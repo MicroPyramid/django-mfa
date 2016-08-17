@@ -2,8 +2,11 @@
 *~
 *.swo
 *.swp
+<<<<<<< HEAD
 db.sqlite3
 media
 migrations
 media-images
 cache
+=======
+>>>>>>> ee8731e625f8c49618214b0644ed3f66b980050d

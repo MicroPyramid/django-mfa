@@ -37,7 +37,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+<<<<<<< HEAD
     'otp_app',
+=======
+>>>>>>> ee8731e625f8c49618214b0644ed3f66b980050d
 ]
 
 MIDDLEWARE_CLASSES = [
@@ -49,7 +52,10 @@ MIDDLEWARE_CLASSES = [
     'django.contrib.auth.middleware.SessionAuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+<<<<<<< HEAD
     'otp_app.middleware.MfaMiddleware',
+=======
+>>>>>>> ee8731e625f8c49618214b0644ed3f66b980050d
 ]
 
 ROOT_URLCONF = 'django_mfa.urls'
