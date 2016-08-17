@@ -2,7 +2,7 @@ from django.shortcuts import render
 import totp
 import base64
 from django.contrib.auth.decorators import login_required
-from otp_app.models import *
+from django_mfa.models import *
 from django.http import HttpResponseRedirect
 
 

@@ -3,8 +3,8 @@ from __future__ import print_function, unicode_literals, division, absolute_impo
 import datetime
 import time
 
-from otp_app import utils
-from otp_app.otp import OTP
+from django_mfa import utils
+from django_mfa.otp import OTP
 
 
 class TOTP(OTP):
