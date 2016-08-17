@@ -11,11 +11,9 @@
 
 	<div class="setup-wrapper">
   <div class="setup-header">
-    <h1>Add GitHub to your two-factor authentication app</h1>
+    <h1>Add your app to your two-factor authentication app</h1>
     <p class="lead">
-      You will need to
-      <a href="https://help.github.com/articles/about-two-factor-authentication">install a two-factor authentication application</a>
-      on your phone.
+      You will need to install a two-factor authentication application on your phone.
     </p>
   </div>
 
@@ -27,7 +25,6 @@
         {{qr_code|qrcode:"my alt"}}
         <div class="simple-box-footer">
           Scan the image above with the two-factor authentication app on your phone.
-          If you can’t use a barcode, <a href="#text-code" rel="facebox">enter this text code</a> instead.
         </div>
       </div>
 
@@ -44,6 +41,8 @@
           <dt><label for="two-factor-code">2. Enter the six-digit code from the application</label></dt>
           <dd>
             <input class="form-control" id="two-factor-code" type="text" name="verification_code" value="" placeholder="Enter six digit number." autocomplete="off">
+            <input type="hidden" name="secret_key" value="{{secret_key}}">
+            <input type="hidden" name="otp_type" value="TOTP">
           </dd>
         </dl>
         <button type="submit" class="btn btn-primary">
@@ -51,39 +50,30 @@
         </button>
 </form>    </div>
   </div>
-  <p class="two-factor-actions">
-    <a href="/settings/two_factor_authentication/configure">Back to settings</a>
-  </p>
+
 </div>
 
 {% else %}
 <div class="two-factor-intro">
-    <p><a href="https://help.github.com/articles/about-two-factor-authentication">Two-factor authentication</a>
+    Two-factor authentication
       adds an extra layer of security to your account. In addition to your username and password, you’ll need to
-      enter a code that GitHub sends to you via text or an app on your phone.</p>
+      enter a code that this app sends to you via text or an app on your phone.</p>
   <div class="two-factor-graphic"></div>
   <div class="row">
-  <div class="col-xs-6 col-md-4">When you sign into GitHub you’ll enter your username and password, like always.</div>
+  <div class="col-xs-6 col-md-4">When you sign into your app you’ll enter your username and password, like always.</div>
   <div class="col-xs-6 col-md-4">When logging in from a new browser, you’ll need to enter an additional code from your phone or tablet.</div>
-  <div class="col-xs-6 col-md-4">Once you enter the code on the website, you’ll be logged into GitHub.</div>
+  <div class="col-xs-6 col-md-4">Once you enter the code on the website, you’ll be logged into your app.</div>
 </div>
 
 	<div class="row">
 		<div class="col-md-6">
-			<p>Use an <a href="https://help.github.com/articles/configuring-two-factor-authentication-via-a-totp-mobile-app">application on your phone</a> to get two-factor authentication codes when prompted.</p>
+			<p>Use an application on your phone to get two-factor authentication codes when prompted.</p>
       <form action="." method="post">{% csrf_token %}
         <input type="hidden" name="otp_type" value="hotp">
         <button type="submit" class="btn btn-primary">Set up using an app</button>
 		</form>
 		</div>
 
-		<div class="col-md-6">
-			<p>GitHub will send you an SMS with a two-factor authentication code when prompted.</p>
-        <!-- </textarea> --><!-- '"` --><form accept-charset="UTF-8" action="/settings/two_factor_authentication/sms" method="post">
-          <input type="hidden" name="noop" value="noop">
-          <button type="submit" class="btn">Set up using SMS</button>
-</form>
-		</div>
 	</div>
 
 </div>
