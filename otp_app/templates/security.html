@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="panel panel-default">
+    <div class="panel-heading"><h3>Two-factor authentication</h3></div>
+    {% if twofactor_enabled %}
+    <div class="panel-body">
+      <p class="two-factor-status">
+        Status:
+        <span class="text-danger">
+          <strong>On</strong>
+          <svg aria-hidden="true" class="octicon octicon-x" height="16" version="1.1" viewBox="0 0 12 16" width="12"><path d="M7.48 8l3.75 3.75-1.48 1.48L6 9.48l-3.75 3.75-1.48-1.48L4.52 8 .77 4.25l1.48-1.48L6 6.52l3.75-3.75 1.48 1.48z"></path></svg>
+        </span>
+      </p>
+      <a href="{% url 'mfa:disable_mfa' %}" class="btn btn-default">Disable two-factor authentication</a>
+    </div>
+    {% else %}
+    <div class="panel-body">
+    	<p class="two-factor-status">
+        Status:
+        <span class="text-danger">
+          <strong>Off</strong>
+          <svg aria-hidden="true" class="octicon octicon-x" height="16" version="1.1" viewBox="0 0 12 16" width="12"><path d="M7.48 8l3.75 3.75-1.48 1.48L6 9.48l-3.75 3.75-1.48-1.48L4.52 8 .77 4.25l1.48-1.48L6 6.52l3.75-3.75 1.48 1.48z"></path></svg>
+        </span>
+      </p>
+      <a href="/settings/mfa/configure" class="btn btn-default">Set up two-factor authentication</a>
+      <p class="help">
+        <a href="https://help.github.com/articles/about-two-factor-authentication">Two-factor authentication</a> provides another layer of security to your account.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+
+{% endblock %}

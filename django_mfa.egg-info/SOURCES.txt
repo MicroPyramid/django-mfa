@@ -1,0 +1,10 @@
+setup.py
+django_mfa/__init__.py
+django_mfa/settings.py
+django_mfa/urls.py
+django_mfa/wsgi.py
+django_mfa.egg-info/PKG-INFO
+django_mfa.egg-info/SOURCES.txt
+django_mfa.egg-info/dependency_links.txt
+django_mfa.egg-info/requires.txt
+django_mfa.egg-info/top_level.txt

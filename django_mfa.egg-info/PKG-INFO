@@ -1,0 +1,22 @@
+Metadata-Version: 1.1
+Name: django-mfa
+Version: 0.0.1
+Summary: A Django deployment package for all hosting types.
+Home-page: https://github.com/MicroPyramid/django-mfa
+Author: Micropyramid
+Author-email: hello@micropyramid.com
+License: UNKNOWN
+Description: # django-mfa
+Platform: UNKNOWN
+Classifier: Environment :: Web Environment
+Classifier: Framework :: Django
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.2
+Classifier: Programming Language :: Python :: 3.3
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
