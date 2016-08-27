@@ -1,5 +1,5 @@
 from django.shortcuts import render
-import totp
+from . import totp
 import base64
 from django.contrib.auth.decorators import login_required
 from django_mfa.models import *
