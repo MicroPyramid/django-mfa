@@ -20,6 +20,7 @@ lib64/
 parts/
 sdist/
 var/
+html/
 *.egg-info/
 .installed.cfg
 *.egg
