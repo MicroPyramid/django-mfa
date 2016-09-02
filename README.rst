@@ -30,25 +30,48 @@ django-mfa
 Django-mfa is a simple Django app to for providing the MFA.
 
 **Documentation** is `avaliable online
-<http://django-simple-pagination.readthedocs.org/>`_, or in the docs
+<http://django-simple-mfa.readthedocs.org/>`_, or in the docs
 directory of the project.
 
 Quick start
 -----------
 
-1. Install 'Django-Simple-Pagination' using the following command::
+Installation
+~~~~~~~~~~~~
 
-    pip install django-simple-pagination
+The Git repository can be cloned with this command::
 
-2. Add ``simple_pagination`` to your INSTALLED_APPS setting like this::
+    git clone https://github.com/MicroPyramid/django-mfa
 
-    INSTALLED_APPS = [
+The ``django_mfa`` package, included in the distribution, should be
+placed on the ``PYTHONPATH``.
+
+Otherwise you can just ``easy_install -Z django-mfa``
+or ``pip install django-mfa``.
+
+Settings
+~~~~~~~~
+
+Add ``otp_app'`` to the ``INSTALLED_APPS`` to your *settings.py*.
+
+See the :doc:`settings` section for other settings.
+
+Add ``'otp_app.middleware.MfaMiddleware'`` to the ``MIDDLEWARE_CLASSES``
+
+Urls
+~~~~
+
+Add the following to your root urls.py file.
+
+.. code:: django
+
+    urlpatterns = [
         ...
-        'simple_pagination',
-    ]
-2. In templates use ``{% paginate entities %}`` to get pagination objects.
-3. In templates use ``{% show_pageitems %}`` to get digg-style page links.
 
-We welcome your feedback and support, raise github ticket if you want to report a bug. Need new features? `Contact us here`_
+        url(r'^settings/', include('otp_app.urls', namespace="mfa")),
+    ]
+
+
+Done. With these settings you have now, you will get the MFA features.
 
 .. _contact us here: https://micropyramid.com/contact-us/
