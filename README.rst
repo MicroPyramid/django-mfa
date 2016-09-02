@@ -30,7 +30,7 @@ django-mfa
 Django-mfa is a simple Django app to for providing the MFA.
 
 **Documentation** is `avaliable online
-<http://django-simple-mfa.readthedocs.org/>`_, or in the docs
+<http://django-mfa.readthedocs.org/>`_, or in the docs
 directory of the project.
 
 Quick start
@@ -73,5 +73,7 @@ Add the following to your root urls.py file.
 
 
 Done. With these settings you have now, you will get the MFA features.
+
+We welcome your feedback and support, raise github ticket if you want to report a bug. Need new features? `Contact us here`_
 
 .. _contact us here: https://micropyramid.com/contact-us/
