@@ -27,7 +27,7 @@ django-mfa
     :target: https://pypi.python.org/pypi/django-mfa/
 
 
-Django-mfa is a simple Django app to for providing the MFA.
+Django-mfa is a simple Django app to for providing MFA (Multi-Factor Authentication).
 
 **Documentation** is `avaliable online
 <http://django-mfa.readthedocs.org/>`_, or in the docs
