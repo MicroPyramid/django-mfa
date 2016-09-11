@@ -2,8 +2,7 @@
 Django MFA
 =========================
 
-This application provides simple Digg-style pagination. It is devoted to implementing
-web pagination in very few steps.
+This application provides an implementation of Multi-Factor Authentication.
 
 The **source code** for this app is hosted at
 https://github.com/MicroPyramid/django-mfa
