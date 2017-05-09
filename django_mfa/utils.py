@@ -85,6 +85,6 @@ def strings_equal(s1, s2):
     still reveal to a timing attack whether the strings are the same
     length.
     """
-    s1 = unicodedata.normalize('NFKC', unicode(s1))
-    s2 = unicodedata.normalize('NFKC', unicode(s2))
+    s1 = unicodedata.normalize('NFKC', str(s1))
+    s2 = unicodedata.normalize('NFKC', str(s2))
     return compare_digest(s1, s2)
