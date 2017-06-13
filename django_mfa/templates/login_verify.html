@@ -2,14 +2,11 @@
 {% load otp_tags %}
 {% block content %}
 
-	<div class="setup-wrapper">
+  <div class="setup-wrapper">
 
   <div class="setup-main two-factor-app-main">
     <div class="setup-form-container">
-
-      <hr>
-
-      <!-- </textarea> --><!-- '"` --><form accept-charset="UTF-8" action="{% url 'mfa:verify_otp' %}" method="post">
+    <form accept-charset="UTF-8" action="{% url 'mfa:verify_otp' %}" method="post">
       {% csrf_token %}
       {% if next_url %}
       <input type="hidden" name="next" value="{{next_url}}">
@@ -18,6 +15,7 @@
           <dt><label for="two-factor-code">Enter the six-digit code from the application</label></dt>
           <dd>
             <input class="form-control" id="two-factor-code" type="text" name="verification_code" value="" placeholder="Enter six digit number." autocomplete="off">
+            <input type="hidden" class="form-control" name="next" value="{{ next }}">
             {% if error_message %}
             <p>{{ error_message }}</p>
             {% endif %}

@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django_mfa.models import *
 from django.http import HttpResponseRedirect
 from django.core.urlresolvers import reverse
+from django.conf import settings
 
 
 @login_required
@@ -18,7 +19,7 @@ def configure_mfa(request):
     qr_code = None
     base_32_secret = None
     if request.method == "POST":
-        base_32_secret = base64.b32encode(request.user.email)
+        base_32_secret = base64.b32encode(bytes(request.user.email, 'utf-8'))
         totp_obj = totp.TOTP(base_32_secret)
         qr_code = totp_obj.provisioning_uri(request.user.email)
 
@@ -67,8 +68,7 @@ def verify_otp(request):
         is_verified = totp_obj.verify(request.POST["verification_code"])
         if is_verified:
             request.session['verfied_otp'] = True
-            return HttpResponseRedirect(request.POST["next"])
+            return HttpResponseRedirect(request.POST.get("next", settings.LOGIN_REDIRECT_URL))
         ctx['error_message'] = "Your code is expired or invalid."
-    ctx['next_url'] = request.GET["next"]
+    ctx['next'] = request.GET.get('next') or settings.LOGIN_REDIRECT_URL
     return render(request, 'login_verify.html', ctx)
-
