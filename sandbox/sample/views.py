@@ -6,7 +6,7 @@ from django.http.response import HttpResponseRedirect
 # Create your views here.
 
 def index(request):
-    if request.user.is_authenticated():
+    if request.user and request.user.is_authenticated():
         return HttpResponseRedirect('/home/')
     if request.method == 'POST':
         email = request.POST.get('username')
