@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Sample Application</title>
+</head>
+<body>
+<div class="wrapper">
+    <form class="form-signin" name="loginform" id="loginform" action="/" method="POST">
+      <h2 class="form-signin-heading">Please login</h2>
+	{% csrf_token %}
+      <input type="text" class="form-control" name="username" id="username" placeholder="Email Address" required="" autofocus="" /><br><br>
+      <input type="password" class="form-control" name="password" id="password" placeholder="Password" required=""/><br><br>
+      <button class="btn btn-lg btn-primary btn-block" type="submit">Login</button>
+    </form>
+  </div>
+</body>
+</html>

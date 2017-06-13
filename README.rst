@@ -52,11 +52,22 @@ or ``pip install django-mfa``.
 Settings
 ~~~~~~~~
 
-Add ``otp_app'`` to the ``INSTALLED_APPS`` to your *settings.py*.
+1. Add app name in settings.py::
 
-See the :doc:`settings` section for other settings.
+    INSTALLED_APPS = [
+       '..................',
+       'django_mfa',
+       '..................'
+    ]
 
-Add ``'otp_app.middleware.MfaMiddleware'`` to the ``MIDDLEWARE_CLASSES``
+2. Add 'django_mfa.middleware.MfaMiddleware' to your project middlewares::
+
+    MIDDLEWARE = [
+       '....................................',
+       'django_mfa.middleware.MfaMiddleware',
+       '....................................',
+    ]
+
 
 Urls
 ~~~~
@@ -68,7 +79,7 @@ Add the following to your root urls.py file.
     urlpatterns = [
         ...
 
-        url(r'^settings/', include('otp_app.urls', namespace="mfa")),
+        url(r'^settings/', include('django_mfa.urls', namespace="mfa")),
     ]
 
 
@@ -76,7 +87,9 @@ Done. With these settings you have now, you will get the MFA features.
 
 Visit our Django web development page `Here`_
 
-We welcome your feedback and support, raise github ticket if you want to report a bug. Need new features? `Contact us here`_
+We welcome your feedback and support, raise `github ticket`_ if you want to report a bug. Need new features? `Contact us here`_
 
 .. _contact us here: https://micropyramid.com/contact-us/
 .. _Here: https://micropyramid.com/django-development-services/
+.. _github ticket: https://github.com/MicroPyramid/django-mfa/issues
+
