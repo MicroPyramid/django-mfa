@@ -22,7 +22,7 @@ for dirpath, dirnames, filenames in os.walk(PROJECT_NAME):
 
 setup(
     name='django-mfa',
-    version='0.0.4',
+    version='0.0.8',
     packages=['django_mfa', 'django_mfa.templatetags', 'django_mfa.migrations'],
     include_package_data=True,
     description='A Django deployment package for all hosting types.',
@@ -45,6 +45,6 @@ setup(
         'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
     ],
     install_requires=[
-        "Django>=1.6.0,<1.10",
+        "Django>=1.6.0,<1.11",
     ],
 )

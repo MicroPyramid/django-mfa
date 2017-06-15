@@ -3,8 +3,14 @@ from django.shortcuts import resolve_url
 from django.contrib.auth import REDIRECT_FIELD_NAME as redirect_field_name
 from .models import is_mfa_enabled
 
+try:
+    from django.utils.deprecation import MiddlewareMixin
+except ImportError:  # Django < 1.10
+    # Works perfectly for everyone using MIDDLEWARE_CLASSES
+    MiddlewareMixin = object
 
-class MfaMiddleware(object):
+
+class MfaMiddleware(MiddlewareMixin):
 
     def process_request(self, request):
         if request.user.is_authenticated() and is_mfa_enabled(request.user):

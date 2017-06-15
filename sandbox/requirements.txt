@@ -1,0 +1,2 @@
+Django==1.11.1
+django-mfa==0.0.8

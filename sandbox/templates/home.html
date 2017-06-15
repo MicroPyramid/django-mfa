@@ -1,0 +1,9 @@
+<h3>Login Successful</h3>
+{{request.user.userotp}}
+{% if request.user.userotp %}
+	<h3><a href="/settings/mfa/disable/">Disable Mfa</a></h3>
+{% else %}
+	<h3><a href="/settings/mfa/configure/">Configure Mfa</a></h3>
+{% endif %}
+<a href="/logout/">Logout</a>
+
