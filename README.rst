@@ -85,6 +85,11 @@ Add the following to your root urls.py file.
 
 Done. With these settings you have now, you will get the MFA features.
 
+You can try it by hosting on your own or deploy to Heroku with a button click.
+
+.. image:: https://www.herokucdn.com/deploy/button.svg
+   :target: https://heroku.com/deploy?template=https://github.com/MicroPyramid/django-mfa.git
+
 Visit our Django web development page `Here`_
 
 We welcome your feedback and support, raise `github ticket`_ if you want to report a bug. Need new features? `Contact us here`_
