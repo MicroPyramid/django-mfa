@@ -15,12 +15,13 @@ Including another URLconf
 """
 from django.conf.urls import url, include
 from django.contrib import admin
-from sample.views import index, home, log_out
+from sample.views import index, home, log_out, register
 
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
     url(r'^settings/', include('django_mfa.urls', namespace="mfa")),
     url(r'^$', index, name="index"),
+    url(r'^register/$', register, name="register"),
     url(r'^home/$', home, name="home"),
     url(r'^logout/$', log_out, name="log_out"),
 ]

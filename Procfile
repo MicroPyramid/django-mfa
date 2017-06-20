@@ -1,0 +1,1 @@
+web: sh -c 'cd sandbox && gunicorn test_django_mfa.wsgi && pip install -r requirements.txt'

@@ -1,2 +1,4 @@
-Django==1.11.1
-django-mfa==0.0.8
+gunicorn==19.6.0
+whitenoise==3.1
+dj-database-url==0.4.1
+psycopg2==2.6.1
