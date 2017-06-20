@@ -20,7 +20,7 @@ def configure_mfa(request):
     base_32_secret = None
     if request.method == "POST":
         base_32_secret = base64.b32encode(bytes(request.user.email, 'utf-8'))
-        totp_obj = totp.TOTP(base_32_secret)
+        totp_obj = totp.TOTP(base_32_secret.decode("utf-8"))
         qr_code = totp_obj.provisioning_uri(request.user.email)
 
     return render(request, 'configure.html', {"qr_code": qr_code, "secret_key": base_32_secret})
