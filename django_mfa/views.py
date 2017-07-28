@@ -23,7 +23,8 @@ def configure_mfa(request):
             base_32_secret = base64.b32encode(bytes(request.user.email, 'utf-8'))
         except:
             base_32_secret = base64.b32encode(request.user.email)
-        totp_obj = totp.TOTP(base_32_secret.decode("utf-8"))
+        #IOS Google Authenticator doesn't like the ='s at the end of a secret code
+        totp_obj = totp.TOTP(base_32_secret.decode("utf-8").replace("=",""))
         qr_code = totp_obj.provisioning_uri(request.user.email)
 
     return render(request, 'configure.html', {"qr_code": qr_code, "secret_key": base_32_secret})
