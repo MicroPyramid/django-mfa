@@ -2,7 +2,7 @@ from django.shortcuts import render
 from . import totp
 import base64
 import codecs
-    import random
+import random
 from django.contrib.auth.decorators import login_required
 from django_mfa.models import *
 from django.http import HttpResponseRedirect
