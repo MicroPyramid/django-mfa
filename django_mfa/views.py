@@ -1,6 +1,8 @@
 from django.shortcuts import render
 from . import totp
 import base64
+import codecs
+import random
 from django.contrib.auth.decorators import login_required
 from django_mfa.models import *
 from django.http import HttpResponseRedirect
@@ -19,10 +21,11 @@ def configure_mfa(request):
     qr_code = None
     base_32_secret = None
     if request.method == "POST":
-        try:
-            base_32_secret = base64.b32encode(bytes(request.user.email, 'utf-8'))
-        except:
-            base_32_secret = base64.b32encode(request.user.email)
+        base_32_secret = base64.b32encode(
+            codecs.decode(codecs.encode(
+            '{0:020x}'.format(random.getrandbits(80))
+            ), 'hex_codec')
+        )
         totp_obj = totp.TOTP(base_32_secret.decode("utf-8"))
         qr_code = totp_obj.provisioning_uri(request.user.email)
 
