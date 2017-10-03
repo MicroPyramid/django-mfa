@@ -29,7 +29,7 @@ django-mfa
 
 Django-mfa is a simple Django app to for providing MFA (Multi-Factor Authentication).
 
-**Documentation** is `avaliable online
+**Documentation** is `available online
 <http://django-mfa.readthedocs.org/>`_, or in the docs
 directory of the project.
 
