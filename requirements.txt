@@ -1,3 +1,3 @@
-Django==1.10
+Django>=1.10
 django-mfa==0.0.10
 -r sandbox/requirements.txt
