@@ -3,6 +3,7 @@ from . import totp
 import base64
 import codecs
 import random
+import re
 from django.contrib.auth.decorators import login_required
 from django_mfa.models import *
 from django.http import HttpResponseRedirect
@@ -27,7 +28,7 @@ def configure_mfa(request):
             ), 'hex_codec')
         )
         totp_obj = totp.TOTP(base_32_secret.decode("utf-8"))
-        qr_code = totp_obj.provisioning_uri(request.user.email)
+        qr_code = re.sub(r'=+$', '', totp_obj.provisioning_uri(request.user.email))
 
     return render(request, 'configure.html', {"qr_code": qr_code, "secret_key": base_32_secret})
 
