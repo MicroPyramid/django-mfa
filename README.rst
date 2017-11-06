@@ -8,10 +8,6 @@ django-mfa
 .. image:: https://travis-ci.org/MicroPyramid/django-mfa.svg?branch=master
    :target: https://travis-ci.org/MicroPyramid/django-mfa
 
-.. image:: https://img.shields.io/pypi/dm/django-mfa.svg
-    :target: https://pypi.python.org/pypi/django-mfa
-    :alt: Downloads
-
 .. image:: https://img.shields.io/pypi/v/django-mfa.svg
     :target: https://pypi.python.org/pypi/django-mfa
     :alt: Latest Release
