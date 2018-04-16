@@ -16,11 +16,11 @@ class Views_test(TestCase):
 
     def test_security_settings_view(self):
         response = self.client.get(reverse('security_settings'))
-        self.assertTemplateUsed(response, "security.html")
+        self.assertTemplateUsed(response, "django_mfa/security.html")
 
     def test_configure_mfa_view(self):
         response = self.client.get(reverse('configure_mfa'))
-        self.assertTemplateUsed(response, "configure.html")
+        self.assertTemplateUsed(response, "django_mfa/configure.html")
 
     # def test_configure_mfa_post_view(self):
     #     response = self.client.post(reverse('configure_mfa'))

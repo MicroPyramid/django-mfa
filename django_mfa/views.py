@@ -14,7 +14,7 @@ from django.conf import settings
 @login_required
 def security_settings(request):
     twofactor_enabled = is_mfa_enabled(request.user)
-    return render(request, 'security.html', {"twofactor_enabled": twofactor_enabled})
+    return render(request, 'django_mfa/security.html', {"twofactor_enabled": twofactor_enabled})
 
 
 @login_required
@@ -30,7 +30,7 @@ def configure_mfa(request):
         totp_obj = totp.TOTP(base_32_secret.decode("utf-8"))
         qr_code = re.sub(r'=+$', '', totp_obj.provisioning_uri(request.user.email))
 
-    return render(request, 'configure.html', {"qr_code": qr_code, "secret_key": base_32_secret})
+    return render(request, 'django_mfa/configure.html', {"qr_code": qr_code, "secret_key": base_32_secret})
 
 
 @login_required
@@ -51,7 +51,7 @@ def enable_mfa(request):
             totp_obj = totp.TOTP(base_32_secret)
             qr_code = totp_obj.provisioning_uri(request.user.email)
 
-    return render(request, 'configure.html', {"is_verified": is_verified, "qr_code": qr_code, "secret_key": base_32_secret})
+    return render(request, 'django_mfa/configure.html', {"is_verified": is_verified, "qr_code": qr_code, "secret_key": base_32_secret})
 
 
 @login_required
@@ -63,7 +63,7 @@ def disable_mfa(request):
         user_mfa = user.userotp
         user_mfa.delete()
         return HttpResponseRedirect(reverse("mfa:configure_mfa"))
-    return render(request, 'disable_mfa.html')
+    return render(request, 'django_mfa/disable_mfa.html')
 
 
 @login_required
@@ -78,4 +78,4 @@ def verify_otp(request):
             return HttpResponseRedirect(request.POST.get("next", settings.LOGIN_REDIRECT_URL))
         ctx['error_message'] = "Your code is expired or invalid."
     ctx['next'] = request.GET.get('next') or settings.LOGIN_REDIRECT_URL
-    return render(request, 'login_verify.html', ctx)
+    return render(request, 'django_mfa/login_verify.html', ctx)
