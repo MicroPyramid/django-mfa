@@ -15,11 +15,11 @@ class Views_test(TestCase):
         user_login = self.client.login(username='micro', password="djangomfa")
 
     def test_security_settings_view(self):
-        response = self.client.get(reverse('security_settings'))
+        response = self.client.get(reverse('mfa:security_settings'))
         self.assertTemplateUsed(response, "django_mfa/security.html")
 
     def test_configure_mfa_view(self):
-        response = self.client.get(reverse('configure_mfa'))
+        response = self.client.get(reverse('mfa:configure_mfa'))
         self.assertTemplateUsed(response, "django_mfa/configure.html")
 
     # def test_configure_mfa_post_view(self):
