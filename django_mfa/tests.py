@@ -1,10 +1,11 @@
-from django.test import TestCase
+from unittest import skip
+
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.models import User
-from django_mfa.models import *
-from django.test import Client
-from django_mfa import totp
 from django.core.urlresolvers import reverse
+from django.test import Client, TestCase
+from django_mfa import totp
+from django_mfa.models import is_mfa_enabled, UserOTP
 
 
 class Views_test(TestCase):
@@ -22,12 +23,18 @@ class Views_test(TestCase):
         response = self.client.get(reverse('mfa:configure_mfa'))
         self.assertTemplateUsed(response, "django_mfa/configure.html")
 
-    # def test_configure_mfa_post_view(self):
-    #     response = self.client.post(reverse('configure_mfa'))
-    #     self.assertTemplateUsed(response, "configure.html")
+    @skip('Need to implement')
+    def test_verify_otp(self):
+        """
+        Test posting with a valid verification token
+        """
+        pass
 
-    # def test_enable_mfa_view(self):
-    #     response = self.client.get(reverse('enable_mfa'))
-    #     self.assertTemplateUsed(response, "configure.html")
+    def test_verify_otp_missing_token(self):
+        """
+        Test posting without a verification code
+        """
+        response = self.client.post(reverse('mfa:verify_otp'))
 
-
+        self.assertEquals(response.context['error_message'], 'Missing verification code.')
+        self.assertEquals(response.status_code, 400)

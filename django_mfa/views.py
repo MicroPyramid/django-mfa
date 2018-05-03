@@ -92,4 +92,4 @@ def verify_otp(request):
             ctx['error_message'] = "Your code is expired or invalid."
 
     ctx['next'] = request.GET.get('next', settings.LOGIN_REDIRECT_URL)
-    return render(request, 'django_mfa/login_verify.html', ctx)
+    return render(request, 'django_mfa/login_verify.html', ctx, status=400)
