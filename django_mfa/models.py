@@ -1,12 +1,12 @@
-from django.db import models
 from django.conf import settings
+from django.db import models
 
 
 class UserOTP(models.Model):
 
     OTP_TYPES = (
-                ('HOTP', 'hotp'),
-                ('TOTP', 'totp'),
+        ('HOTP', 'hotp'),
+        ('TOTP', 'totp'),
     )
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL)
@@ -15,8 +15,7 @@ class UserOTP(models.Model):
 
 
 def is_mfa_enabled(user):
-    try:
-        user_otp = user.userotp
-        return True
-    except:
-        return False
+    """
+    Determine if a user has MFA enabled
+    """
+    return hasattr(user, 'userotp')
