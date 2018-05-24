@@ -1,14 +1,16 @@
-from django.shortcuts import render
-from . import totp
 import base64
 import codecs
 import random
 import re
-from django.contrib.auth.decorators import login_required
-from django_mfa.models import *
-from django.http import HttpResponseRedirect
-from django.core.urlresolvers import reverse
+
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
+from django.core.urlresolvers import reverse
+from django.http import HttpResponseRedirect
+from django.shortcuts import render
+from django_mfa.models import is_mfa_enabled, UserOTP
+
+from . import totp
 
 
 @login_required
@@ -68,14 +70,26 @@ def disable_mfa(request):
 
 @login_required
 def verify_otp(request):
+    """
+    Verify a OTP request
+    """
     ctx = {}
+
     if request.method == "POST":
-        otp_obj = UserOTP.objects.filter(user=request.user).first()
-        totp_obj = totp.TOTP(otp_obj.secret_key)
-        is_verified = totp_obj.verify(request.POST["verification_code"])
-        if is_verified:
-            request.session['verfied_otp'] = True
-            return HttpResponseRedirect(request.POST.get("next", settings.LOGIN_REDIRECT_URL))
-        ctx['error_message'] = "Your code is expired or invalid."
-    ctx['next'] = request.GET.get('next') or settings.LOGIN_REDIRECT_URL
-    return render(request, 'django_mfa/login_verify.html', ctx)
+        verification_code = request.POST.get('verification_code')
+
+        if verification_code is None:
+            ctx['error_message'] = "Missing verification code."
+        else:
+            otp_ = UserOTP.objects.get(user=request.user)
+            totp_ = totp.TOTP(otp_.secret_key)
+
+            is_verified = totp_.verify(verification_code)
+
+            if is_verified:
+                request.session['verfied_otp'] = True
+                return HttpResponseRedirect(request.POST.get("next", settings.LOGIN_REDIRECT_URL))
+            ctx['error_message'] = "Your code is expired or invalid."
+
+    ctx['next'] = request.GET.get('next', settings.LOGIN_REDIRECT_URL)
+    return render(request, 'django_mfa/login_verify.html', ctx, status=400)
