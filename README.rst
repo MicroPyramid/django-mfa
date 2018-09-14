@@ -75,7 +75,7 @@ Add the following to your root urls.py file.
     urlpatterns = [
         ...
 
-        url(r'^settings/', include('django_mfa.urls', namespace="mfa")),
+        url(r'^settings/', include('django_mfa.urls')),
     ]
 
 
