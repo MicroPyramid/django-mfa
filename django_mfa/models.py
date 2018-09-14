@@ -9,7 +9,7 @@ class UserOTP(models.Model):
         ('TOTP', 'totp'),
     )
 
-    user = models.OneToOneField(settings.AUTH_USER_MODEL)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     otp_type = models.CharField(max_length=20, choices=OTP_TYPES)
     secret_key = models.CharField(max_length=100, blank=True)
 

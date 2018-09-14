@@ -5,7 +5,7 @@ import re
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django_mfa.models import is_mfa_enabled, UserOTP
@@ -22,17 +22,17 @@ def security_settings(request):
 @login_required
 def configure_mfa(request):
     qr_code = None
-    base_32_secret = None
+    base_32_secret_utf8 = None
     if request.method == "POST":
         base_32_secret = base64.b32encode(
             codecs.decode(codecs.encode(
             '{0:020x}'.format(random.getrandbits(80))
             ), 'hex_codec')
         )
-        totp_obj = totp.TOTP(base_32_secret.decode("utf-8"))
+        base_32_secret_utf8 = base_32_secret.decode("utf-8")
+        totp_obj = totp.TOTP(base_32_secret_utf8)
         qr_code = re.sub(r'=+$', '', totp_obj.provisioning_uri(request.user.email))
-
-    return render(request, 'django_mfa/configure.html', {"qr_code": qr_code, "secret_key": base_32_secret})
+    return render(request, 'django_mfa/configure.html', {"qr_code": qr_code, "secret_key": base_32_secret_utf8})
 
 
 @login_required
