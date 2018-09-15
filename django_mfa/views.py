@@ -100,6 +100,12 @@ def verify_rmb_cookie(request):
         return cookie_value
 
 
+def delete_rmb_cookie(request, response):
+    cookie_name = MFA_COOKIE_PREFIX + str(request.user.pk)
+    response.delete_cookie(cookie_name)
+    return response
+
+
 @login_required
 def disable_mfa(request):
     user = request.user
@@ -109,7 +115,8 @@ def disable_mfa(request):
         user_mfa = user.userotp
         user_mfa.delete()
         messages.success(request, "You have successfully disabled multi-factor authentication on your account.")
-        return redirect(settings.LOGIN_REDIRECT_URL)
+        response = redirect(settings.LOGIN_REDIRECT_URL)
+        return delete_rmb_cookie(request, response)
     return render(request, 'django_mfa/disable_mfa.html')
 
 
