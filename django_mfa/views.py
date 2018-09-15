@@ -4,6 +4,7 @@ import random
 import re
 
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.urls import reverse
 from django.http import HttpResponseRedirect
@@ -31,7 +32,12 @@ def configure_mfa(request):
         )
         base_32_secret_utf8 = base_32_secret.decode("utf-8")
         totp_obj = totp.TOTP(base_32_secret_utf8)
-        qr_code = re.sub(r'=+$', '', totp_obj.provisioning_uri(request.user.email))
+        try:
+            issuer_name = settings.MFA_ISSUER_NAME
+        except:
+            issuer_name = None
+        qr_code = re.sub(r'=+$', '', totp_obj.provisioning_uri(request.user.username, issuer_name=issuer_name))
+
     return render(request, 'django_mfa/configure.html', {"qr_code": qr_code, "secret_key": base_32_secret_utf8})
 
 
@@ -49,6 +55,8 @@ def enable_mfa(request):
             UserOTP.objects.get_or_create(otp_type=request.POST["otp_type"],
                                           user=request.user,
                                           secret_key=request.POST['secret_key'])
+            messages.success(request, "You have successfully enabled multi-factor authentication on your account.")
+            return HttpResponseRedirect(reverse(settings.LOGIN_REDIRECT_URL))
         else:
             totp_obj = totp.TOTP(base_32_secret)
             qr_code = totp_obj.provisioning_uri(request.user.email)
