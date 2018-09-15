@@ -56,7 +56,7 @@ def enable_mfa(request):
                                           user=request.user,
                                           secret_key=request.POST['secret_key'])
             messages.success(request, "You have successfully enabled multi-factor authentication on your account.")
-            response = HttpResponseRedirect(reverse(settings.LOGIN_REDIRECT_URL))
+            response = redirect(settings.LOGIN_REDIRECT_URL)
             return update_rmb_cookie(request, response)
         else:
             totp_obj = totp.TOTP(base_32_secret)
