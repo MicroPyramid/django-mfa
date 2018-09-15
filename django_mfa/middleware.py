@@ -2,6 +2,7 @@ from django.urls import reverse
 from django.shortcuts import resolve_url
 from django.contrib.auth import REDIRECT_FIELD_NAME as redirect_field_name
 from .models import is_mfa_enabled
+from .views import verify_rmb_cookie
 
 try:
     from django.utils.deprecation import MiddlewareMixin
@@ -13,7 +14,7 @@ except ImportError:  # Django < 1.10
 class MfaMiddleware(MiddlewareMixin):
 
     def process_request(self, request):
-        if request.user.is_authenticated and is_mfa_enabled(request.user):
+        if request.user.is_authenticated and not verify_rmb_cookie(request) and is_mfa_enabled(request.user):
             if not request.session.get('verfied_otp'):
                 current_path = request.path
                 if current_path != reverse("mfa:verify_otp"):
