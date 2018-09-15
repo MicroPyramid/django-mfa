@@ -57,7 +57,7 @@ def enable_mfa(request):
                                           secret_key=request.POST['secret_key'])
             messages.success(request, "You have successfully enabled multi-factor authentication on your account.")
             response = redirect(settings.LOGIN_REDIRECT_URL)
-            return update_rmb_cookie(request, response)
+            return response
         else:
             totp_obj = totp.TOTP(base_32_secret)
             qr_code = totp_obj.provisioning_uri(request.user.email)
@@ -77,8 +77,8 @@ def update_rmb_cookie(request, response):
     if remember_my_browser:
         # better not to reveal the username.  Revealing the number seems harmless
         cookie_name = MFA_COOKIE_PREFIX + str(request.user.pk)
-        response.set_signed_cookie(cookie_name, True, salt=cookie_salt, max_age=remember_days*24*3600, secure=True,
-                                   httponly=True)
+        response.set_signed_cookie(cookie_name, True, salt=cookie_salt, max_age=remember_days*24*3600,
+                                   secure=(not settings.DEBUG), httponly=True)
     return response
 
 
