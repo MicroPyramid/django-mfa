@@ -32,6 +32,7 @@ def configure_mfa(request):
         )
         base_32_secret_utf8 = base_32_secret.decode("utf-8")
         totp_obj = totp.TOTP(base_32_secret_utf8)
+
         try:
             issuer_name = settings.MFA_ISSUER_NAME
         except:
