@@ -65,13 +65,13 @@ Settings
 
 3. Optional issuer name.  This name will be shown in the Authenticator App along with the username
 
-MFA_ISSUER_NAME = "Cool Django App"
+   MFA_ISSUER_NAME = "Cool Django App"
 
-4. Optionally enable remember-my-browser.  If enabled, the browser will be trusted for specified number of days after the user enters the code once.
+4. Optionally enable remember-my-browser.  If enabled, the browser will be trusted for specified number of days after the user enters the code once::
 
-MFA_REMEMBER_MY_BROWSER = True
-MFA_REMEMBER_DAYS = 90
-MFA_COOKIE_SALT = "uoiqwueroqwer"   # random
+    MFA_REMEMBER_MY_BROWSER = True
+    MFA_REMEMBER_DAYS = 90
+    MFA_COOKIE_SALT = "uoiqwueroqwer"   # random
 
 Urls
 ~~~~
