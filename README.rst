@@ -71,7 +71,6 @@ Settings
 
     MFA_REMEMBER_MY_BROWSER = True
     MFA_REMEMBER_DAYS = 90
-    MFA_COOKIE_SALT = "uoiqwueroqwer"   # random
 
 Urls
 ~~~~

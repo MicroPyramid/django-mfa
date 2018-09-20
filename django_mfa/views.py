@@ -1,6 +1,7 @@
 import base64
 import codecs
 import random
+import hashlib
 import re
 
 from django.conf import settings
@@ -66,18 +67,34 @@ def enable_mfa(request):
     return render(request, 'django_mfa/configure.html', {"is_verified": is_verified, "qr_code": qr_code, "secret_key": base_32_secret})
 
 
-MFA_COOKIE_PREFIX="RMB_"
+def _generate_cookie_salt(user):
+    try:
+        otp_ = UserOTP.objects.get(user=user)
+    except UserOTP.DoesNotExist:
+        return None
+    # out of paranoia only use half the secret to generate the salt
+    uselen = int(len(otp_.secret_key) / 2)
+    half_secret = otp_.secret_key[:uselen]
+    m = hashlib.sha256()
+    m.update(half_secret.encode("utf-8"))
+    cookie_salt = m.hexdigest()
+    return cookie_salt
+
+
+MFA_COOKIE_PREFIX = "RMB_"
+
+
 # update Remember-My-Browser cookie
 def update_rmb_cookie(request, response):
     try:
         remember_my_browser = settings.MFA_REMEMBER_MY_BROWSER
         remember_days = settings.MFA_REMEMBER_DAYS
-        cookie_salt = settings.MFA_COOKIE_SALT
     except:
         remember_my_browser = False
     if remember_my_browser:
         # better not to reveal the username.  Revealing the number seems harmless
         cookie_name = MFA_COOKIE_PREFIX + str(request.user.pk)
+        cookie_salt = _generate_cookie_salt(request.user)
         response.set_signed_cookie(cookie_name, True, salt=cookie_salt, max_age=remember_days*24*3600,
                                    secure=(not settings.DEBUG), httponly=True)
     return response
@@ -89,13 +106,13 @@ def verify_rmb_cookie(request):
     try:
         remember_my_browser = settings.MFA_REMEMBER_MY_BROWSER
         max_cookie_age = settings.MFA_REMEMBER_DAYS*24*3600
-        cookie_salt = settings.MFA_COOKIE_SALT
     except:
         return False
     if not remember_my_browser:
         return False
     else:
         cookie_name = MFA_COOKIE_PREFIX + str(request.user.pk)
+        cookie_salt = _generate_cookie_salt(request.user)
         cookie_value = request.get_signed_cookie(cookie_name, False, max_age=max_cookie_age, salt=cookie_salt)
         # if the cookie value is True and the signature is good than the browser can be trusted
         return cookie_value
