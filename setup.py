@@ -45,6 +45,6 @@ setup(
         'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
     ],
     install_requires=[
-        "Django>=1.6.0,<2.0",
+        "Django>=1.10.0",
     ],
 )
