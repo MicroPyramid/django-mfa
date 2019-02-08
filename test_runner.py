@@ -15,12 +15,12 @@ if __name__ == "__main__":
             }
         },
         INSTALLED_APPS=(
-                        'django.contrib.auth',
-                        'django.contrib.contenttypes',
-                        'django.contrib.sessions',
-                        'django.contrib.staticfiles',
-                        'django_mfa',
-                        ),
+            'django.contrib.auth',
+            'django.contrib.contenttypes',
+            'django.contrib.sessions',
+            'django.contrib.staticfiles',
+            'django_mfa',
+        ),
         MIDDLEWARE_CLASSES=(
             'django.contrib.sessions.middleware.SessionMiddleware',
             'django.middleware.common.CommonMiddleware',

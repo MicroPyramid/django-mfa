@@ -57,7 +57,6 @@ def enable_mfa(request):
         totp_obj = totp.TOTP(request.POST['secret_key'])
         is_verified = totp_obj.verify(request.POST["verification_code"])
         if is_verified:
-            print("in loop of enable mfa ")
             request.session['verfied_otp'] = True
             UserOTP.objects.get_or_create(otp_type=request.POST["otp_type"],
                                           user=request.user,
@@ -135,7 +134,7 @@ def delete_rmb_cookie(request, response):
 def disable_mfa(request):
     user = request.user
     if not is_mfa_enabled(user):
-        return HttpResponseRedirect(reverse("mfa:configure_mfa"))
+        return HttpResponseRedirect(reverse("configure_mfa"))
     if request.method == "POST":
         user_mfa = user.userotp
         user_mfa.delete()
