@@ -1,0 +1,9 @@
+{
+	"name": "Django MFA",
+	"description": "Multi Factor Authentication of Django Applications",
+	"repository": "https://github.com/MicroPyramid/django-mfa.git",
+	"scripts": {
+		"postdeploy": "python sandbox/manage.py makemigrations && python sandbox/manage.py migrate && echo \"from django.contrib.auth.models import User; User.objects.create_superuser('Admin001', 'admin001@djangocrm.com', 'admin001')\" | python sandbox/manage.py shell"
+	},
+	"env": {}
+}
