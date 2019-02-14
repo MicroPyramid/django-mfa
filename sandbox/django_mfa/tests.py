@@ -20,11 +20,11 @@ class Views_test(TestCase):
         self.client.login(username='micro', password="djangomfa")
 
     # def test_security_settings_view(self):
-    #     response = self.client.get(reverse('security_settings'))
+    #     response = self.client.get(reverse('mfa:security_settings'))
     #     self.assertTemplateUsed(response, "django_mfa/security.html")
 
     # def test_configure_mfa_view(self):
-    #     response = self.client.get(reverse('configure_mfa'))
+    #     response = self.client.get(reverse('mfa:configure_mfa'))
     #     self.assertTemplateUsed(response, "django_mfa/configure.html")
 
     # @skip('Need to implement')
@@ -38,7 +38,7 @@ class Views_test(TestCase):
     #     """
     #     Test posting without a verification code
     #     """
-    #     response = self.client.post(reverse('verify_otp'))
+    #     response = self.client.post(reverse('mfa:verify_otp'))
 
     #     self.assertEquals(response.context['error_message'], 'Missing verification code.')
     #     self.assertEquals(response.status_code, 400)

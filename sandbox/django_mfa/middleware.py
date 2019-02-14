@@ -17,9 +17,9 @@ class MfaMiddleware(MiddlewareMixin):
         if request.user.is_authenticated and not verify_rmb_cookie(request) and is_mfa_enabled(request.user):
             if not request.session.get('verfied_otp'):
                 current_path = request.path
-                if current_path != reverse("verify_otp"):
+                if current_path != reverse("mfa:verify_otp"):
                     path = request.get_full_path()
-                    resolved_login_url = resolve_url(reverse("verify_otp"))
+                    resolved_login_url = resolve_url(reverse("mfa:verify_otp"))
                     from django.contrib.auth.views import redirect_to_login
                     return redirect_to_login(path, resolved_login_url, redirect_field_name)
         return None

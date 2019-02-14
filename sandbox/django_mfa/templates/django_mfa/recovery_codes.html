@@ -11,9 +11,9 @@
 <p>{{i}}</p>
 {% endfor %}
 
-<a href="{% url 'recovery_codes_download' %}">Download</a>
+<a href="{% url 'mfa:recovery_codes_download' %}">Download</a>
 
-<a href="{% url 'home' %}">Home Page</a>
+<a href="{{next_url}}">Home Page</a>
 
 </body>
 </html>

@@ -35,7 +35,7 @@
 
       <hr>
 
-      <!-- </textarea> --><!-- '"` --><form accept-charset="UTF-8" action="{% url 'enable_mfa' %}" method="post">
+      <!-- </textarea> --><!-- '"` --><form accept-charset="UTF-8" action="{% url 'mfa:enable_mfa' %}" method="post">
       {% csrf_token %}
         <dl class="form-group">
           <dt><label for="two-factor-code">2. Enter the six-digit code from the application</label></dt>

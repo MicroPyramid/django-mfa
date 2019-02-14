@@ -134,7 +134,7 @@ def delete_rmb_cookie(request, response):
 def disable_mfa(request):
     user = request.user
     if not is_mfa_enabled(user):
-        return HttpResponseRedirect(reverse("configure_mfa"))
+        return HttpResponseRedirect(reverse("mfa:configure_mfa"))
     if request.method == "POST":
         user_mfa = user.userotp
         user_mfa.delete()
@@ -209,7 +209,8 @@ def recovery_codes(request):
                     user=UserOTP.objects.get(user=request.user.id))]
             else:
                 codes = generate_user_recovery_codes(request.user.id)
-            return render(request, "django_mfa/recovery_codes.html", {"codes": codes})
+            next_url = settings.REDIRECT_URL_AFTER_DOWNLOADING_CODES
+            return render(request, "django_mfa/recovery_codes.html", {"codes": codes, "next_url": next_url})
         else:
             return HttpResponse("please enable twofactor_authentication!")
 

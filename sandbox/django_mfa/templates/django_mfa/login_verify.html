@@ -6,7 +6,7 @@
 
   <div class="setup-main two-factor-app-main">
     <div class="setup-form-container">
-    <form accept-charset="UTF-8" action="{% url 'verify_otp' %}" method="post">
+    <form accept-charset="UTF-8" action="{% url 'mfa:verify_otp' %}" method="post">
       {% csrf_token %}
       {% if next_url %}
       <input type="hidden" name="next" value="{{next_url}}">

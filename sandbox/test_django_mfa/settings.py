@@ -146,6 +146,8 @@ CONFIGURE_URL = "/settings/mfa/configure/"
 
 RECOVERY_CODE_URL = "/settings/recovery/codes/"
 
+REDIRECT_URL_AFTER_DOWNLOADING_CODES = "/home/"
+
 ALLOWED_HOSTS = ['*']
 
 
