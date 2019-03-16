@@ -19,3 +19,8 @@ def is_mfa_enabled(user):
     Determine if a user has MFA enabled
     """
     return hasattr(user, 'userotp')
+
+
+class UserRecoveryCodes(models.Model):
+    user = models.ForeignKey(UserOTP, on_delete=models.CASCADE)
+    secret_code = models.CharField(max_length=100, blank=True)
