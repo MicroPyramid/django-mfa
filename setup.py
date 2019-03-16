@@ -43,8 +43,9 @@ setup(
         'Programming Language :: Python :: 3.3',
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
-    ],
-    install_requires=[
-        "Django>=1.10.0",
+        'Framework :: Django',
+        'Framework :: Django :: 1.11',
+        'Framework :: Django :: 2.0',
+        'Framework :: Django :: 2.1',
     ],
 )
