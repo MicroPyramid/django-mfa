@@ -6,7 +6,7 @@ Requirements
 
 ======  ====================
 Python  >= 2.6 (or Python 3)
-Django  < 1.10
+Django  >= 1.11
 ======  ====================
 
 Installation
