@@ -38,7 +38,7 @@ class Views_test(TestCase):
     #     """
     #     Test posting without a verification code
     #     """
-    #     response = self.client.post(reverse('mfa:verify_otp'))
+    #     response = self.client.post(reverse('mfa:verify_second_factor_totp'))
 
     #     self.assertEquals(response.context['error_message'], 'Missing verification code.')
     #     self.assertEquals(response.status_code, 400)

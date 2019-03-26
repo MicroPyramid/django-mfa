@@ -1,0 +1,16 @@
+{% extends base_template|default:"u2f_base.html" %}
+{% load staticfiles %}
+{% load i18n %}
+{% block content %}
+<script src="{% static 'django_u2f/u2f-api.js' %}"></script>
+{{ block.super }}
+<div id="u2f-not-defined-error" style="display: none">
+  {% blocktrans %}
+  You must be using a compatible browser to use a U2F security key.
+  The following browsers are known to be compatible
+  {% endblocktrans %}
+  <ul>
+    <li>{% trans 'Chrome 41 and higher' %}
+  </ul>
+</div>
+{% endblock %}

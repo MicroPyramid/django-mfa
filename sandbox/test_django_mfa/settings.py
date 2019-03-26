@@ -39,6 +39,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_mfa',
+    'argonauts',
+    'debug_toolbar',
 ]
 
 MIDDLEWARE = [
@@ -50,25 +52,11 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django_mfa.middleware.MfaMiddleware',
+    'debug_toolbar.middleware.DebugToolbarMiddleware',
 ]
 
 ROOT_URLCONF = 'test_django_mfa.urls'
 
-TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-            ],
-        },
-    },
-]
 
 WSGI_APPLICATION = 'test_django_mfa.wsgi.application'
 
@@ -141,6 +129,9 @@ TEMPLATES = [
 AUTH_USER_MODEL = 'auth.User'
 
 LOGIN_URL = LOGIN_REDIRECT_URL = '/'
+
+# LOGIN_REDIRECT_URL = 'u2f:two-factor-settings'
+# LOGIN_URL = 'u2f:login'
 
 CONFIGURE_URL = "/settings/mfa/configure/"
 

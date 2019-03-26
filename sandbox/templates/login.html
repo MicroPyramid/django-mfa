@@ -1,4 +1,7 @@
 <!DOCTYPE html>
+{% load argonauts %}
+{% load i18n %}
+{% load static %}
 <html>
 <head>
 	<title>Django MFA</title>
@@ -202,6 +205,10 @@ body {
 
 <!-- Latest compiled JavaScript -->
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+
+<script src="{% static 'django_u2f/u2f-api.js' %}" ></script>
+<script src="{% static 'django_u2f/django_u2f.js' %}" ></script>
+
 <script type="text/javascript">
 	$(function() {
 	    $('#login-form-link').click(function(e) {
