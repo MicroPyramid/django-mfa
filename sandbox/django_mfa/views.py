@@ -39,7 +39,7 @@ class OriginMixin(object):
         return '{scheme}://{host}'.format(
             # scheme=self.request.scheme,
             scheme="https",
-            host="7d494686.ngrok.io"
+            host="557806e0.ngrok.io"
             # host=self.request.get_host(),
         )
 
@@ -209,7 +209,7 @@ def verify_second_factor_totp(request):
             ctx['error_message'] = "Your code is expired or invalid."
 
     ctx['next'] = request.GET.get('next', settings.LOGIN_REDIRECT_URL)
-    return render(request, 'django_mfa/verify_second_factor_mfa.html', ctx, status=400)
+    return render(request, 'django_mfa/verify_second_factor_mfa.html', ctx)
 
 
 def generate_user_recovery_codes(user_id):
@@ -303,6 +303,7 @@ class AddKeyView(OriginMixin, FormView):
             key_handle=device['keyHandle'],
             app_id=device['appId'],
         )
+        self.request.session['verfied_u2f'] = True
         messages.success(self.request, _("Key added."))
         return super(AddKeyView, self).form_valid(form)
 
@@ -397,6 +398,7 @@ class VerifySecondFactorView(OriginMixin, TemplateView):
         del self.request.session['u2f_pre_verify_user_pk']
         del self.request.session['u2f_pre_verify_user_backend']
         self.request.session['verfied_otp'] = True
+        self.request.session['verfied_u2f'] = True
 
         auth.login(self.request, self.user)
 
