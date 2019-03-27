@@ -37,10 +37,10 @@ from .forms import *
 class OriginMixin(object):
     def get_origin(self):
         return '{scheme}://{host}'.format(
-            # scheme=self.request.scheme,
-            scheme="https",
-            host="557806e0.ngrok.io"
-            # host=self.request.get_host(),
+            scheme=self.request.scheme,
+            # scheme="https",
+            # host="557806e0.ngrok.io"
+            host=self.request.get_host(),
         )
 
 
