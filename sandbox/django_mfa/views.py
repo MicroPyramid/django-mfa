@@ -78,6 +78,9 @@ def configure_mfa(request):
 
 @login_required
 def enable_mfa(request):
+    user = request.user
+    if is_mfa_enabled(user):
+        return HttpResponseRedirect(reverse("mfa:disable_mfa"))
     qr_code = None
     base_32_secret = None
     is_verified = False
@@ -180,6 +183,9 @@ def verify_second_factor_totp(request):
     Verify a OTP request
     """
     ctx = {}
+    if request.method == 'GET':
+        ctx['next'] = request.GET.get('next', settings.LOGIN_REDIRECT_URL)
+        return render(request, 'django_mfa/verify_second_factor_mfa.html', ctx)
 
     if request.method == "POST":
         verification_code = request.POST.get('verification_code')
@@ -188,8 +194,8 @@ def verify_second_factor_totp(request):
             ctx['error_message'] = "Missing verification code."
 
         else:
-            user_recovery_codes = [i.secret_code for i in UserRecoveryCodes.objects.filter(
-                user=UserOTP.objects.get(user=request.user.id))]
+            user_recovery_codes = UserRecoveryCodes.objects.values_list('secret_code', flat=True).filter(
+                user=UserOTP.objects.get(user=request.user.id))
             if verification_code in user_recovery_codes:
                 UserRecoveryCodes.objects.filter(user=UserOTP.objects.get(
                     user=request.user.id), secret_code=verification_code).delete()
@@ -209,7 +215,7 @@ def verify_second_factor_totp(request):
             ctx['error_message'] = "Your code is expired or invalid."
 
     ctx['next'] = request.GET.get('next', settings.LOGIN_REDIRECT_URL)
-    return render(request, 'django_mfa/verify_second_factor_mfa.html', ctx)
+    return render(request, 'django_mfa/verify_second_factor_mfa.html', ctx, status=400)
 
 
 def generate_user_recovery_codes(user_id):
@@ -220,8 +226,8 @@ def generate_user_recovery_codes(user_id):
     while(no_of_recovery_codes > 0):
         code = ''.join(random.choice(chars)
                        for _ in range(size_of_recovery_code))
-        Total_recovery_codes = [i.secret_code for i in UserRecoveryCodes.objects.filter(
-            user=UserOTP.objects.get(user=user_id))]
+        Total_recovery_codes = UserRecoveryCodes.objects.values_list('secret_code', flat=True).filter(
+            user=UserOTP.objects.get(user=user_id))
         if code not in Total_recovery_codes:
             no_of_recovery_codes = no_of_recovery_codes - 1
             UserRecoveryCodes.objects.create(
@@ -233,10 +239,10 @@ def generate_user_recovery_codes(user_id):
 @login_required
 def recovery_codes(request):
     if request.method == "GET":
-        if UserOTP.objects.filter(user=request.user.id).exists():
+        if is_mfa_enabled(request.user):
             if UserRecoveryCodes.objects.filter(user=UserOTP.objects.get(user=request.user.id)).exists():
-                codes = [i.secret_code for i in UserRecoveryCodes.objects.filter(
-                    user=UserOTP.objects.get(user=request.user.id))]
+                codes = UserRecoveryCodes.objects.values_list('secret_code', flat=True).filter(
+                    user=UserOTP.objects.get(user=request.user.id))
             else:
                 codes = generate_user_recovery_codes(request.user.id)
             next_url = settings.REDIRECT_URL_AFTER_DOWNLOADING_CODES
@@ -258,8 +264,10 @@ def verify_second_factor(request):
 def recovery_codes_download(request):
     user_id = request.user.id
     codes_list = []
-    for i in UserRecoveryCodes.objects.filter(user=UserOTP.objects.get(user=user_id)):
-        codes_list.append(i.secret_code)
+    codes = UserRecoveryCodes.objects.values_list('secret_code', flat=True).filter(
+        user=UserOTP.objects.get(user=request.user.id))
+    for i in codes:
+        codes_list.append(i)
         codes_list.append("\n")
     response = HttpResponse(
         codes_list, content_type='text/plain')

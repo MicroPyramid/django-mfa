@@ -130,9 +130,6 @@ AUTH_USER_MODEL = 'auth.User'
 
 LOGIN_URL = LOGIN_REDIRECT_URL = '/'
 
-# LOGIN_REDIRECT_URL = 'u2f:two-factor-settings'
-# LOGIN_URL = 'u2f:login'
-
 CONFIGURE_URL = "/settings/mfa/configure/"
 
 RECOVERY_CODE_URL = "/settings/recovery/codes/"
