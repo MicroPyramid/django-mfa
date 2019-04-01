@@ -128,13 +128,9 @@ TEMPLATES = [
 
 AUTH_USER_MODEL = 'auth.User'
 
-LOGIN_URL = LOGIN_REDIRECT_URL = '/'
+LOGIN_URL = '/'
 
-CONFIGURE_URL = "/settings/mfa/configure/"
-
-RECOVERY_CODE_URL = "/settings/recovery/codes/"
-
-REDIRECT_URL_AFTER_DOWNLOADING_CODES = "/home/"
+LOGIN_REDIRECT_URL = "/home/"
 
 ALLOWED_HOSTS = ['*']
 

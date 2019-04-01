@@ -4,11 +4,12 @@ from django.http.response import HttpResponseRedirect, JsonResponse
 from .forms import RegistrationForm, LoginForm
 from django.contrib.auth.models import User
 from django_mfa.models import is_u2f_enabled
+from django.conf import settings
 
 
 def index(request):
     if request.user and request.user.is_authenticated:
-        return HttpResponseRedirect('/home/')
+        return HttpResponseRedirect(settings.LOGIN_REDIRECT_URL)
     if request.method == 'POST':
         form = LoginForm(request.POST, request.FILES)
         if form.is_valid():

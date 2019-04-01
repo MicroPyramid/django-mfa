@@ -32,6 +32,7 @@ from qrcode.image.svg import SvgPathImage
 from u2flib_server import u2f
 from django_mfa.models import *
 from .forms import *
+from django.conf import settings
 
 
 class OriginMixin(object):
@@ -39,7 +40,7 @@ class OriginMixin(object):
         return '{scheme}://{host}'.format(
             scheme=self.request.scheme,
             # scheme="https",
-            # host="557806e0.ngrok.io"
+            # host="9dade978.ngrok.io"
             host=self.request.get_host(),
         )
 
@@ -95,7 +96,7 @@ def enable_mfa(request):
                                           secret_key=request.POST['secret_key'])
             messages.success(
                 request, "You have successfully enabled multi-factor authentication on your account.")
-            response = redirect(settings.RECOVERY_CODE_URL)
+            response = redirect(reverse("mfa:recovery_codes"))
             return response
         else:
             totp_obj = totp.TOTP(base_32_secret)
@@ -172,7 +173,7 @@ def disable_mfa(request):
         user_mfa.delete()
         messages.success(
             request, "You have successfully disabled multi-factor authentication on your account.")
-        response = redirect(settings.CONFIGURE_URL)
+        response = redirect(reverse('mfa:configure_mfa'))
         return delete_rmb_cookie(request, response)
     return render(request, 'django_mfa/disable_mfa.html')
 
@@ -245,7 +246,7 @@ def recovery_codes(request):
                     user=UserOTP.objects.get(user=request.user.id))
             else:
                 codes = generate_user_recovery_codes(request.user.id)
-            next_url = settings.REDIRECT_URL_AFTER_DOWNLOADING_CODES
+            next_url = settings.LOGIN_REDIRECT_URL
             return render(request, "django_mfa/recovery_codes.html", {"codes": codes, "next_url": next_url})
         else:
             return HttpResponse("please enable twofactor_authentication!")
@@ -349,7 +350,7 @@ class VerifySecondFactorView(OriginMixin, TemplateView):
     def dispatch(self, request, *args, **kwargs):
         self.user = self.get_user()
         if self.user is None:
-            return HttpResponseRedirect(reverse('index'))
+            return HttpResponseRedirect(settings.LOGIN_URL)
         return super(VerifySecondFactorView, self).dispatch(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
