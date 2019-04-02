@@ -16,12 +16,15 @@ from django.contrib.auth.models import User
 from . import totp
 import random
 import string
+from django.conf import settings
 
 
 @login_required
 def security_settings(request):
     twofactor_enabled = is_mfa_enabled(request.user)
-    return render(request, 'django_mfa/security.html', {"twofactor_enabled": twofactor_enabled})
+    backup_codes = UserRecoveryCodes.objects.filter(
+        user=UserOTP.objects.filter(user=request.user).first()).all()
+    return render(request, 'django_mfa/security.html', {"backup_codes": backup_codes, "twofactor_enabled": twofactor_enabled})
 
 
 @login_required
@@ -49,6 +52,8 @@ def configure_mfa(request):
 
 @login_required
 def enable_mfa(request):
+    if is_mfa_enabled(request.user):
+        return HttpResponseRedirect(reverse("mfa:disable_mfa"))
     qr_code = None
     base_32_secret = None
     is_verified = False
@@ -63,7 +68,7 @@ def enable_mfa(request):
                                           secret_key=request.POST['secret_key'])
             messages.success(
                 request, "You have successfully enabled multi-factor authentication on your account.")
-            response = redirect(settings.RECOVERY_CODE_URL)
+            response = redirect(reverse('mfa:recovery_codes'))
             return response
         else:
             totp_obj = totp.TOTP(base_32_secret)
@@ -140,7 +145,7 @@ def disable_mfa(request):
         user_mfa.delete()
         messages.success(
             request, "You have successfully disabled multi-factor authentication on your account.")
-        response = redirect(settings.CONFIGURE_URL)
+        response = redirect(reverse('mfa:configure_mfa'))
         return delete_rmb_cookie(request, response)
     return render(request, 'django_mfa/disable_mfa.html')
 
@@ -190,8 +195,8 @@ def generate_user_recovery_codes(user_id):
     while(no_of_recovery_codes > 0):
         code = ''.join(random.choice(chars)
                        for _ in range(size_of_recovery_code))
-        Total_recovery_codes = [i.secret_code for i in UserRecoveryCodes.objects.filter(
-            user=UserOTP.objects.get(user=user_id))]
+        Total_recovery_codes = UserRecoveryCodes.objects.values_list('secret_code', flat=True).filter(
+            user=UserOTP.objects.get(user=user_id))
         if code not in Total_recovery_codes:
             no_of_recovery_codes = no_of_recovery_codes - 1
             UserRecoveryCodes.objects.create(
@@ -205,11 +210,11 @@ def recovery_codes(request):
     if request.method == "GET":
         if UserOTP.objects.filter(user=request.user.id).exists():
             if UserRecoveryCodes.objects.filter(user=UserOTP.objects.get(user=request.user.id)).exists():
-                codes = [i.secret_code for i in UserRecoveryCodes.objects.filter(
-                    user=UserOTP.objects.get(user=request.user.id))]
+                codes = UserRecoveryCodes.objects.values_list('secret_code', flat=True).filter(
+                    user=UserOTP.objects.get(user=request.user.id))
             else:
                 codes = generate_user_recovery_codes(request.user.id)
-            next_url = settings.REDIRECT_URL_AFTER_DOWNLOADING_CODES
+            next_url = settings.LOGIN_REDIRECT_URL
             return render(request, "django_mfa/recovery_codes.html", {"codes": codes, "next_url": next_url})
         else:
             return HttpResponse("please enable twofactor_authentication!")
@@ -219,8 +224,10 @@ def recovery_codes(request):
 def recovery_codes_download(request):
     user_id = request.user.id
     codes_list = []
-    for i in UserRecoveryCodes.objects.filter(user=UserOTP.objects.get(user=user_id)):
-        codes_list.append(i.secret_code)
+    codes = UserRecoveryCodes.objects.values_list('secret_code', flat=True).filter(
+        user=UserOTP.objects.get(user=request.user.id))
+    for i in codes:
+        codes_list.append(i)
         codes_list.append("\n")
     response = HttpResponse(
         codes_list, content_type='text/plain')
