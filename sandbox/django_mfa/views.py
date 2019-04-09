@@ -156,6 +156,9 @@ def verify_otp(request):
     Verify a OTP request
     """
     ctx = {}
+    if request.method == 'GET':
+        ctx['next'] = request.GET.get('next', settings.LOGIN_REDIRECT_URL)
+        return render(request, 'django_mfa/login_verify.html', ctx)
 
     if request.method == "POST":
         verification_code = request.POST.get('verification_code')
@@ -164,8 +167,8 @@ def verify_otp(request):
             ctx['error_message'] = "Missing verification code."
 
         else:
-            user_recovery_codes = [i.secret_code for i in UserRecoveryCodes.objects.filter(
-                user=UserOTP.objects.get(user=request.user.id))]
+            user_recovery_codes = UserRecoveryCodes.objects.values_list('secret_code', flat=True).filter(
+                user=UserOTP.objects.get(user=request.user.id))
             if verification_code in user_recovery_codes:
                 UserRecoveryCodes.objects.filter(user=UserOTP.objects.get(
                     user=request.user.id), secret_code=verification_code).delete()

@@ -9,6 +9,9 @@ from django.test import Client, TestCase
 from django_mfa import totp
 from django_mfa.models import *
 from django.conf import settings
+from django.contrib import auth
+from django_mfa.apps import DjangoMfaAppConfig
+import binascii
 
 
 class Views_test_auth_factor(TestCase):
@@ -16,7 +19,7 @@ class Views_test_auth_factor(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            username='micro', email='djangomfa@mp.com', password='djangomfa')
+            username='djangomfa@mp.com', email='djangomfa@mp.com', password='djangomfa')
         UserOTP.objects.create(
             otp_type='TOTP', user=self.user, secret_key='secret_key')
         self.session = self.client.session
@@ -25,7 +28,7 @@ class Views_test_auth_factor(TestCase):
         session = self.client.session
         session['verfied_otp'] = True
         session.save()
-        self.client.login(username='micro', password="djangomfa")
+        self.client.login(username='djangomfa@mp.com', password="djangomfa")
 
     def test_middleware_with_Securitysettings_view(self):
         session = self.client.session
@@ -57,6 +60,10 @@ class Views_test_auth_factor(TestCase):
         self.assertEquals(response.status_code, 302)
         self.assertEquals(response.url, settings.LOGIN_REDIRECT_URL)
 
+        with self.assertRaises(binascii.Error):
+            response = self.client.post(reverse('mfa:verify_otp'), {
+                                        'verification_code': "jnfqbfqbg"})
+
     # @skip('Need to implement')
     # def test_verify_otp(self):
     #     """
@@ -72,6 +79,9 @@ class Views_test_auth_factor(TestCase):
         self.assertEquals(
             response.context['error_message'], 'Missing verification code.')
         self.assertEquals(response.status_code, 400)
+        response = self.client.get(reverse('mfa:verify_otp'))
+        self.assertNotEquals(response.status_code, 400)
+        self.assertTemplateUsed(response, "django_mfa/login_verify.html")
 
     def test_enable_mfa_false_case_view(self):
         response = self.client.get(reverse('mfa:enable_mfa'))
@@ -84,7 +94,7 @@ class Views_test_auth_factor(TestCase):
 
     def test_recovery_codes_newcodes_generate_view(self):
         UserRecoveryCodes.objects.get(user=UserOTP.objects.get(
-            user=self.user), secret_code="ABcDg").delete()
+            user=auth.get_user(self.client)), secret_code="ABcDg").delete()
         response = self.client.get(reverse('mfa:recovery_codes'))
         self.assertTemplateUsed(response, "django_mfa/recovery_codes.html")
 
@@ -106,8 +116,8 @@ class Views_test_not_auth_factor(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            username='micro', email='djangomfa@mp.com', password='djangomfa')
-        self.client.login(username='micro', password="djangomfa")
+            username='djangomfa@mp.com', email='djangomfa@mp.com', password='djangomfa')
+        self.client.login(username='djangomfa@mp.com', password="djangomfa")
 
     def test_configure_mfa_view_post_method(self):
         response = self.client.post(reverse('mfa:configure_mfa'))
@@ -130,3 +140,6 @@ class Views_test_not_auth_factor(TestCase):
         response = self.client.get(reverse('mfa:recovery_codes'))
         self.assertEquals(response.content,
                           b'please enable twofactor_authentication!')
+
+    def test_app_file(self):
+        self.assertEqual(DjangoMfaAppConfig.name, 'django_mfa')

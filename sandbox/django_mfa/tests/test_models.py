@@ -1,6 +1,7 @@
 from django_mfa.models import *
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
+from django.contrib import auth
 
 
 class Test_Models_Mfa(TestCase):
@@ -20,19 +21,21 @@ class Test_Models_Mfa(TestCase):
         self.assertTrue(is_mfa_enabled(self.user))
 
     def test_user_data_saved_correctly(self):
-        user_details = User.objects.filter(id=self.user.id).first()
+        user_details = auth.get_user(self.client)
         self.assertEqual(self.user.username, user_details.username)
         self.assertEqual(self.user.email, user_details.email)
         self.assertEqual(self.user.password, user_details.password)
 
     def test_userotp_data_saved_correctly(self):
-        user_otp = UserOTP.objects.filter(user=self.user).first()
+        user_otp = UserOTP.objects.filter(
+            user=auth.get_user(self.client)).first()
         self.assertEqual(self.userotp.otp_type, user_otp.otp_type)
         self.assertEqual(self.userotp.user, user_otp.user)
         self.assertEqual(self.userotp.secret_key, user_otp.secret_key)
 
     def test_recovery_codes_generated(self):
-        user_codes = UserRecoveryCodes.objects.filter(user=UserOTP.objects.filter(
-            user=self.user).first()).first()
+        user_otp = UserOTP.objects.filter(
+            user=auth.get_user(self.client)).first()
+        user_codes = UserRecoveryCodes.objects.filter(user=user_otp).first()
 
         self.assertEqual(self.user_codes, user_codes)
