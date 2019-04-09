@@ -1,14 +1,14 @@
 from django_mfa.models import *
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
-
+from django.contrib import auth
 
 class Test_Models_Mfa_U2f(TestCase):
 
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            username='micro', email='djangomfa@mp.com', password='djangomfa')
+            username='djangomfa@mp.com', email='djangomfa@mp.com', password='djangomfa')
         self.userotp = UserOTP.objects.create(
             otp_type='TOTP', user=self.user, secret_key='secret_key')
         self.user_codes = UserRecoveryCodes.objects.create(user=UserOTP.objects.get(
@@ -18,7 +18,7 @@ class Test_Models_Mfa_U2f(TestCase):
             key_handle='keyHandle',
             app_id='https://appId',
         )
-        self.client.login(username='micro', password="djangomfa")
+        self.client.login(username='djangomfa@mp.com', password="djangomfa")
 
     def test_mfa_enabled(self):
 
@@ -29,7 +29,7 @@ class Test_Models_Mfa_U2f(TestCase):
         self.assertTrue(is_u2f_enabled(self.user))
 
     def test_user_data_saved_correctly(self):
-        user_details = User.objects.filter(id=self.user.id).first()
+        user_details = auth.get_user(self.client)
         self.assertEqual(self.user.username, user_details.username)
         self.assertEqual(self.user.email, user_details.email)
         self.assertEqual(self.user.password, user_details.password)
