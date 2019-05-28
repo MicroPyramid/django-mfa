@@ -41,3 +41,11 @@ class Views_test(TestCase):
 
     #     self.assertEquals(response.context['error_message'], 'Missing verification code.')
     #     self.assertEquals(response.status_code, 400)
+
+    def test_login_redirect_persists_after_failed_otp_verify(self):
+        login_redirect = '/some_other_url'
+        UserOTP.objects.create(user=self.user, otp_type='totp')
+        response = self.client.post(reverse('mfa:verify_otp'), {'verification_code': 'Bad Code',  'next': login_redirect })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(login_redirect in response.content)

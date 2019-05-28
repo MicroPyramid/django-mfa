@@ -147,6 +147,7 @@ def verify_otp(request):
 
     if request.method == "POST":
         verification_code = request.POST.get('verification_code')
+        ctx['next'] = request.POST.get("next", settings.LOGIN_REDIRECT_URL)
 
         if verification_code is None:
             ctx['error_message'] = "Missing verification code."
@@ -161,6 +162,7 @@ def verify_otp(request):
                 response = redirect(request.POST.get("next", settings.LOGIN_REDIRECT_URL))
                 return update_rmb_cookie(request, response)
             ctx['error_message'] = "Your code is expired or invalid."
+    else:
+        ctx['next'] = request.GET.get('next', settings.LOGIN_REDIRECT_URL)
 
-    ctx['next'] = request.GET.get('next', settings.LOGIN_REDIRECT_URL)
     return render(request, 'django_mfa/login_verify.html', ctx, status=400)
