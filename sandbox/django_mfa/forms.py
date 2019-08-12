@@ -1,9 +1,6 @@
 import json
-
 from django import forms
 from django.utils import timezone
-from django.utils.translation import ugettext_lazy as _
-from django_mfa.models import *
 from u2flib_server import u2f
 
 

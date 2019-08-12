@@ -2,13 +2,6 @@ from __future__ import division
 from django.conf import settings
 from django.db import models
 
-import datetime
-import string
-import hmac
-import six
-
-from django.utils import timezone
-
 
 class UserOTP(models.Model):
 

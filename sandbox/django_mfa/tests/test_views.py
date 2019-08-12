@@ -114,7 +114,7 @@ class Views_test_auth_factor(TestCase):
 
     def test_recovery_codes_newcodes_generate_view(self):
         UserRecoveryCodes.objects.get(user=UserOTP.objects.get(
-            user=self.user), secret_code="ABcDg").delete()
+            user=auth.get_user(self.client)), secret_code="ABcDg").delete()
         response = self.client.get(reverse('mfa:recovery_codes'))
         self.assertTemplateUsed(response, "django_mfa/recovery_codes.html")
 

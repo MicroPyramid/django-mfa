@@ -3,36 +3,21 @@ import codecs
 import random
 import hashlib
 import re
-import os
-import qrcode
-import random
 import string
-import json
 from django.http import HttpResponse, HttpResponseRedirect
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, resolve_url, get_object_or_404
 from django_mfa.models import *
-from django.contrib.auth.models import User
 from . import totp
-from base64 import b32encode, b32decode
-from collections import OrderedDict
-from six import BytesIO
-from six.moves.urllib.parse import quote
 from django.views.generic import FormView, ListView, TemplateView
 from django.contrib.auth import load_backend
-from django.contrib.auth.views import LoginView
 from django.contrib import auth, messages
 from django.urls import reverse, reverse_lazy
-from django.utils.http import is_safe_url, urlencode
-from django.contrib.sites.shortcuts import get_current_site
-from django.utils.functional import cached_property
+from django.utils.http import is_safe_url
 from django.utils.translation import ugettext as _
-from qrcode.image.svg import SvgPathImage
 from u2flib_server import u2f
-from django_mfa.models import *
 from .forms import *
-from django.conf import settings
 
 
 class OriginMixin(object):
@@ -263,7 +248,6 @@ def verify_second_factor(request):
 
 @login_required
 def recovery_codes_download(request):
-    user_id = request.user.id
     codes_list = []
     codes = UserRecoveryCodes.objects.values_list('secret_code', flat=True).filter(
         user=UserOTP.objects.get(user=request.user.id))

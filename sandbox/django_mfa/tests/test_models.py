@@ -3,6 +3,7 @@ from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from django.contrib import auth
 
+
 class Test_Models_Mfa_U2f(TestCase):
 
     def setUp(self):
@@ -22,11 +23,11 @@ class Test_Models_Mfa_U2f(TestCase):
 
     def test_mfa_enabled(self):
 
-        self.assertTrue(is_mfa_enabled(self.user))
+        self.assertTrue(is_mfa_enabled(auth.get_user(self.client)))
 
     def test_u2f_enabled(self):
 
-        self.assertTrue(is_u2f_enabled(self.user))
+        self.assertTrue(is_u2f_enabled(auth.get_user(self.client)))
 
     def test_user_data_saved_correctly(self):
         user_details = auth.get_user(self.client)
@@ -35,24 +36,27 @@ class Test_Models_Mfa_U2f(TestCase):
         self.assertEqual(self.user.password, user_details.password)
 
     def test_userotp_data_saved_correctly(self):
-        user_otp = UserOTP.objects.filter(user=self.user).first()
+        user_otp = UserOTP.objects.filter(
+            user=auth.get_user(self.client)).first()
         self.assertEqual(self.userotp.otp_type, user_otp.otp_type)
         self.assertEqual(self.userotp.user, user_otp.user)
         self.assertEqual(self.userotp.secret_key, user_otp.secret_key)
 
     def test_u2f_key_user(self):
-        user_u2f = U2FKey.objects.filter(user=self.user).first()
+        user_u2f = U2FKey.objects.filter(
+            user=auth.get_user(self.client)).first()
         self.assertEqual(self.u2f_keys.user, user_u2f.user)
         self.assertEqual(self.u2f_keys.public_key, user_u2f.public_key)
         self.assertEqual(self.u2f_keys.key_handle, user_u2f.key_handle)
         self.assertEqual(self.u2f_keys.app_id, user_u2f.app_id)
 
     def test_u2f_to_json_function(self):
-        user_u2f = U2FKey.objects.filter(user=self.user).first()
-        self.assertEqual(self.u2f_keys.to_json(),user_u2f.to_json())
+        user_u2f = U2FKey.objects.filter(
+            user=auth.get_user(self.client)).first()
+        self.assertEqual(self.u2f_keys.to_json(), user_u2f.to_json())
 
     def test_recovery_codes_generated(self):
         user_codes = UserRecoveryCodes.objects.filter(user=UserOTP.objects.filter(
-            user=self.user).first()).first()
+            user=auth.get_user(self.client)).first()).first()
 
         self.assertEqual(self.user_codes, user_codes)
