@@ -3,7 +3,6 @@ import codecs
 import random
 import hashlib
 import re
-import os
 from django.http import HttpResponse
 from django.conf import settings
 from django.contrib import messages
@@ -12,11 +11,8 @@ from django.urls import reverse
 from django.http import HttpResponseRedirect
 from django.shortcuts import render, redirect
 from django_mfa.models import *
-from django.contrib.auth.models import User
 from . import totp
-import random
 import string
-from django.conf import settings
 
 
 @login_required

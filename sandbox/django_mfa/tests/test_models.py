@@ -18,7 +18,7 @@ class Test_Models_Mfa(TestCase):
 
     def test_mfa_enabled(self):
 
-        self.assertTrue(is_mfa_enabled(self.user))
+        self.assertTrue(is_mfa_enabled(auth.get_user(self.client)))
 
     def test_user_data_saved_correctly(self):
         user_details = auth.get_user(self.client)

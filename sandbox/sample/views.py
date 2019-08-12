@@ -5,6 +5,7 @@ from .forms import RegistrationForm, LoginForm
 from django.contrib.auth.models import User
 from django.conf import settings
 
+
 def index(request):
     if request.user and request.user.is_authenticated:
         return HttpResponseRedirect(settings.LOGIN_REDIRECT_URL)
