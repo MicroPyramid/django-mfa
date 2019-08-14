@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+{% load staticfiles %}
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>{{title}}</title>
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{% static 'style.css' %}" rel="stylesheet">
+  </head>
+
+  <body>
+
+  {% block nav_menu %}
+    <nav class="navbar navbar-dark navbar-fixed-top bg-inverse">
+      <a class="navbar-brand" href="#">Django MFA</a>
+    </nav>
+  {% endblock %}
+
+    <div class="container">
+      <div class="row">
+        {% block left_bar %}
+        <div class="col-sm-3 col-md-2">
+
+        </div>
+      {% endblock %}
+      <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
+      {% block content %}
+        {% endblock %}
+      </div>
+      </div>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+  </body>
+</html>

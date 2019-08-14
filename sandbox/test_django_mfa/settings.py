@@ -140,7 +140,9 @@ TEMPLATES = [
 
 AUTH_USER_MODEL = 'auth.User'
 
-LOGIN_URL = LOGIN_REDIRECT_URL = '/'
+LOGIN_URL = '/'
+
+LOGIN_REDIRECT_URL = "/home/"
 
 ALLOWED_HOSTS = ['*']
 

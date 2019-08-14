@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+{% load otp_tags %}
+<html>
+<head>
+	<title>Enable MFA</title>
+</head>
+<body>
+<form method="post" action=".">
+{% csrf_token %}
+<input type="hidden" name="otp_type" value="hotp">
+<button type="submit">SetUp with App</button>
+</form>
+<button>SetUp with Email</button>
+{% if qr_code %}
+{{qr_code|qrcode:"my alt"}}
+{% endif %}
+</body>
+</html>
