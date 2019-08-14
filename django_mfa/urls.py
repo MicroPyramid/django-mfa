@@ -1,14 +1,20 @@
-from django.conf.urls import include, url
 from .views import *
+from django.urls import path, include
 
-security_patterns = ([
-    url(r'^security/$', security_settings, name="security_settings"),
-    url(r'^mfa/configure/$', configure_mfa, name="configure_mfa"),
-    url(r'^mfa/enable/$', enable_mfa, name="enable_mfa"),
-    url(r'^verify/token/$', verify_otp, name="verify_otp"),
-    url(r'^mfa/disable/$', disable_mfa, name="disable_mfa"),
-], 'mfa')
+app_name = 'mfa'
+
+
+security_patterns = [
+    path('security/', security_settings, name='security_settings'),
+    path('mfa/configure/', configure_mfa, name='configure_mfa'),
+    path('mfa/enable/', enable_mfa, name='enable_mfa'),
+    path('verify/token/', verify_otp, name='verify_otp'),
+    path('mfa/disable/', disable_mfa, name='disable_mfa'),
+    path('recovery/codes/', recovery_codes, name='recovery_codes'),
+    path('recovery/codes/downloads/', recovery_codes_download,
+         name='recovery_codes_download'),
+]
 
 urlpatterns = [
-    url(r'', include(security_patterns)),
+    path("", include(security_patterns)),
 ]
