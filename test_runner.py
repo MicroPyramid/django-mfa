@@ -4,7 +4,6 @@ import sys
 import django
 from django.conf import settings
 from django.test.utils import get_runner
-from django_mfa import totp
 
 if __name__ == "__main__":
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
