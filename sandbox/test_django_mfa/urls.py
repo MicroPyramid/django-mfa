@@ -17,6 +17,7 @@ from django.urls import path, include
 from django.contrib import admin
 from sample.views import index, home, log_out, register
 from django.conf import settings
+from django.conf.urls import url
 
 
 urlpatterns = [
