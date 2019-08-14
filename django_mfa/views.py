@@ -3,24 +3,40 @@ import codecs
 import random
 import hashlib
 import re
-from django.http import HttpResponse
+import string
+from django.http import HttpResponse, HttpResponseRedirect
 from django.conf import settings
-from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.urls import reverse
-from django.http import HttpResponseRedirect
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, resolve_url, get_object_or_404
 from django_mfa.models import *
 from . import totp
-import string
+from django.views.generic import FormView, ListView, TemplateView
+from django.contrib.auth import load_backend
+from django.contrib import auth, messages
+from django.urls import reverse, reverse_lazy
+from django.utils.http import is_safe_url
+from django.utils.translation import ugettext as _
+from u2flib_server import u2f
+from .forms import *
+
+
+class OriginMixin(object):
+    def get_origin(self):
+        return '{scheme}://{host}'.format(
+            scheme=self.request.scheme,
+            # scheme="https",
+            # host="9dade978.ngrok.io"
+            host=self.request.get_host(),
+        )
 
 
 @login_required
 def security_settings(request):
     twofactor_enabled = is_mfa_enabled(request.user)
+    u2f_enabled = is_u2f_enabled(request.user)
     backup_codes = UserRecoveryCodes.objects.filter(
         user=UserOTP.objects.filter(user=request.user).first()).all()
-    return render(request, 'django_mfa/security.html', {"backup_codes": backup_codes, "twofactor_enabled": twofactor_enabled})
+    return render(request, 'django_mfa/security.html', {"backup_codes": backup_codes, "u2f_enabled": u2f_enabled, "twofactor_enabled": twofactor_enabled})
 
 
 @login_required
@@ -48,7 +64,8 @@ def configure_mfa(request):
 
 @login_required
 def enable_mfa(request):
-    if is_mfa_enabled(request.user):
+    user = request.user
+    if is_mfa_enabled(user):
         return HttpResponseRedirect(reverse("mfa:disable_mfa"))
     qr_code = None
     base_32_secret = None
@@ -64,7 +81,7 @@ def enable_mfa(request):
                                           secret_key=request.POST['secret_key'])
             messages.success(
                 request, "You have successfully enabled multi-factor authentication on your account.")
-            response = redirect(reverse('mfa:recovery_codes'))
+            response = redirect(reverse("mfa:recovery_codes"))
             return response
         else:
             totp_obj = totp.TOTP(base_32_secret)
@@ -147,14 +164,14 @@ def disable_mfa(request):
 
 
 @login_required
-def verify_otp(request):
+def verify_second_factor_totp(request):
     """
     Verify a OTP request
     """
     ctx = {}
     if request.method == 'GET':
         ctx['next'] = request.GET.get('next', settings.LOGIN_REDIRECT_URL)
-        return render(request, 'django_mfa/login_verify.html', ctx)
+        return render(request, 'django_mfa/verify_second_factor_mfa.html', ctx)
 
     if request.method == "POST":
         verification_code = request.POST.get('verification_code')
@@ -177,13 +194,14 @@ def verify_otp(request):
 
             if is_verified:
                 request.session['verfied_otp'] = True
+                request.session['verfied_u2f'] = True
                 response = redirect(request.POST.get(
                     "next", settings.LOGIN_REDIRECT_URL))
                 return update_rmb_cookie(request, response)
             ctx['error_message'] = "Your code is expired or invalid."
 
     ctx['next'] = request.GET.get('next', settings.LOGIN_REDIRECT_URL)
-    return render(request, 'django_mfa/login_verify.html', ctx, status=400)
+    return render(request, 'django_mfa/verify_second_factor_mfa.html', ctx, status=400)
 
 
 def generate_user_recovery_codes(user_id):
@@ -207,7 +225,7 @@ def generate_user_recovery_codes(user_id):
 @login_required
 def recovery_codes(request):
     if request.method == "GET":
-        if UserOTP.objects.filter(user=request.user.id).exists():
+        if is_mfa_enabled(request.user):
             if UserRecoveryCodes.objects.filter(user=UserOTP.objects.get(user=request.user.id)).exists():
                 codes = UserRecoveryCodes.objects.values_list('secret_code', flat=True).filter(
                     user=UserOTP.objects.get(user=request.user.id))
@@ -220,8 +238,16 @@ def recovery_codes(request):
 
 
 @login_required
+def verify_second_factor(request):
+    if request.method == "GET":
+        twofactor_enabled = is_mfa_enabled(request.user)
+        u2f_enabled = is_u2f_enabled(request.user)
+        if twofactor_enabled or u2f_enabled:
+            return render(request, 'django_mfa/verify_second_factor.html', {"u2f_enabled": u2f_enabled, "twofactor_enabled": twofactor_enabled})
+
+
+@login_required
 def recovery_codes_download(request):
-    user_id = request.user.id
     codes_list = []
     codes = UserRecoveryCodes.objects.values_list('secret_code', flat=True).filter(
         user=UserOTP.objects.get(user=request.user.id))
@@ -232,3 +258,169 @@ def recovery_codes_download(request):
         codes_list, content_type='text/plain')
     response['Content-Disposition'] = 'attachment; filename=%s' % 'recovery_codes.txt'
     return response
+
+
+class AddKeyView(OriginMixin, FormView):
+    template_name = 'u2f/add_key.html'
+    form_class = KeyRegistrationForm
+    success_url = reverse_lazy('mfa:u2f_keys')
+
+    def dispatch(self, request, *args, **kwargs):
+        return super(AddKeyView, self).dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super(AddKeyView, self).get_form_kwargs()
+        kwargs.update(
+            user=self.request.user,
+            request=self.request,
+            appId=self.get_origin(),
+        )
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        kwargs = super(AddKeyView, self).get_context_data(**kwargs)
+        request = u2f.begin_registration(self.get_origin(), [
+            key.to_json() for key in self.request.user.u2f_keys.all()
+        ])
+        self.request.session['u2f_registration_request'] = request
+        kwargs['registration_request'] = request
+        return kwargs
+
+    def form_valid(self, form):
+        request = self.request.session['u2f_registration_request']
+        response = form.cleaned_data['response']
+        del self.request.session['u2f_registration_request']
+        device, attestation_cert = u2f.complete_registration(request, response)
+        self.request.user.u2f_keys.create(
+            public_key=device['publicKey'],
+            key_handle=device['keyHandle'],
+            app_id=device['appId'],
+        )
+        self.request.session['verfied_u2f'] = True
+        messages.success(self.request, _("Key added."))
+        return super(AddKeyView, self).form_valid(form)
+
+    def get_success_url(self):
+        if 'next' in self.request.GET and is_safe_url(self.request.GET['next']):
+            return self.request.GET['next']
+        else:
+            return super(AddKeyView, self).get_success_url()
+
+
+class VerifySecondFactorView(OriginMixin, TemplateView):
+    template_name = 'u2f/verify_second_factor_u2f.html'
+
+    @property
+    def form_classes(self):
+        ret = {}
+        if self.user.u2f_keys.exists():
+            ret['u2f'] = KeyResponseForm
+        return ret
+
+    def get_user(self):
+        try:
+            user_id = self.request.session['u2f_pre_verify_user_pk']
+            backend_path = self.request.session['u2f_pre_verify_user_backend']
+            self.request.session['verfied_u2f'] = False
+            assert backend_path in settings.AUTHENTICATION_BACKENDS
+            backend = load_backend(backend_path)
+            user = backend.get_user(user_id)
+            if user is not None:
+                user.backend = backend_path
+            return user
+        except (KeyError, AssertionError):
+            return None
+
+    def dispatch(self, request, *args, **kwargs):
+        self.user = self.get_user()
+        if self.user is None:
+            return HttpResponseRedirect(settings.LOGIN_URL)
+        return super(VerifySecondFactorView, self).dispatch(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        forms = self.get_forms()
+        form = forms[request.POST['type']]
+        if form.is_valid():
+            return self.form_valid(form, forms)
+        else:
+            return self.form_invalid(forms)
+
+    def form_invalid(self, forms):
+        return self.render_to_response(self.get_context_data(
+            forms=forms,
+        ))
+
+    def get_form_kwargs(self):
+        return {
+            'user': self.user,
+            'request': self.request,
+            'appId': self.get_origin(),
+        }
+
+    def get_forms(self):
+        kwargs = self.get_form_kwargs()
+        if self.request.method == 'GET':
+            forms = {key: form(**kwargs)
+                     for key, form in self.form_classes.items()}
+        else:
+            method = self.request.POST['type']
+            forms = {
+                key: form(**kwargs)
+                for key, form in self.form_classes.items()
+                if key != method
+            }
+            forms[method] = self.form_classes[method](
+                self.request.POST, **kwargs)
+        return forms
+
+    def get_context_data(self, **kwargs):
+        if 'forms' not in kwargs:
+            kwargs['forms'] = self.get_forms()
+        kwargs = super(VerifySecondFactorView, self).get_context_data(**kwargs)
+        if self.request.GET.get('admin'):
+            kwargs['base_template'] = 'admin/base_site.html'
+        else:
+            kwargs['base_template'] = 'u2f_base.html'
+        kwargs['user'] = self.user
+        return kwargs
+
+    def form_valid(self, form, forms):
+        if not form.validate_second_factor():
+            return self.form_invalid(forms)
+
+        del self.request.session['u2f_pre_verify_user_pk']
+        del self.request.session['u2f_pre_verify_user_backend']
+        self.request.session['verfied_otp'] = True
+        self.request.session['verfied_u2f'] = True
+
+        auth.login(self.request, self.user)
+
+        redirect_to = self.request.POST.get(auth.REDIRECT_FIELD_NAME,
+                                            self.request.GET.get(auth.REDIRECT_FIELD_NAME, ''))
+        if not is_safe_url(url=redirect_to, allowed_hosts=self.request.get_host()):
+            redirect_to = resolve_url(settings.LOGIN_REDIRECT_URL)
+        return HttpResponseRedirect(redirect_to)
+
+
+class KeyManagementView(ListView):
+    template_name = 'u2f/key_list.html'
+
+    def get_queryset(self):
+        return self.request.user.u2f_keys.all()
+
+    def post(self, request):
+        assert 'delete' in self.request.POST
+        key = get_object_or_404(self.get_queryset(),
+                                pk=self.request.POST['key_id'])
+        key.delete()
+        if self.get_queryset().exists():
+            messages.success(request, _("Key removed."))
+        else:
+            messages.success(request, _(
+                "Key removed. Two-factor auth disabled."))
+        return HttpResponseRedirect(reverse('mfa:u2f_keys'))
+
+
+add_key = login_required(AddKeyView.as_view())
+verify_second_factor_u2f = VerifySecondFactorView.as_view()
+keys = login_required(KeyManagementView.as_view())

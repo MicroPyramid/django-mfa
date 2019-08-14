@@ -16,6 +16,8 @@ Including another URLconf
 from django.urls import path, include
 from django.contrib import admin
 from sample.views import index, home, log_out, register
+from django.conf import settings
+from django.conf.urls import url
 
 
 urlpatterns = [
@@ -26,3 +28,9 @@ urlpatterns = [
     path('home/', home, name='home'),
     path('logout/', log_out, name='log_out'),
 ]
+
+if settings.DEBUG:
+    import debug_toolbar
+    urlpatterns = [
+        url(r'^__debug__/', include(debug_toolbar.urls)),
+    ] + urlpatterns

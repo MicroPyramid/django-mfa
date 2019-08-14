@@ -4,3 +4,4 @@ from .models import *
 
 admin.site.register(UserOTP)
 admin.site.register(UserRecoveryCodes)
+admin.site.register(U2FKey)

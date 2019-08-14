@@ -1,0 +1,60 @@
+{% extends "u2f/base.html" %}
+{% load i18n %}
+{% block content %}
+{{ block.super }}
+<h1>U2F Keys</h1>
+<a href="{% url 'mfa:security_settings' %}" class="btn btn-default" >{% trans '&larr; Back to settings' %}</a>
+<br>
+<br>
+<div class="panel panel-default">
+  <div class="panel-heading">
+    <h3> U2F Management </h3>
+  </div>
+  <div class="panel-body">
+    <table class="key_list_table">
+      <thead>
+        <tr>
+          <span class="text-danger">
+            <th>{% trans ' U2F Device Added on' %}</th>
+          </span>
+          <span class="text-danger">
+            <th>{% trans 'U2F Device Last used on' %}</th>
+          </span>
+          <span class="text-danger">
+            <th>{% trans 'Remove' %}</th>
+          </span>
+        </tr>
+      </thead>
+      <tbody>
+        {% for key in object_list %}
+        <tr>
+          <span class="text-danger">
+            <strong>
+              <td>{{ key.created_at }}</td>
+            </strong>
+          </span>
+          {% trans 'Never' as never %}
+          <span class="text-danger">
+            <strong>
+              <td>{{ key.last_used_at|default:never }}</td>
+            </strong>
+          </span>
+          <span class="text-danger">
+            <strong>
+              <td>
+                <form method="post">{% csrf_token %}
+                  <input name="key_id" type="hidden" value="{{ key.pk }}">
+                  <input type="submit" name="delete" value="X">
+                </form>
+              </td>
+            </strong>
+          </span>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<br>
+<a href="{% url 'mfa:add_u2f_key' %}" class="btn btn-default" >{% trans 'Add another key' %}</a>
+{% endblock %}

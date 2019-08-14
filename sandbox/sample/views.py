@@ -3,6 +3,7 @@ from django.contrib.auth import login, logout
 from django.http.response import HttpResponseRedirect, JsonResponse
 from .forms import RegistrationForm, LoginForm
 from django.contrib.auth.models import User
+from django_mfa.models import is_u2f_enabled
 from django.conf import settings
 
 
@@ -12,6 +13,10 @@ def index(request):
     if request.method == 'POST':
         form = LoginForm(request.POST, request.FILES)
         if form.is_valid():
+            user = form.user
+            if is_u2f_enabled(user):
+                request.session['u2f_pre_verify_user_pk'] = user.pk
+                request.session['u2f_pre_verify_user_backend'] = user.backend
             login(request, form.user)
             return JsonResponse({"error": False})
         else:
