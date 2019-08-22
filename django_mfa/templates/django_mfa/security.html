@@ -2,7 +2,7 @@
 {% load i18n %}
 {% block content %}
 <h1>{% trans "Two Factor Settings" %}</h1>
-<a href="{% url 'home' %}" style="color:blue" class="btn btn-default">{% trans '&larr; Back to settings' %}</a>
+<a href="{{prev_url}}" style="color:blue" class="btn btn-default">{% trans '&larr; Back to settings' %}</a>
 <br>
 <br>
 <div class="panel panel-default">

@@ -36,7 +36,7 @@ def security_settings(request):
     u2f_enabled = is_u2f_enabled(request.user)
     backup_codes = UserRecoveryCodes.objects.filter(
         user=UserOTP.objects.filter(user=request.user).first()).all()
-    return render(request, 'django_mfa/security.html', {"backup_codes": backup_codes, "u2f_enabled": u2f_enabled, "twofactor_enabled": twofactor_enabled})
+    return render(request, 'django_mfa/security.html', {"prev_url": settings.LOGIN_REDIRECT_URL, "backup_codes": backup_codes, "u2f_enabled": u2f_enabled, "twofactor_enabled": twofactor_enabled})
 
 
 @login_required
