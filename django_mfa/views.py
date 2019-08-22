@@ -424,3 +424,4 @@ class KeyManagementView(ListView):
 add_key = login_required(AddKeyView.as_view())
 verify_second_factor_u2f = VerifySecondFactorView.as_view()
 keys = login_required(KeyManagementView.as_view())
+
