@@ -41,7 +41,7 @@ install_requires = [
 
 setup(
     name='django-mfa',
-    version='1.2',
+    version='2.0',
     packages=['django_mfa', 'django_mfa.templatetags', 'django_mfa.migrations'],
     include_package_data=True,
     description='A Django deployment package for all hosting types.',
