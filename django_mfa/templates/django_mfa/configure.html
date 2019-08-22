@@ -1,0 +1,72 @@
+{% extends 'django_mfa/base.html' %}
+{% load otp_tags %}
+{% block content %}
+{% if is_verified %}
+<div>
+  You have successfully enabled mfa on your account.
+</div>
+{% else %}
+{% if qr_code %}
+<div class="setup-wrapper">
+  <div class="setup-header">
+    <h1>Add your app to your two-factor authentication app</h1>
+    <p class="lead">
+      You will need to install a two-factor authentication application on your phone.
+    </p>
+  </div>
+  <div class="setup-main two-factor-app-main">
+    <div class="setup-form-container">
+      <div class="simple-box">
+        <h3 class="simple-box-title">1. Scan barcode</h3>
+        {{qr_code|qrcode:"my alt"}}
+        <div class="simple-box-footer">
+          Scan the image above with the two-factor authentication app on your phone.
+        </div>
+      </div>
+      <p>
+        After scanning the barcode image, the app will display a six-digit code that
+        you can enter below.
+      </p>
+      <hr>
+      <!-- </textarea> --><!-- '"` -->
+      <form accept-charset="UTF-8" action="{% url 'mfa:enable_mfa' %}" method="post">
+        {% csrf_token %}
+        <dl class="form-group">
+          <dt><label for="two-factor-code">2. Enter the six-digit code from the application</label></dt>
+          <dd>
+            <input class="form-control" id="two-factor-code" type="text" name="verification_code" value="" placeholder="Enter six digit number." autocomplete="off">
+            <input type="hidden" name="secret_key" value="{{secret_key}}">
+            <input type="hidden" name="otp_type" value="TOTP">
+          </dd>
+        </dl>
+        <button type="submit" class="btn btn-primary">
+        Enable two-factor authentication
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="two-factor-intro">
+  Two-factor authentication
+  adds an extra layer of security to your account. In addition to your username and password, you’ll need to
+  enter a code that this app sends to you via text or an app on your phone.</p>
+  <div class="two-factor-graphic"></div>
+  <div class="row">
+    <div class="col-xs-6 col-md-4">When you sign into your app you’ll enter your username and password, like always.</div>
+    <div class="col-xs-6 col-md-4">When logging in from a new browser, you’ll need to enter an additional code from your phone or tablet.</div>
+    <div class="col-xs-6 col-md-4">Once you enter the code on the website, you’ll be logged into your app.</div>
+  </div>
+  <div class="row">
+    <div class="col-md-6">
+      <p>Use an application on your phone to get two-factor authentication codes when prompted.</p>
+      <form action="." method="post">{% csrf_token %}
+        <input type="hidden" name="otp_type" value="hotp">
+        <button type="submit" class="btn btn-primary">Set up using an app</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

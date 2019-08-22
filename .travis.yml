@@ -1,0 +1,14 @@
+language: python
+
+python:
+  - "3.5"
+
+install:
+  - python setup.py install
+  - pip install coveralls
+
+script:
+  - coverage run --source=django_mfa  test_runner.py test
+
+after_success:
+  coveralls

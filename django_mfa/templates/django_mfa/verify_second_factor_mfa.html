@@ -1,0 +1,32 @@
+{% extends 'django_mfa/base.html' %}
+{% load otp_tags %}
+{% block content %}
+<h1>
+   Please verify using MFA authentication method below.
+</h1>
+<div class="setup-wrapper">
+  <div class="setup-main two-factor-app-main">
+    <div class="setup-form-container">
+      <form accept-charset="UTF-8" action="{% url 'mfa:verify_second_factor_totp' %}" method="post">
+        {% csrf_token %}
+        {% if next_url %}
+        <input type="hidden" name="next" value="{{next_url}}">
+        {% endif %}
+        <dl class="form-group">
+          <dt><label for="two-factor-code">Enter the six-digit code from the application from the two-factor app on your mobile device. If you've lost your device, you may enter one of your recovery codes.</label></dt>
+          <dd>
+            <input class="form-control" id="two-factor-code" type="text" name="verification_code" value="" placeholder="Enter six digit number." autocomplete="off">
+            <input type="hidden" class="form-control" name="next" value="{{ next }}">
+            {% if error_message %}
+            <p>{{ error_message }}</p>
+            {% endif %}
+          </dd>
+        </dl>
+        <button type="submit" class="btn btn-primary">
+        Submit
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

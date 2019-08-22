@@ -1,0 +1,38 @@
+{% extends "u2f/base.html" %}
+{% load argonauts %}
+{% load i18n %}
+{% load static %}
+{% block content %}
+{{ block.super }}
+{% if forms.u2f %}
+<h1>
+  {% trans 'Insert your Security Key' %}
+</h1>
+<div class="panel panel-default">
+  <div class="panel-heading">
+    <h3>{% blocktrans %}
+      If your Security Key has a button, tap it.<br>
+      If it doesn't, remove and re-insert it.
+      {% endblocktrans %} 
+    </h3>
+  </div>
+  <div class="panel-body">
+    <p class="two-factor-status">
+      {% trans 'Insert your Security Key' %}
+    </p>
+    <div class="method u2f">
+      <p class="color:red;" id="u2f-status"></p>
+      <form method="post" id="u2f-form">
+        {% csrf_token %}
+        {{ forms.u2f.as_p }}
+        <input type="hidden" name="type" value="u2f">
+      </form>
+      <script type="application/json" id="django_u2f_request">
+        {{ forms.u2f.sign_request|json }}
+      </script>
+    </div>
+  </div>
+</div>
+<script src="{% static 'django_u2f/django_u2f.js' %}"></script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends 'django_mfa/base.html' %}
+{% load i18n %}
+{% block content %}
+<h1>{% trans "Two Factor Settings" %}</h1>
+<a href="{{prev_url}}" style="color:blue" class="btn btn-default">{% trans '&larr; Back to settings' %}</a>
+<br>
+<br>
+<div class="panel panel-default">
+  <div class="panel-heading">
+    <h3>Two-factor authentication</h3>
+  </div>
+  {% if twofactor_enabled %}
+  <div class="panel-body">
+    <p class="two-factor-status">
+      Status:
+      <span class="text-danger">
+        <strong>On</strong>
+        <svg aria-hidden="true" class="octicon octicon-x" height="16" version="1.1" viewBox="0 0 12 16" width="12">
+          <path d="M7.48 8l3.75 3.75-1.48 1.48L6 9.48l-3.75 3.75-1.48-1.48L4.52 8 .77 4.25l1.48-1.48L6 6.52l3.75-3.75 1.48 1.48z"></path>
+        </svg>
+      </span>
+    </p>
+    <a href="{% url 'mfa:disable_mfa' %}" class="btn btn-default">Disable MFA</a>
+  </div>
+  {% else %}
+  <div class="panel-body">
+    <p class="two-factor-status">
+      Status:
+      <span class="text-danger">
+        <strong>Off</strong>
+        <svg aria-hidden="true" class="octicon octicon-x" height="16" version="1.1" viewBox="0 0 12 16" width="12">
+          <path d="M7.48 8l3.75 3.75-1.48 1.48L6 9.48l-3.75 3.75-1.48-1.48L4.52 8 .77 4.25l1.48-1.48L6 6.52l3.75-3.75 1.48 1.48z"></path>
+        </svg>
+      </span>
+    </p>
+    <a href="{% url 'mfa:configure_mfa' %}" class="btn btn-default">Enable MFA</a>
+    <p class="help">
+      <a href="https://help.github.com/articles/about-two-factor-authentication">Two-factor authentication</a> provides another layer of security to your account.
+    </p>
+  </div>
+  {% endif %}
+</div>
+<br>
+<div class="panel panel-default">
+  <div class="panel-heading">
+    <h3>U2F authentication</h3>
+  </div>
+  <div class="panel-body">
+    <p class="two-factor-status">
+      Status:
+      <span class="text-danger">
+        <strong>{% if u2f_enabled %}{% trans "On" %}{% else %}{% trans "Off" %}{% endif %}</strong>
+        <svg aria-hidden="true" class="octicon octicon-x" height="16" version="1.1" viewBox="0 0 12 16" width="12">
+          <path d="M7.48 8l3.75 3.75-1.48 1.48L6 9.48l-3.75 3.75-1.48-1.48L4.52 8 .77 4.25l1.48-1.48L6 6.52l3.75-3.75 1.48 1.48z"></path>
+        </svg>
+      </span>
+    </p>
+    <a href="{% url 'mfa:u2f_keys' %}" class="btn btn-default">Manage U2F</a>
+    <p class="help">
+      <a href="https://developers.yubico.com/U2F/">U2F authentication</a> provides another layer of security to your account.
+    </p>
+  </div>
+</div>
+<br>
+<div class="panel panel-default">
+  <div class="panel-heading">
+    <h3>Backup Codes Status</h3>
+  </div>
+  <div class="panel-body">
+    <p class="two-factor-status">
+      {% trans "Backup codes remaining" %}:
+      <span class="text-danger">
+        <strong> {{ backup_codes | length }} </strong>
+        <svg aria-hidden="true" class="octicon octicon-x" height="16" version="1.1" viewBox="0 0 12 16" width="12">
+          <path d="M7.48 8l3.75 3.75-1.48 1.48L6 9.48l-3.75 3.75-1.48-1.48L4.52 8 .77 4.25l1.48-1.48L6 6.52l3.75-3.75 1.48 1.48z"></path>
+        </svg>
+      </span>
+    </p>
+    <a href="{% url 'mfa:recovery_codes' %}" class="btn btn-default">Get Backup Codes</a>
+    <p class="help">
+    </p>
+  </div>
+</div>
+{% endblock %}
