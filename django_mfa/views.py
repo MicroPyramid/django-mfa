@@ -24,8 +24,6 @@ class OriginMixin(object):
     def get_origin(self):
         return '{scheme}://{host}'.format(
             scheme=self.request.scheme,
-            # scheme="https",
-            # host="9dade978.ngrok.io"
             host=self.request.get_host(),
         )
 
@@ -175,6 +173,7 @@ def verify_second_factor_totp(request):
 
     if request.method == "POST":
         verification_code = request.POST.get('verification_code')
+        ctx['next'] = request.POST.get("next", settings.LOGIN_REDIRECT_URL)
 
         if verification_code is None:
             ctx['error_message'] = "Missing verification code."
@@ -199,8 +198,9 @@ def verify_second_factor_totp(request):
                     "next", settings.LOGIN_REDIRECT_URL))
                 return update_rmb_cookie(request, response)
             ctx['error_message'] = "Your code is expired or invalid."
+    else:
+        ctx['next'] = request.GET.get('next', settings.LOGIN_REDIRECT_URL)
 
-    ctx['next'] = request.GET.get('next', settings.LOGIN_REDIRECT_URL)
     return render(request, 'django_mfa/verify_second_factor_mfa.html', ctx, status=400)
 
 
