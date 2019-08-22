@@ -1,7 +1,7 @@
 try:
-    from urllib.parse import urlencode
-except ImportError:
     from urllib import urlencode
+except ImportError:
+    from urllib.parse import urlencode
 from django import template
 from django.template.defaultfilters import stringfilter
 from django.utils.html import conditional_escape, format_html

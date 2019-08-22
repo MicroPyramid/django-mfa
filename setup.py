@@ -20,6 +20,25 @@ for dirpath, dirnames, filenames in os.walk(PROJECT_NAME):
             data_files.append(os.path.join(
                 dirpath[len(PROJECT_NAME) + 1:], f))
 
+install_requires = [
+    'asn1crypto==0.24.0',
+    'cffi==1.12.2',
+    'cryptography==2.6.1',
+    'dj-database-url==0.4.1',
+    'Django==2.1.5',
+    'django-argonauts==1.2.0',
+    'django-debug-toolbar==1.11',
+    'gunicorn==19.6.0',
+    'psycopg2==2.7',
+    'pycparser==2.19',
+    'python-u2flib-server==5.0.0',
+    'pytz==2018.9',
+    'qrcode==6.1',
+    'six==1.12.0',
+    'sqlparse==0.3.0',
+    'whitenoise==3.1',
+]
+
 setup(
     name='django-mfa',
     version='1.2',
@@ -30,6 +49,7 @@ setup(
     url='https://github.com/MicroPyramid/django-mfa',
     author='Micropyramid',
     author_email='hello@micropyramid.com',
+    install_requires=install_requires,
     classifiers=[
         'Environment :: Web Environment',
         'Framework :: Django',
