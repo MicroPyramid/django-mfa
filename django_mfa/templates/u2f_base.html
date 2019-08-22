@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 {% load staticfiles %}
-<html lang="en">
+{% load static %}
+<html lang="en" >
   <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -12,18 +13,19 @@
     <link href="{% static 'style.css' %}" rel="stylesheet">
   </head>
   <body>
-    {% block nav_menu %}
-    <nav class="navbar navbar-dark navbar-fixed-top bg-inverse">
-      <a class="navbar-brand" href="#">Django MFA</a>
-    </nav>
-    {% endblock %}
     <div class="container">
       <div class="row">
-        {% block left_bar %}
-        <div class="col-sm-3 col-md-2">
-        </div>
-        {% endblock %}
         <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
+          {% if messages %}
+          <ul class="messages">
+            {% for message in messages %}
+            <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>
+            {% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}Important: {% endif %}
+            {{ message }}
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
           {% block content %}
           {% endblock %}
         </div>

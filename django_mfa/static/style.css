@@ -103,3 +103,25 @@ body {
   display: inline-block;
   border-radius: 50%;
 }
+
+/* style for table in key_list.html start's here */
+
+.key_list_table{
+  border: 1px solid black;
+
+}
+
+.key_list_table td{
+  border: 1px solid black;
+  padding: 5px;
+
+}
+
+.key_list_table th{
+  border: 1px solid black;
+  padding: 5px;
+
+}
+
+
+/* style for table in key_list.html end's here */
