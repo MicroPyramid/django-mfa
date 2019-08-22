@@ -1,0 +1,24 @@
+{% extends "u2f/base.html" %}
+{% load argonauts %}
+{% load i18n %}
+{% load static %}
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+{% block content %}
+{{ block.super }}
+<div class="panel panel-default">
+  <div class="panel-heading">
+    <h3> {% trans 'To add a security key to your account, insert (and tap) it.' %} </h3>
+  </div>
+  <div class="panel-body">
+    <p style="color:red;" id="u2f-status"></p>
+    <form method="post"  id="u2f-form">
+      {% csrf_token %}
+      {{ form.response }}
+    </form>
+  </div>
+</div>
+<script type="application/json" id="django_u2f_registration">
+  {{ registration_request|json }}
+</script>
+<script src="{% static 'django_u2f/django_u2f.js' %}"></script>
+{% endblock %}
