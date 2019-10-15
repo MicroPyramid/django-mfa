@@ -91,8 +91,7 @@ def _generate_cookie_salt(user):
     try:
         otp_ = UserOTP.objects.get(user=user)
     except UserOTP.DoesNotExist:
-        # TODO: probably needs to be return ''.  Can't remember why though
-        return None
+        return ''
     # out of paranoia only use half the secret to generate the salt
     uselen = int(len(otp_.secret_key) / 2)
     half_secret = otp_.secret_key[:uselen]
