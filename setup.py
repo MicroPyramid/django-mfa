@@ -21,22 +21,10 @@ for dirpath, dirnames, filenames in os.walk(PROJECT_NAME):
                 dirpath[len(PROJECT_NAME) + 1:], f))
 
 install_requires = [
-    'asn1crypto',
-    'cffi',
-    'cryptography',
-    'dj-database-url',
     'Django',
     'django-argonauts',
-    'django-debug-toolbar',
-    'gunicorn',
-    'psycopg2',
-    'pycparser',
     'python-u2flib-server',
-    'pytz',
     'qrcode',
-    'six',
-    'sqlparse',
-    'whitenoise',
 ]
 
 setup(
