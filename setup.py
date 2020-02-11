@@ -25,7 +25,7 @@ install_requires = [
     'cffi==1.12.2',
     'cryptography==2.6.1',
     'dj-database-url==0.4.1',
-    'Django<=2.1.5',
+    'Django<2.2.11',
     'django-argonauts==1.2.0',
     'django-debug-toolbar==1.11',
     'gunicorn==19.6.0',
