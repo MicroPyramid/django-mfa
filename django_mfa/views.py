@@ -130,13 +130,15 @@ def verify_rmb_cookie(request):
         return False
     if not remember_my_browser:
         return False
-    else:
-        cookie_name = MFA_COOKIE_PREFIX + str(request.user.pk)
-        cookie_salt = _generate_cookie_salt(request.user)
-        cookie_value = request.get_signed_cookie(
-            cookie_name, False, max_age=max_cookie_age, salt=cookie_salt)
-        # if the cookie value is True and the signature is good than the browser can be trusted
-        return cookie_value
+
+    cookie_name = MFA_COOKIE_PREFIX + str(request.user.pk)
+    cookie_salt = _generate_cookie_salt(request.user)
+    if not cookie_salt:
+        return False
+    cookie_value = request.get_signed_cookie(
+        cookie_name, False, max_age=max_cookie_age, salt=cookie_salt)
+    # if the cookie value is True and the signature is good than the browser can be trusted
+    return cookie_value
 
 
 def delete_rmb_cookie(request, response):
