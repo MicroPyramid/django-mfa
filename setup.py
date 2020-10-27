@@ -23,7 +23,7 @@ for dirpath, dirnames, filenames in os.walk(PROJECT_NAME):
 install_requires = [
     'asn1crypto==0.24.0',
     'cffi==1.12.2',
-    'cryptography==2.6.1',
+    'cryptography==3.2',
     'dj-database-url==0.4.1',
     'Django<=2.1.5',
     'django-argonauts==1.2.0',
