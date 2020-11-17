@@ -241,6 +241,7 @@ def recovery_codes(request):
 @login_required
 def verify_second_factor(request):
     if request.method == "GET":
+        next = request.GET.get('next', settings.LOGIN_REDIRECT_URL)
         twofactor_enabled = is_mfa_enabled(request.user)
         u2f_enabled = is_u2f_enabled(request.user)
         if twofactor_enabled and u2f_enabled:

@@ -25,7 +25,7 @@
     <p class="two-factor-status">
       click below for two factor authentication
     </p>
-    <a href="{% url 'mfa:verify_second_factor_totp' %}" class="btn btn-default">Two-factor authentication</a>
+    <a href="{% url 'mfa:verify_second_factor_totp'%}?next={{ next }}" class="btn btn-default">Two-factor authentication</a>
   </div>
 </div>
 {% endif %}
