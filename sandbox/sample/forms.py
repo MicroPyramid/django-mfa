@@ -10,7 +10,7 @@ class RegistrationForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super(RegistrationForm, self).__init__(*args, **kwargs)
         for field in self.fields.values():
-            field.widget.attrs = {'class': 'form-control'}
+            field.widget.attrs = {"class": "form-control"}
 
     def clean_confirm_password(self):
         password = self.cleaned_data.get("password")
@@ -27,11 +27,11 @@ class LoginForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super(LoginForm, self).__init__(*args, **kwargs)
         for field in self.fields.values():
-            field.widget.attrs = {'class': 'form-control'}
+            field.widget.attrs = {"class": "form-control"}
 
     def clean(self):
-        email = self.cleaned_data.get('email')
-        password = self.cleaned_data.get('password')
+        email = self.cleaned_data.get("email")
+        password = self.cleaned_data.get("password")
         self.user = authenticate(username=email, password=password)
         if not self.user:
             raise forms.ValidationError("Invalid Credentials")

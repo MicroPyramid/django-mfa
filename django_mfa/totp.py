@@ -13,7 +13,7 @@ class TOTP(OTP):
         @option options [Integer] interval (30) the time interval in seconds
             for OTP This defaults to 30 which is standard.
         """
-        self.interval = kwargs.pop('interval', 30)
+        self.interval = kwargs.pop("interval", 30)
         super(TOTP, self).__init__(*args, **kwargs)
 
     def at(self, for_time, counter_offset=0):

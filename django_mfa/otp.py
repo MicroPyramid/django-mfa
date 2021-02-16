@@ -34,21 +34,23 @@ class OTP(object):
         ).digest()
 
         hmac_hash = bytearray(hmac_hash)
-        offset = hmac_hash[-1] & 0xf
-        code = ((hmac_hash[offset] & 0x7f) << 24 |
-                (hmac_hash[offset + 1] & 0xff) << 16 |
-                (hmac_hash[offset + 2] & 0xff) << 8 |
-                (hmac_hash[offset + 3] & 0xff))
+        offset = hmac_hash[-1] & 0xF
+        code = (
+            (hmac_hash[offset] & 0x7F) << 24
+            | (hmac_hash[offset + 1] & 0xFF) << 16
+            | (hmac_hash[offset + 2] & 0xFF) << 8
+            | (hmac_hash[offset + 3] & 0xFF)
+        )
         str_code = str(code % 10 ** self.digits)
         while len(str_code) < self.digits:
-            str_code = '0' + str_code
+            str_code = "0" + str_code
 
         return str_code
 
     def byte_secret(self):
         missing_padding = len(self.secret) % 8
         if missing_padding != 0:
-            self.secret += '=' * (8 - missing_padding)
+            self.secret += "=" * (8 - missing_padding)
         return base64.b32decode(self.secret, casefold=True)
 
     @staticmethod
@@ -64,4 +66,4 @@ class OTP(object):
             i >>= 8
         # It's necessary to convert the final result from bytearray to bytes because
         # the hmac functions in python 2.6 and 3.3 don't work with bytearray
-        return bytes(bytearray(reversed(result)).rjust(padding, b'\0'))
+        return bytes(bytearray(reversed(result)).rjust(padding, b"\0"))

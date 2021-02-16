@@ -6,7 +6,7 @@ Requirements
 
 ======  ====================
 Python  >= 2.6 (or Python 3)
-Django  >= 1.11
+Django  > 3.1.1
 ======  ====================
 
 Installation
@@ -41,7 +41,7 @@ Add the following to your root urls.py file.
     urlpatterns = [
         ...
 
-        url(r'^settings/', include('django_mfa.urls', namespace="mfa")),
+        path('settings/', include('django_mfa.urls')),
     ]
 
 
