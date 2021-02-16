@@ -4,4 +4,4 @@ from django.apps import AppConfig
 
 
 class DjangoMfaAppConfig(AppConfig):
-    name = 'django_mfa'
+    name = "django_mfa"

@@ -28,7 +28,8 @@
         you can enter below.
       </p>
       <hr>
-      <!-- </textarea> --><!-- '"` -->
+      <!-- </textarea> -->
+      <!-- '"` -->
       <form accept-charset="UTF-8" action="{% url 'mfa:enable_mfa' %}" method="post">
         {% csrf_token %}
         <dl class="form-group">
@@ -40,7 +41,7 @@
           </dd>
         </dl>
         <button type="submit" class="btn btn-primary">
-        Enable two-factor authentication
+          Enable two-factor authentication
         </button>
       </form>
     </div>
