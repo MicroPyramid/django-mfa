@@ -26,7 +26,7 @@ Django-mfa(Multi-factor Authentication) is a simple django package to add extra 
 
 We welcome your feedback on this package. If you run into problems, please raise an issue or contribute to the project by forking the repository and sending some pull requests. 
 
-This Package is compatible with Django versions >=3.1.1 Documentation is available at readthedocs(http://django-mfa.readthedocs.io/en/latest/)
+This Package is compatible with Django versions >=1.10 (including at least Django 2.0.7) Documentation is available at readthedocs(http://django-mfa.readthedocs.io/en/latest/)
 
 Quick start
 -----------
@@ -63,23 +63,14 @@ Settings
        '....................................',
     ]
 
-3. Add AUTH_USER_MODEL in settings.py.  This can be the custom User model or django default User model.
-
-4. Add LOGIN_REDIRECT_URL (mandatory data) in settings.py.  This is the url where the browser redirects after successfull two-factored authentication.
-
-5. Add ENFORCE_MFA (mandatory data) in settings.py. It can be used to show/hide disable-django_mfa option.  If enabled, there will be no disable option available for mfa else disable mfa option is available::
-
-    ENFORCE_MFA = False/True
-
-6. Optional issuer name.  This name will be shown in the Authenticator App along with the username
+3. Optional issuer name.  This name will be shown in the Authenticator App along with the username
 
    MFA_ISSUER_NAME = "Cool Django App"
 
-7. Optionally enable remember-my-browser.  If enabled, the browser will be trusted for specified number of days after the user enters the code once::
+4. Optionally enable remember-my-browser.  If enabled, the browser will be trusted for specified number of days after the user enters the code once::
 
     MFA_REMEMBER_MY_BROWSER = True
     MFA_REMEMBER_DAYS = 90
-
 
 Urls
 ~~~~
@@ -91,7 +82,7 @@ Add the following to your root urls.py file.
     urlpatterns = [
         ...
 
-        path('settings/', include('django_mfa.urls')),
+        url(r'^settings/', include('django_mfa.urls')),
     ]
 
 

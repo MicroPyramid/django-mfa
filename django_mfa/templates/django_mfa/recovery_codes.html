@@ -1,27 +1,16 @@
 {% extends 'django_mfa/base.html' %}
 {% load i18n %}
 {% block content %}
-{% if user_codes %}
 <div class="panel panel-default">
   <div class="panel-heading">
     <h3> Recovery Codes </h3>
   </div>
   <div class="panel-body">
-    {% for code in user_codes %}
-    <p>{{code}}</p>
+    {% for i in codes %}
+    <p>{{i}}</p>
     {% endfor %}
   </div>
 </div>
-<a href="{% url 'mfa:recovery_codes_download' %}" class="btn btn-primary" >Download</a>
-<a href="{{next_url}}" class="btn btn-primary" >Home Page</a>
-{% else %}
-<div class="panel panel-default">
-  <div class="panel-heading">
-    <h3>You have not enabled MFA, enable it Now ?</h3>
-  </div>
-  <div class="panel-body">
-	<a href="{{next_url}}" class="btn btn-primary" >Enable Mfa</a>
-  </div>
-</div>
-{% endif %}
+<a href="{% url 'mfa:recovery_codes_download' %}" class="btn btn-default" >Download</a>
+<a href="{{next_url}}" class="btn btn-default" >Home Page</a>
 {% endblock %}
