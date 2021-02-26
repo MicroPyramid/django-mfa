@@ -144,8 +144,7 @@ class Views_test_auth_factor(TestCase):
         response = self.client.get(reverse('mfa:disable_mfa'))
         self.assertTemplateUsed(response, "django_mfa/disable_mfa.html")
         response = self.client.post(reverse('mfa:disable_mfa'))
-        self.assertRedirects(
-            response, expected_url=reverse('mfa:configure_mfa'), status_code=302)
+        self.assertEquals(response.url, settings.LOGIN_REDIRECT_URL)
 
 
 class Views_test_not_auth_factor(TestCase):

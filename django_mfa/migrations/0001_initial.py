@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('last_used_at', models.DateTimeField(null=True)),
-                ('public_key', models.TextField(unique=True)),
+                ('public_key', models.TextField()),
                 ('key_handle', models.TextField()),
                 ('app_id', models.TextField()),
                 ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='u2f_keys', to=settings.AUTH_USER_MODEL)),
