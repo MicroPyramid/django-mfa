@@ -26,7 +26,7 @@ def is_mfa_enabled(user):
 class UserRecoveryCodes(models.Model):
     user = models.ForeignKey(UserOTP,
                              on_delete=models.CASCADE)
-    secret_code = models.CharField(max_length=10)
+    secret_code = models.CharField(max_length=16)
 
 
 class U2FKey(models.Model):
