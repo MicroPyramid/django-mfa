@@ -17,7 +17,15 @@ for dirpath, dirnames, filenames in os.walk(PROJECT_NAME):
         continue
     elif filenames:
         for f in filenames:
-            data_files.append(os.path.join(dirpath[len(PROJECT_NAME) + 1 :], f))
+            data_files.append(os.path.join(
+                dirpath[len(PROJECT_NAME) + 1:], f))
+
+install_requires = [
+    'Django',
+    'django-argonauts',
+    'python-u2flib-server',
+    'qrcode',
+]
 
 setup(
     name="django-mfa",
