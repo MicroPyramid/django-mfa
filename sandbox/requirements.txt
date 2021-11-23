@@ -1,12 +1,8 @@
-asn1crypto==0.24.0
-cffi==1.12.2
+cffi==1.14.6
 cryptography==3.3.2
-dj-database-url==0.4.1
-Django==2.1.5
+Django==2.2.19
 django-argonauts==1.2.0
 django-debug-toolbar==1.11
-gunicorn==19.6.0
-psycopg2==2.7
 pycparser==2.19
 python-u2flib-server==5.0.0
 pytz==2018.9
