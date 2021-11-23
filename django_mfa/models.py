@@ -11,7 +11,7 @@ class UserOTP(models.Model):
     )
 
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     otp_type = models.CharField(max_length=20, choices=OTP_TYPES)
     secret_key = models.CharField(max_length=100, blank=True)
 
@@ -22,11 +22,12 @@ def is_mfa_enabled(user):
     """
     return hasattr(user, 'userotp')
 
-
+MFA_RECOVERY_CODE_LENGTH = 10
 class UserRecoveryCodes(models.Model):
     user = models.ForeignKey(UserOTP,
                              on_delete=models.CASCADE)
-    secret_code = models.CharField(max_length=16)
+    secret_code = models.CharField(max_length=MFA_RECOVERY_CODE_LENGTH)
+
 
 
 class U2FKey(models.Model):
@@ -35,7 +36,7 @@ class U2FKey(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     last_used_at = models.DateTimeField(null=True)
 
-    public_key = models.TextField(unique=True)
+    public_key = models.TextField()
     key_handle = models.TextField()
     app_id = models.TextField()
 

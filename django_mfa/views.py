@@ -19,7 +19,6 @@ from django.utils.translation import ugettext as _
 from u2flib_server import u2f
 from .forms import *
 
-
 class OriginMixin(object):
     def get_origin(self):
         return '{scheme}://{host}'.format(
@@ -92,7 +91,7 @@ def _generate_cookie_salt(user):
     try:
         otp_ = UserOTP.objects.get(user=user)
     except UserOTP.DoesNotExist:
-        return None
+        return ''
     # out of paranoia only use half the secret to generate the salt
     uselen = int(len(otp_.secret_key) / 2)
     half_secret = otp_.secret_key[:uselen]
@@ -131,13 +130,15 @@ def verify_rmb_cookie(request):
         return False
     if not remember_my_browser:
         return False
-    else:
-        cookie_name = MFA_COOKIE_PREFIX + str(request.user.pk)
-        cookie_salt = _generate_cookie_salt(request.user)
-        cookie_value = request.get_signed_cookie(
-            cookie_name, False, max_age=max_cookie_age, salt=cookie_salt)
-        # if the cookie value is True and the signature is good than the browser can be trusted
-        return cookie_value
+
+    cookie_name = MFA_COOKIE_PREFIX + str(request.user.pk)
+    cookie_salt = _generate_cookie_salt(request.user)
+    if not cookie_salt:
+        return False
+    cookie_value = request.get_signed_cookie(
+        cookie_name, False, max_age=max_cookie_age, salt=cookie_salt)
+    # if the cookie value is True and the signature is good than the browser can be trusted
+    return cookie_value
 
 
 def delete_rmb_cookie(request, response):
@@ -156,7 +157,7 @@ def disable_mfa(request):
         user_mfa.delete()
         messages.success(
             request, "You have successfully disabled multi-factor authentication on your account.")
-        response = redirect(reverse('mfa:configure_mfa'))
+        response = redirect(settings.LOGIN_REDIRECT_URL)
         return delete_rmb_cookie(request, response)
     return render(request, 'django_mfa/disable_mfa.html')
 
@@ -206,7 +207,7 @@ def verify_second_factor_totp(request):
 
 def generate_user_recovery_codes(user_id):
     no_of_recovery_codes = 10
-    size_of_recovery_code = 16
+    size_of_recovery_code = MFA_RECOVERY_CODE_LENGTH
     recovery_codes_list = []
     chars = string.ascii_uppercase + string.digits + string.ascii_lowercase
     while(no_of_recovery_codes > 0):
@@ -231,7 +232,7 @@ def recovery_codes(request):
                     user=UserOTP.objects.get(user=request.user.id))
             else:
                 codes = generate_user_recovery_codes(request.user.id)
-            next_url = settings.LOGIN_REDIRECT_URL
+            next_url = resolve_url(settings.LOGIN_REDIRECT_URL)
             return render(request, "django_mfa/recovery_codes.html", {"codes": codes, "next_url": next_url})
         else:
             return HttpResponse("please enable twofactor_authentication!")
@@ -242,9 +243,12 @@ def verify_second_factor(request):
     if request.method == "GET":
         twofactor_enabled = is_mfa_enabled(request.user)
         u2f_enabled = is_u2f_enabled(request.user)
-        if twofactor_enabled or u2f_enabled:
+        if twofactor_enabled and u2f_enabled:
             return render(request, 'django_mfa/verify_second_factor.html', {"u2f_enabled": u2f_enabled, "twofactor_enabled": twofactor_enabled})
-
+        if u2f_enabled:
+            return redirect("mfa:verify_second_factor_u2f")
+        if twofactor_enabled:
+            return redirect("mfa:verify_second_factor_totp")
 
 @login_required
 def recovery_codes_download(request):
