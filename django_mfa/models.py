@@ -29,6 +29,7 @@ class UserRecoveryCodes(models.Model):
     secret_code = models.CharField(max_length=MFA_RECOVERY_CODE_LENGTH)
 
 
+
 class U2FKey(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='u2f_keys',
                              on_delete=models.CASCADE)
