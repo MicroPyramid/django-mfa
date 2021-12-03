@@ -22,7 +22,6 @@ if __name__ == "__main__":
             'django.contrib.staticfiles',
             'django_mfa',
             'argonauts',
-            'debug_toolbar',
         ),
         MIDDLEWARE=(
             'django.middleware.security.SecurityMiddleware',
@@ -33,7 +32,6 @@ if __name__ == "__main__":
             'django.contrib.messages.middleware.MessageMiddleware',
             'django.middleware.clickjacking.XFrameOptionsMiddleware',
             'django_mfa.middleware.MfaMiddleware',
-            'debug_toolbar.middleware.DebugToolbarMiddleware',
         ),
         ROOT_URLCONF='django_mfa.urls',
         STATIC_URL='/static/',
@@ -52,6 +50,7 @@ if __name__ == "__main__":
                 },
             },
         ],
+        SECRET_KEY='test_secret_key',
     )
 
     django.setup()

@@ -26,7 +26,7 @@ Django-mfa(Multi-factor Authentication) is a simple django package to add extra 
 
 We welcome your feedback on this package. If you run into problems, please raise an issue or contribute to the project by forking the repository and sending some pull requests. 
 
-This Package is compatible with Django versions >=1.10 (including at least Django 2.0.7) Documentation is available at readthedocs(http://django-mfa.readthedocs.io/en/latest/)
+This Package is compatible with the following Django versions: 2.2, 3.0, 3.1, 3.2. Documentation is available at readthedocs(http://django-mfa.readthedocs.io/en/latest/)
 
 Quick start
 -----------
