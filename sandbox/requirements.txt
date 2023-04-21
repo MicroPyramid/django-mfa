@@ -8,5 +8,5 @@ python-u2flib-server==5.0.0
 pytz==2018.9
 qrcode==6.1
 six==1.12.0
-sqlparse==0.3.0
+sqlparse==0.4.4
 whitenoise==3.1
