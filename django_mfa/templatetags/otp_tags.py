@@ -12,8 +12,7 @@ register = template.Library()
 @register.filter
 @stringfilter
 def qrcode(value, alt=None):
-    url = conditional_escape("http://chart.apis.google.com/chart?%s" %
-                             urlencode({'chs': '150x150', 'cht': 'qr', 'chl': value, 'choe': 'UTF-8'}))
+    url = conditional_escape("https://qrcode.tec-it.com/API/QRCode?data=" + value)
     alt = conditional_escape(alt or value)
 
     return format_html(u"""<img class="qrcode" src="%s" width="150" height="150" alt="%s" />""" % (url, alt))
