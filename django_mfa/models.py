@@ -22,7 +22,7 @@ def is_mfa_enabled(user):
     """
     return hasattr(user, 'userotp')
 
-MFA_RECOVERY_CODE_LENGTH = 10
+MFA_RECOVERY_CODE_LENGTH = 16
 class UserRecoveryCodes(models.Model):
     user = models.ForeignKey(UserOTP,
                              on_delete=models.CASCADE)
