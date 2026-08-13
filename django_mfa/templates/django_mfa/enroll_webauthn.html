@@ -1,0 +1,46 @@
+{% extends base_template %}
+{% load i18n static webauthn_tags %}
+{% block content %}
+<section class="mfa-card">
+  <h1>{% trans "Add a security key or passkey" %}</h1>
+  <p class="mfa-lede">{% trans "Use a hardware security key, or a passkey built into this device such as Touch ID or Windows Hello." %}</p>
+
+  {% comment %}webauthn.js reveals this by setting .hidden = false when the
+  browser has no WebAuthn support. It MUST render with `hidden` set.{% endcomment %}
+  <div id="webauthn-unsupported" class="mfa-alert" hidden>
+    {% trans "This browser doesn't support security keys or passkeys. Try another browser, or choose a different method." %}
+  </div>
+
+  {% if error_message %}
+  <p class="mfa-alert">{{ error_message }}</p>
+  {% endif %}
+  {% comment %}Left empty on purpose: webauthn.js writes ceremony errors here.
+  The stylesheet collapses it while empty so it reserves no space.{% endcomment %}
+  <p id="webauthn-error" class="mfa-alert" role="alert"></p>
+
+  {% webauthn_options_script options "webauthn-options" %}
+
+  <form accept-charset="UTF-8" method="post" action="" id="webauthn-form" data-mode="create">
+    {% csrf_token %}
+    <input type="hidden" name="credential" value="">
+    <dl class="form-group">
+      <dt><label for="id_name">{% trans "Name this key" %}</label></dt>
+      <dd>
+        <input class="form-control" id="id_name" type="text" name="name" value=""
+               placeholder="{% trans 'e.g. YubiKey, work laptop' %}"
+               maxlength="100" autocomplete="off" autofocus
+               aria-describedby="id_name_help">
+        <span class="help-block mfa-muted" id="id_name_help">
+          {% trans "Optional. Helps you tell your keys apart later." %}
+        </span>
+      </dd>
+    </dl>
+    <div class="mfa-actions">
+      <button type="button" id="webauthn-start" class="btn btn-primary">{% trans "Register" %}</button>
+      <a href="{% url 'mfa:security_settings' %}" class="btn btn-default">{% trans "Cancel" %}</a>
+    </div>
+  </form>
+</section>
+
+<script src="{% static 'django_mfa/webauthn.js' %}" defer></script>
+{% endblock %}

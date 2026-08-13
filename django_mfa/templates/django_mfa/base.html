@@ -1,35 +1,27 @@
 <!DOCTYPE html>
-{% load static %}
-<html lang="en">
+{% load i18n static %}
+<html lang="{{ LANGUAGE_CODE|default:"en" }}">
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <meta name="description" content="">
-    <meta name="author" content="">
-    <title>{{title}}</title>
-    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" rel="stylesheet">
-    <link href="{% static 'style.css' %}" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% comment %}These pages are part of an authentication flow and have
+    nothing to offer a search engine or a referrer.{% endcomment %}
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="same-origin">
+    <title>{{ title|default:_("Two-factor authentication") }}</title>
+    <link href="{% static 'django_mfa/style.css' %}" rel="stylesheet">
   </head>
   <body>
     {% block nav_menu %}
-    <nav class="navbar navbar-dark navbar-fixed-top bg-inverse">
-      <a class="navbar-brand" href="#">Django MFA</a>
-    </nav>
-    {% endblock %}
-    <div class="container">
-      <div class="row">
-        {% block left_bar %}
-        <div class="col-sm-3 col-md-2">
-        </div>
-        {% endblock %}
-        <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
-          {% block content %}
-          {% endblock %}
-        </div>
+    <header class="mfa-header">
+      <div class="mfa-header__inner">
+        <span class="mfa-brand">{% trans "Two-factor authentication" %}</span>
       </div>
-    </div>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+    </header>
+    {% endblock %}
+
+    <main class="mfa-main{% block main_modifier %}{% endblock %}">
+      {% block content %}{% endblock %}
+    </main>
   </body>
 </html>

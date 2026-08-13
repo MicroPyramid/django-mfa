@@ -1,57 +1,55 @@
-from __future__ import division
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
+
+# Whether a factor type counts as "primary" (protects a user on its own) is
+# NOT decided here. It used to be a second, independent definition
+# (a frozenset of type strings) that could -- and did -- silently diverge
+# from django_mfa.registry.Adapter.counts_as_primary_factor, the one place
+# that actually matters (see django_mfa.signals.stamp_pending_verification
+# and django_mfa.views.verify.verify_factor, the production callers of that
+# decision). The registry is the single source of truth: use
+# registry.primary_enabled_for(user) instead.
 
 
-class UserOTP(models.Model):
-
-    OTP_TYPES = (
-        ('HOTP', 'hotp'),
-        ('TOTP', 'totp'),
-    )
-
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    otp_type = models.CharField(max_length=20, choices=OTP_TYPES)
-    secret_key = models.CharField(max_length=100, blank=True)
+class AuthenticatorManager(models.Manager):
+    def for_user(self, user):
+        return self.filter(user=user)
 
 
-def is_mfa_enabled(user):
-    """
-    Determine if a user has MFA enabled
-    """
-    return hasattr(user, 'userotp')
+class Authenticator(models.Model):
+    class Type(models.TextChoices):
+        TOTP = "totp", "Authenticator app"
+        WEBAUTHN = "webauthn", "Security key or passkey"
+        RECOVERY_CODES = "recovery_codes", "Recovery codes"
 
-MFA_RECOVERY_CODE_LENGTH = 16
-class UserRecoveryCodes(models.Model):
-    user = models.ForeignKey(UserOTP,
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,
+                             related_name="mfa_authenticators",
                              on_delete=models.CASCADE)
-    secret_code = models.CharField(max_length=MFA_RECOVERY_CODE_LENGTH)
+    type = models.CharField(max_length=32, choices=Type.choices)
+    name = models.CharField(max_length=100, blank=True)
+    data = models.JSONField(default=dict)
+    created_at = models.DateTimeField(default=timezone.now)
+    last_used_at = models.DateTimeField(null=True, blank=True)
 
+    objects = AuthenticatorManager()
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "type"],
+                condition=models.Q(type__in=["totp", "recovery_codes"]),
+                name="mfa_one_singleton_authenticator_per_user",
+            ),
+        ]
 
-class U2FKey(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='u2f_keys',
-                             on_delete=models.CASCADE)
-    created_at = models.DateTimeField(auto_now_add=True)
-    last_used_at = models.DateTimeField(null=True)
+    def __str__(self):
+        # `name` is WebAuthn-only and optional; without it several security
+        # keys belonging to one user are indistinguishable in the admin.
+        label = self.get_type_display()
+        return f"{label} ({self.name})" if self.name else label
 
-    public_key = models.TextField()
-    key_handle = models.TextField()
-    app_id = models.TextField()
-
-    def to_json(self):
-        return {
-            'publicKey': self.public_key,
-            'keyHandle': self.key_handle,
-            'appId': self.app_id,
-            'version': 'U2F_V2',
-        }
-
-
-def is_u2f_enabled(user):
-    """
-    Determine if a user has U2F enabled
-    """
-    return user.u2f_keys.all().exists()
+    def record_usage(self):
+        self.last_used_at = timezone.now()
+        self.save(update_fields=["last_used_at"])
 

@@ -1,25 +1,16 @@
-from .views import *
-from django.urls import path, include
-from . import views
+from django.urls import include, path
+
+from django_mfa.views import enroll, manage, picker, verify
 
 security_patterns = ([
-    path('verify-second-factor-options/',
-         verify_second_factor, name='verify_second_factor'),
-    path('verify/token/u2f/', views.verify_second_factor_u2f,
-         name='verify_second_factor_u2f'),
-    path('verify/token/totp/', verify_second_factor_totp,
-         name='verify_second_factor_totp'),
-    path('keys/', views.keys, name='u2f_keys'),
-    path('add-key/', views.add_key, name='add_u2f_key'),
-    path('security/', security_settings, name='security_settings'),
-    path('mfa/configure/', configure_mfa, name='configure_mfa'),
-    path('mfa/enable/', enable_mfa, name='enable_mfa'),
-    path('mfa/disable/', disable_mfa, name='disable_mfa'),
-    path('recovery/codes/', recovery_codes, name='recovery_codes'),
-    path('recovery/codes/downloads/', recovery_codes_download,
-         name='recovery_codes_download'),
-], 'mfa')
+    path("security/", manage.security_settings, name="security_settings"),
+    path("manage/", manage.manage_factors, name="manage"),
+    path("verify/", picker.verify, name="verify"),
+    path("verify/<str:factor_type>/", verify.verify_factor, name="verify_factor"),
+    path("enroll/<str:factor_type>/", enroll.enroll_factor, name="enroll_factor"),
+    path("recovery/codes/", manage.recovery_codes, name="recovery_codes"),
+    path("passkey/begin/", verify.passkey_begin, name="passkey_begin"),
+    path("passkey/complete/", verify.passkey_complete, name="passkey_complete"),
+], "mfa")
 
-urlpatterns = [
-    path("", include(security_patterns)),
-]
+urlpatterns = [path("", include(security_patterns))]

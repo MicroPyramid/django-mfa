@@ -1,0 +1,639 @@
+/*
+ * django-mfa default styling.
+ *
+ * Self-contained: no framework, no webfont, no network request of any kind.
+ * These pages are part of a login flow, so they must render correctly on a
+ * locked-down network and before any host-project CSS exists.
+ *
+ * Namespaced under static/django_mfa/ (matching webauthn.js). It used to be
+ * static/style.css -- the ROOT of the static namespace -- where a host
+ * project's own static/style.css collides with it and Django's app-directories
+ * finder resolves the clash by INSTALLED_APPS order, silently serving one in
+ * place of the other.
+ *
+ * Host projects are expected to replace all of this by pointing
+ * MFA_BASE_TEMPLATE at their own base template; see docs/customizing.md.
+ */
+
+/* --------------------------------------------------------------------------
+ * Design tokens
+ *
+ * `color-scheme` opts the page into the browser's dark UA styles too, so form
+ * controls, scrollbars and focus rings match rather than staying stark white.
+ * ---------------------------------------------------------------------- */
+
+:root {
+  color-scheme: light dark;
+
+  --mfa-bg: #f4f6f8;
+  --mfa-surface: #ffffff;
+  --mfa-surface-alt: #f8fafc;
+  --mfa-text: #16191d;
+  --mfa-muted: #5c6672;
+  --mfa-border: #dfe4ea;
+  --mfa-border-strong: #c3cbd5;
+
+  --mfa-accent: #2563eb;
+  --mfa-accent-hover: #1d4ed8;
+  --mfa-on-accent: #ffffff;
+  --mfa-focus: #2563eb;
+
+  --mfa-danger: #b42318;
+  --mfa-danger-bg: #fef3f2;
+  --mfa-danger-border: #fecdca;
+
+  --mfa-radius: 10px;
+  --mfa-radius-sm: 7px;
+  --mfa-shadow: 0 1px 2px rgba(16, 24, 40, 0.05),
+                0 1px 3px rgba(16, 24, 40, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mfa-bg: #0f1216;
+    --mfa-surface: #171b21;
+    --mfa-surface-alt: #1e242c;
+    --mfa-text: #e8ecf1;
+    --mfa-muted: #9aa5b1;
+    --mfa-border: #2b323b;
+    --mfa-border-strong: #3d4650;
+
+    --mfa-accent: #4f8cff;
+    --mfa-accent-hover: #6ba0ff;
+    --mfa-on-accent: #0b1220;
+    --mfa-focus: #6ba0ff;
+
+    --mfa-danger: #ff9a91;
+    --mfa-danger-bg: #2a1614;
+    --mfa-danger-border: #5a2a25;
+
+    --mfa-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Base
+ * ---------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    "Noto Sans", sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--mfa-text);
+  background-color: var(--mfa-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 0.4em;
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.011em;
+  color: var(--mfa-text);
+}
+
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.125rem; }
+h3 { font-size: 1rem; }
+
+p {
+  margin: 0 0 1rem;
+}
+
+a {
+  color: var(--mfa-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+code,
+kbd {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 0.9375em;
+  padding: 0.15em 0.4em;
+  border-radius: 5px;
+  background: var(--mfa-surface-alt);
+  border: 1px solid var(--mfa-border);
+  word-break: break-all;
+}
+
+/* Visible only to screen readers -- used for form hints that would be noise
+   on screen but matter when the field is announced out of context. */
+.mfa-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Keyboard focus must stay obvious on every interactive element. :focus-visible
+   keeps it off mouse clicks, so it doesn't read as a stuck state. */
+:focus-visible {
+  outline: 2px solid var(--mfa-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* --------------------------------------------------------------------------
+ * `hidden` MUST win over any class rule that sets `display`.
+ *
+ * The HTML `hidden` attribute is implemented by a user-agent rule,
+ * [hidden] { display: none }, whose specificity loses to ANY class selector
+ * setting `display` -- and .help-block below is exactly such a selector, on
+ * exactly the elements webauthn.js toggles. Without `!important` here, the
+ * "your browser does not support security keys" banner stays permanently
+ * visible on browsers that fully support WebAuthn, directly above a working
+ * button. Found in a real browser; a cascade outcome no Python test can see.
+ *
+ * Keep this ahead of every rule that sets `display` on a toggled class.
+ * ---------------------------------------------------------------------- */
+
+[hidden] {
+  display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+ * Page frame
+ * ---------------------------------------------------------------------- */
+
+.mfa-header {
+  background: var(--mfa-surface);
+  border-bottom: 1px solid var(--mfa-border);
+}
+
+.mfa-header__inner,
+.mfa-main {
+  width: 100%;
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.mfa-header__inner {
+  display: flex;
+  align-items: center;
+  min-height: 3.5rem;
+}
+
+.mfa-brand {
+  font-weight: 650;
+  font-size: 0.9375rem;
+  letter-spacing: -0.01em;
+  color: var(--mfa-text);
+  text-decoration: none;
+}
+
+.mfa-main {
+  padding-top: 2rem;
+  padding-bottom: 4rem;
+}
+
+/* The settings page is a list of things rather than a single focused task, so
+   it earns more width than a challenge screen. */
+.mfa-main--wide {
+  max-width: 48rem;
+}
+
+/* --------------------------------------------------------------------------
+ * Cards
+ * ---------------------------------------------------------------------- */
+
+.mfa-card {
+  background: var(--mfa-surface);
+  border: 1px solid var(--mfa-border);
+  border-radius: var(--mfa-radius);
+  box-shadow: var(--mfa-shadow);
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.mfa-card > :last-child {
+  margin-bottom: 0;
+}
+
+.mfa-card__title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.mfa-card__title h2 {
+  margin: 0;
+}
+
+.mfa-lede {
+  color: var(--mfa-muted);
+  margin-top: -0.25rem;
+}
+
+.mfa-muted {
+  color: var(--mfa-muted);
+  font-size: 0.875rem;
+}
+
+/* --------------------------------------------------------------------------
+ * Lists of enrolled methods / pickable methods
+ * ---------------------------------------------------------------------- */
+
+.mfa-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mfa-list > li + li {
+  border-top: 1px solid var(--mfa-border);
+}
+
+.mfa-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.875rem 0;
+}
+
+.mfa-list > li:first-child .mfa-item { padding-top: 0; }
+.mfa-list > li:last-child .mfa-item { padding-bottom: 0; }
+
+.mfa-item__text {
+  min-width: 0;
+}
+
+.mfa-item__name {
+  font-weight: 550;
+  word-break: break-word;
+}
+
+.mfa-item__meta {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--mfa-muted);
+}
+
+/* The verification picker: each method is a full-width target, because this
+   screen is often reached on a phone mid-login. */
+.mfa-picker {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.625rem;
+}
+
+.mfa-picker a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9375rem 1.125rem;
+  min-height: 3rem;
+  font-weight: 550;
+  color: var(--mfa-text);
+  text-decoration: none;
+  background: var(--mfa-surface);
+  border: 1px solid var(--mfa-border-strong);
+  border-radius: var(--mfa-radius-sm);
+}
+
+.mfa-picker a::after {
+  content: "\203A";           /* › */
+  color: var(--mfa-muted);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.mfa-picker a:hover {
+  border-color: var(--mfa-accent);
+  background: var(--mfa-surface-alt);
+}
+
+/* --------------------------------------------------------------------------
+ * Buttons
+ * ---------------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  /* 2.75rem = 44px, the minimum comfortable touch target. */
+  min-height: 2.75rem;
+  padding: 0.5rem 1.125rem;
+  font: inherit;
+  font-weight: 550;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--mfa-radius-sm);
+  background: var(--mfa-surface);
+  color: var(--mfa-text);
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-default {
+  border-color: var(--mfa-border-strong);
+}
+
+.btn-default:hover:not(:disabled) {
+  background: var(--mfa-surface-alt);
+}
+
+.btn-primary {
+  color: var(--mfa-on-accent);
+  background: var(--mfa-accent);
+  border-color: var(--mfa-accent);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--mfa-accent-hover);
+  border-color: var(--mfa-accent-hover);
+}
+
+.btn-danger {
+  color: var(--mfa-danger);
+  border-color: var(--mfa-border-strong);
+  background: transparent;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--mfa-danger-bg);
+  border-color: var(--mfa-danger-border);
+}
+
+.btn-sm {
+  min-height: 2.25rem;
+  padding: 0.3125rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.btn-block {
+  display: flex;
+  width: 100%;
+}
+
+.mfa-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-top: 1.25rem;
+}
+
+/* On narrow screens a row of buttons becomes a stack of full-width ones --
+   easier to hit, and it stops long labels from overflowing. */
+@media (max-width: 26rem) {
+  .mfa-actions {
+    flex-direction: column;
+  }
+  .mfa-actions .btn {
+    width: 100%;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Forms
+ * ---------------------------------------------------------------------- */
+
+.form-group {
+  margin: 0 0 1.125rem;
+}
+
+.form-group dt,
+.mfa-label {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.form-group dd {
+  margin: 0;
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  /* 16px minimum: anything smaller makes iOS Safari zoom on focus. */
+  font-size: 1rem;
+  font-family: inherit;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--mfa-text);
+  background: var(--mfa-surface);
+  border: 1px solid var(--mfa-border-strong);
+  border-radius: var(--mfa-radius-sm);
+}
+
+.form-control::placeholder {
+  color: var(--mfa-muted);
+  opacity: 1;
+}
+
+.form-control:focus {
+  border-color: var(--mfa-accent);
+}
+
+/* One-time codes: wide, monospaced and spaced out, so a six-digit code is
+   easy to check before submitting. */
+.mfa-code-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.5rem;
+  letter-spacing: 0.35em;
+  text-indent: 0.35em;      /* re-centres text against the trailing space */
+  text-align: center;
+  min-height: 3.25rem;
+  max-width: 15rem;
+}
+
+.mfa-code-input--wide {
+  letter-spacing: 0.12em;
+  text-indent: 0.12em;
+  font-size: 1.125rem;
+  max-width: 20rem;
+}
+
+/* --------------------------------------------------------------------------
+ * Messages
+ * ---------------------------------------------------------------------- */
+
+.help-block {
+  display: block;
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+}
+
+/* webauthn.js writes ceremony errors into an element that is always in the
+   DOM, so without this an empty <p> reserves blank space under every button. */
+.help-block:empty {
+  display: none;
+}
+
+.text-danger {
+  color: var(--mfa-danger);
+}
+
+.mfa-alert {
+  display: block;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  border-radius: var(--mfa-radius-sm);
+  border: 1px solid var(--mfa-danger-border);
+  background: var(--mfa-danger-bg);
+  color: var(--mfa-danger);
+}
+
+.mfa-alert:empty {
+  display: none;
+}
+
+.mfa-empty {
+  margin: 0;
+  color: var(--mfa-muted);
+}
+
+/* --------------------------------------------------------------------------
+ * TOTP enrollment
+ * ---------------------------------------------------------------------- */
+
+.mfa-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  margin: 0 0 1.25rem;
+  background: var(--mfa-surface-alt);
+  border: 1px solid var(--mfa-border);
+  border-radius: var(--mfa-radius-sm);
+}
+
+/* The QR code is an inline SVG data URI generated server-side. It must keep a
+   white quiet zone even in dark mode or scanners fail to read it. */
+.qrcode {
+  display: block;
+  width: 100%;
+  max-width: 12.5rem;
+  height: auto;
+  padding: 0.625rem;
+  background: #ffffff;
+  border-radius: 6px;
+}
+
+.mfa-secret {
+  width: 100%;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--mfa-muted);
+}
+
+.mfa-secret code {
+  display: inline-block;
+  margin-top: 0.25rem;
+  font-size: 0.9375rem;
+  letter-spacing: 0.08em;
+  color: var(--mfa-text);
+}
+
+/* --------------------------------------------------------------------------
+ * Recovery codes
+ * ---------------------------------------------------------------------- */
+
+.mfa-codes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0 0 1.25rem;
+  padding: 1rem;
+  background: var(--mfa-surface-alt);
+  border: 1px solid var(--mfa-border);
+  border-radius: var(--mfa-radius-sm);
+}
+
+@media (max-width: 26rem) {
+  .mfa-codes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.recovery-code {
+  margin: 0;
+  padding: 0.375rem 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  text-align: center;
+  background: var(--mfa-surface);
+  border: 1px solid var(--mfa-border);
+  border-radius: 5px;
+  user-select: all;      /* one click/tap selects a whole code */
+}
+
+/* --------------------------------------------------------------------------
+ * Motion
+ * ---------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * Print: recovery codes are the one page people legitimately print.
+ * ---------------------------------------------------------------------- */
+
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+  }
+  .mfa-header,
+  .mfa-actions {
+    display: none;
+  }
+  .mfa-card {
+    border: none;
+    box-shadow: none;
+    padding: 0;
+  }
+  .mfa-codes {
+    background: none;
+  }
+}

@@ -1,4 +1,3 @@
-from __future__ import print_function, unicode_literals, division, absolute_import
 
 import datetime
 import time
@@ -14,7 +13,7 @@ class TOTP(OTP):
             for OTP This defaults to 30 which is standard.
         """
         self.interval = kwargs.pop('interval', 30)
-        super(TOTP, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def at(self, for_time, counter_offset=0):
         """
@@ -38,7 +37,8 @@ class TOTP(OTP):
         """
         Verifies the OTP passed in against the current time OTP
         @param [String/Integer] otp the OTP to check against
-        @param [Integer] valid_window extends the validity to this many counter ticks before and after the current one
+        @param [Integer] valid_window extends the validity to this many
+            counter ticks before and after the current one
         """
         if for_time is None:
             for_time = datetime.datetime.now()

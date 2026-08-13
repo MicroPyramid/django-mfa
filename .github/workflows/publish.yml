@@ -1,0 +1,148 @@
+name: Publish
+
+# Publishing to PyPI uses a Trusted Publisher (OIDC), configured on PyPI as:
+#
+#     repository: MicroPyramid/django-mfa
+#     workflow:   publish.yml        <- this file's NAME is part of the trust
+#     environment: pypi              <- and so is the environment below
+#
+# There is no API token anywhere: PyPI trades this workflow's short-lived OIDC
+# token for an upload token, scoped to this project, valid for minutes. Renaming
+# this file, or the environment, silently breaks publishing -- PyPI will reject
+# the token because the claims no longer match. Change either one on PyPI first.
+#
+# The `pypi` environment additionally restricts deployment to tags matching
+# `v*`, so a release cut from a branch, or tagged `4.0.0` without the `v`,
+# never reaches the publish job at all.
+#
+# One trigger, deliberately: a published GitHub Release. The tag on that
+# release is what the version guard checks the package against. Note that
+# ci.yml's `push` trigger is branch-scoped, so pushing a tag runs NO tests of
+# its own -- that is why this workflow re-runs the corners of the test matrix
+# before it builds anything.
+#
+# GitHub resolves `release` triggers against the DEFAULT branch, so this file
+# does nothing until it is on master -- having it on a feature branch is not
+# enough, and there is no warning to that effect anywhere.
+on:
+  release:
+    types: [published]
+
+# Read-only by default. Only the `publish` job gets id-token: write, and it is
+# the only job that can reach the `pypi` environment.
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  # Never cancel a run that may be mid-upload.
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: py${{ matrix.python-version }} / Django ${{ matrix.django }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        # The corners of ci.yml's grid: the oldest supported combination and
+        # the newest. A release that breaks either must not reach PyPI, and a
+        # release is exactly the moment nobody is watching CI.
+        include:
+          - python-version: "3.10"
+            django: "4.2"
+          - python-version: "3.13"
+            django: "5.2"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Run the test suite
+        run: >
+          uv run
+          --python ${{ matrix.python-version }}
+          --with "django~=${{ matrix.django }}.0"
+          python test_runner.py
+
+  build:
+    name: Build and install-smoke
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Refuse to publish if the tag and the packaged version disagree
+        # Nothing else connects the two. hatchling reads the version from
+        # pyproject.toml and never looks at the tag, so a release tagged
+        # v4.0.0 cut from a tree still saying 4.0.0a1 would publish 4.0.0a1
+        # and report success -- the mismatch would surface only to users, and
+        # PyPI does not allow re-uploading a version to fix it.
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version=$(python3 -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          if [ "$tag" != "$version" ]; then
+            echo "::error::release tag ${GITHUB_REF_NAME} does not match pyproject.toml version ${version}"
+            exit 1
+          fi
+          echo "publishing django-mfa ${version}"
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Check the README renders on PyPI
+        # PyPI's renderer is not Sphinx, and a README it cannot render is
+        # published as an EMPTY project page rather than an error. `--strict`
+        # makes warnings fail here instead.
+        run: uv run --with "twine" --with "readme-renderer[md]" twine check --strict dist/*
+
+      - name: Install the wheel into a clean environment
+        run: |
+          uv venv /tmp/smoke
+          VIRTUAL_ENV=/tmp/smoke uv pip install dist/*.whl
+
+      - name: Start Django against the installed package
+        # Runs from /tmp so the checkout is not on sys.path: this is the job
+        # that catches a wheel missing a subpackage. See the script's docstring.
+        working-directory: /tmp
+        run: /tmp/smoke/bin/python "$GITHUB_WORKSPACE/.github/scripts/smoke_installed_wheel.py"
+
+      - name: Upload the distributions for the publish job
+        uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/django-mfa
+    permissions:
+      # Mints the OIDC token PyPI trades for a scoped upload token. This is
+      # the only job in the repository that has it.
+      id-token: write
+    steps:
+      - name: Download the distributions built above
+        # Deliberately not a rebuild: what gets uploaded is byte-for-byte the
+        # artifact the install-smoke actually exercised.
+        uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # No `with:` block on purpose -- no user, no password, no api-token.
+        # `skip-existing` stays off: re-running a release whose version is
+        # already on PyPI should fail loudly, not report a green success.

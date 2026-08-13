@@ -1,84 +1,78 @@
-{% extends 'django_mfa/base.html' %}
+{% extends base_template %}
 {% load i18n %}
+{% block main_modifier %} mfa-main--wide{% endblock %}
 {% block content %}
-<h1>{% trans "Two Factor Settings" %}</h1>
-<a href="{{prev_url}}" style="color:blue" class="btn btn-default">{% trans '&larr; Back to settings' %}</a>
-<br>
-<br>
-<div class="panel panel-default">
-  <div class="panel-heading">
-    <h3>Two-factor authentication</h3>
+<h1>{% trans "Two-factor authentication" %}</h1>
+<p class="mfa-lede">{% trans "Add a second step to your sign-in so a stolen password isn't enough on its own." %}</p>
+
+<section class="mfa-card">
+  <div class="mfa-card__title">
+    <h2>{% trans "Your methods" %}</h2>
   </div>
-  {% if twofactor_enabled %}
-  <div class="panel-body">
-    <p class="two-factor-status">
-      Status:
-      <span class="text-danger">
-        <strong>On</strong>
-        <svg aria-hidden="true" class="octicon octicon-x" height="16" version="1.1" viewBox="0 0 12 16" width="12">
-          <path d="M7.48 8l3.75 3.75-1.48 1.48L6 9.48l-3.75 3.75-1.48-1.48L4.52 8 .77 4.25l1.48-1.48L6 6.52l3.75-3.75 1.48 1.48z"></path>
-        </svg>
-      </span>
-    </p>
-    <a href="{% url 'mfa:disable_mfa' %}" class="btn btn-default">Disable MFA</a>
-  </div>
+
+  {% if authenticators %}
+  <ul class="mfa-list">
+    {% for authenticator in authenticators %}
+    <li>
+      <div class="mfa-item">
+        <div class="mfa-item__text">
+          <span class="mfa-item__name">
+            {{ authenticator.get_type_display }}{% if authenticator.name %} &mdash; {{ authenticator.name }}{% endif %}
+          </span>
+          <span class="mfa-item__meta">
+            {% blocktrans with created=authenticator.created_at|date:"j M Y" %}Added {{ created }}{% endblocktrans %}
+            {% if authenticator.last_used_at %}
+            &middot; {% blocktrans with used=authenticator.last_used_at|date:"j M Y" %}last used {{ used }}{% endblocktrans %}
+            {% endif %}
+          </span>
+        </div>
+        {% if authenticator.type != "webauthn" or not owned_by_enterprise %}
+        <form method="post" action="{% url 'mfa:manage' %}">
+          {% csrf_token %}
+          <input type="hidden" name="pk" value="{{ authenticator.pk }}">
+          <button type="submit" class="btn btn-danger btn-sm"
+                  onclick="return confirm('{% trans "Remove this method?" %}')">
+            {% trans "Remove" %}
+          </button>
+        </form>
+        {% else %}
+        <span class="mfa-item__meta">{% trans "Managed by your organization" %}</span>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
   {% else %}
-  <div class="panel-body">
-    <p class="two-factor-status">
-      Status:
-      <span class="text-danger">
-        <strong>Off</strong>
-        <svg aria-hidden="true" class="octicon octicon-x" height="16" version="1.1" viewBox="0 0 12 16" width="12">
-          <path d="M7.48 8l3.75 3.75-1.48 1.48L6 9.48l-3.75 3.75-1.48-1.48L4.52 8 .77 4.25l1.48-1.48L6 6.52l3.75-3.75 1.48 1.48z"></path>
-        </svg>
-      </span>
-    </p>
-    <a href="{% url 'mfa:configure_mfa' %}" class="btn btn-default">Enable MFA</a>
-    <p class="help">
-      <a href="https://help.github.com/articles/about-two-factor-authentication">Two-factor authentication</a> provides another layer of security to your account.
-    </p>
-  </div>
+  <p class="mfa-empty">{% trans "You haven't set up two-factor authentication yet." %}</p>
   {% endif %}
-</div>
-<br>
-<div class="panel panel-default">
-  <div class="panel-heading">
-    <h3>U2F authentication</h3>
+</section>
+
+<section class="mfa-card">
+  <div class="mfa-card__title">
+    <h2>{% trans "Add a method" %}</h2>
   </div>
-  <div class="panel-body">
-    <p class="two-factor-status">
-      Status:
-      <span class="text-danger">
-        <strong>{% if u2f_enabled %}{% trans "On" %}{% else %}{% trans "Off" %}{% endif %}</strong>
-        <svg aria-hidden="true" class="octicon octicon-x" height="16" version="1.1" viewBox="0 0 12 16" width="12">
-          <path d="M7.48 8l3.75 3.75-1.48 1.48L6 9.48l-3.75 3.75-1.48-1.48L4.52 8 .77 4.25l1.48-1.48L6 6.52l3.75-3.75 1.48 1.48z"></path>
-        </svg>
-      </span>
-    </p>
-    <a href="{% url 'mfa:u2f_keys' %}" class="btn btn-default">Manage U2F</a>
-    <p class="help">
-      <a href="https://developers.yubico.com/U2F/">U2F authentication</a> provides another layer of security to your account.
-    </p>
+
+  {% if available_adapters %}
+  <ul class="mfa-picker">
+    {% for adapter in available_adapters %}
+    <li><a href="{% url 'mfa:enroll_factor' adapter.type %}">{{ adapter.verbose_name }}</a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="mfa-empty">{% trans "There is nothing left to add." %}</p>
+  {% endif %}
+</section>
+
+<section class="mfa-card">
+  <div class="mfa-card__title">
+    <h2>{% trans "Recovery codes" %}</h2>
   </div>
-</div>
-<br>
-<div class="panel panel-default">
-  <div class="panel-heading">
-    <h3>Backup Codes Status</h3>
+  <p class="mfa-muted">
+    {% blocktrans count remaining=recovery_codes_remaining %}{{ remaining }} code remaining.{% plural %}{{ remaining }} codes remaining.{% endblocktrans %}
+    {% trans "Use one to sign in if you lose access to your other methods." %}
+  </p>
+  <div class="mfa-actions">
+    <a href="{% url 'mfa:recovery_codes' %}" class="btn btn-default">{% trans "View recovery codes" %}</a>
   </div>
-  <div class="panel-body">
-    <p class="two-factor-status">
-      {% trans "Backup codes remaining" %}:
-      <span class="text-danger">
-        <strong> {{ backup_codes | length }} </strong>
-        <svg aria-hidden="true" class="octicon octicon-x" height="16" version="1.1" viewBox="0 0 12 16" width="12">
-          <path d="M7.48 8l3.75 3.75-1.48 1.48L6 9.48l-3.75 3.75-1.48-1.48L4.52 8 .77 4.25l1.48-1.48L6 6.52l3.75-3.75 1.48 1.48z"></path>
-        </svg>
-      </span>
-    </p>
-    <a href="{% url 'mfa:recovery_codes' %}" class="btn btn-default">Get Backup Codes</a>
-    <p class="help">
-    </p>
-  </div>
-</div>
+</section>
 {% endblock %}

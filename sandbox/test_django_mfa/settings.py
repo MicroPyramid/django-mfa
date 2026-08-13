@@ -38,8 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_mfa',
-    'argonauts',
-    'debug_toolbar',
+    'sample',
 ]
 
 MIDDLEWARE = [
@@ -51,7 +50,11 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django_mfa.middleware.MfaMiddleware',
-    'debug_toolbar.middleware.DebugToolbarMiddleware',
+]
+
+AUTHENTICATION_BACKENDS = [
+    'django_mfa.backends.WebAuthnBackend',
+    'django.contrib.auth.backends.ModelBackend',
 ]
 
 ROOT_URLCONF = 'test_django_mfa.urls'
@@ -143,4 +146,39 @@ DATABASES = {
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 STATIC_ROOT = os.path.join(PROJECT_ROOT, 'staticfiles')
 STATIC_URL = '/static/'
-STATICFILES_STORAGE = 'whitenoise.django.GzipManifestStaticFilesStorage'
+# 'whitenoise.django.GzipManifestStaticFilesStorage' (whitenoise 3.x) no
+# longer exists -- whitenoise now ships a storage backend configured via the
+# Django 4.2+ STORAGES setting instead of STATICFILES_STORAGE, e.g.:
+#
+#   STORAGES = {
+#       "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+#       "staticfiles": {
+#           "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+#       },
+#   }
+#
+# with 'whitenoise.middleware.WhiteNoiseMiddleware' added to MIDDLEWARE
+# (directly after SecurityMiddleware) and whitenoise installed.
+# Not wired in here: this sandbox targets local `manage.py runserver`, which
+# serves static files itself via django.contrib.staticfiles without any
+# storage backend needing to be importable. Wire up the STORAGES block above
+# (and add whitenoise, e.g. `uv run --with whitenoise`) before deploying this
+# sandbox anywhere `runserver` isn't serving static files for you.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
+# Required for WebAuthn (security keys/passkeys) -- see the warning in
+# docs/settings.md: this cannot be changed later without
+# invalidating every credential registered against it. "localhost" is only
+# appropriate because this sandbox is for local development; a real
+# deployment must set this to its actual registrable domain.
+MFA_FIDO2_RP_ID = 'localhost'
+
+# Without this, a user stuck pending a second factor (lost device, no
+# recovery codes) could never reach /logout/ -- see the warning in
+# docs/settings.md.
+MFA_EXEMPT_PATHS = ['/logout/']

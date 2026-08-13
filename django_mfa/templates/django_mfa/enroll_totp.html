@@ -1,0 +1,35 @@
+{% extends base_template %}
+{% load i18n otp_tags %}
+{% block content %}
+<section class="mfa-card">
+  <h1>{% trans "Set up an authenticator app" %}</h1>
+  <p class="mfa-lede">{% trans "Scan this code with an authenticator app, then enter the six-digit code it shows." %}</p>
+
+  <div class="mfa-qr">
+    {% qrcode provisioning_uri "Scan this code" %}
+    <div class="mfa-secret">
+      {% trans "Can't scan it?" %}<br>
+      <code>{{ secret_key }}</code>
+    </div>
+  </div>
+
+  <form accept-charset="UTF-8" method="post" action="">
+    {% csrf_token %}
+    <input type="hidden" name="secret_key" value="{{ secret_key }}">
+    <dl class="form-group">
+      <dt><label for="id_code">{% trans "Six-digit code" %}</label></dt>
+      <dd>
+        <input class="form-control mfa-code-input" id="id_code" type="text" name="code" value=""
+               inputmode="numeric" pattern="[0-9]*" maxlength="6"
+               autocomplete="one-time-code" spellcheck="false" autofocus
+               aria-describedby="id_code_error">
+        <p class="help-block text-danger" id="id_code_error">{% if error_message %}{{ error_message }}{% endif %}</p>
+      </dd>
+    </dl>
+    <div class="mfa-actions">
+      <button type="submit" class="btn btn-primary">{% trans "Turn on two-factor authentication" %}</button>
+      <a href="{% url 'mfa:security_settings' %}" class="btn btn-default">{% trans "Cancel" %}</a>
+    </div>
+  </form>
+</section>
+{% endblock %}
