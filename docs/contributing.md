@@ -34,6 +34,40 @@ Two things that build output alone will *not* catch, both pinned by `django_mfa/
 
 When you add a setting to `django_mfa/conf.py`, document it in `docs/settings.md` in the same change; a test asserts every key in `DEFAULTS` appears there.
 
+## Releasing
+
+Releases publish themselves. There is no API token to hold, and nobody runs
+`twine upload` by hand: PyPI is configured to trust `.github/workflows/publish.yml`
+in this repository via OpenID Connect, and mints a short-lived, project-scoped
+upload token for that workflow alone.
+
+To cut a release:
+
+1.  Bump `version` in `pyproject.toml` and land it on `master`.
+2.  Publish a GitHub Release whose tag is that version with a leading `v` --
+    `v4.0.0a1` for version `4.0.0a1`.
+
+Publishing the release runs `publish.yml`, which tests the oldest and newest
+supported Python/Django combinations, builds the sdist and wheel, checks the
+README renders on PyPI, installs the wheel into a clean environment and starts
+Django against it, and only then uploads.
+
+Two guards exist because getting either wrong is unfixable after the fact --
+PyPI does not allow re-uploading a version:
+
+- The tag must match `pyproject.toml`'s `version`. Nothing else connects them:
+  hatchling never looks at the tag, so a release tagged `v4.0.0` cut from a tree
+  still saying `4.0.0a1` would publish `4.0.0a1` and report success.
+- The tag must start with `v`. The `pypi` deployment environment only accepts
+  tags matching `v*`, so a release cut from a branch cannot publish at all.
+
+:::{warning}
+Renaming `publish.yml`, or the `pypi` environment, breaks publishing --
+both names are part of what PyPI trusts, and a mismatch is rejected at upload
+time with an authentication error that does not mention the rename. Change it on
+[PyPI](https://pypi.org/manage/project/django-mfa/settings/publishing/) first.
+:::
+
 ## Sending pull requests
 
 1.  Fork the repo:

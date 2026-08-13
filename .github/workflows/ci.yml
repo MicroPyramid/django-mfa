@@ -163,7 +163,10 @@ jobs:
         # nothing else in this pipeline noticed. Still worth running now that
         # the README is Markdown: MyST syntax valid in docs/ (```{toctree},
         # :::{warning}, {doc} roles) is equally meaningless to PyPI.
-        run: uv run --with twine twine check dist/*
+        # Same invocation as publish.yml's, on purpose: if the two differ, a
+        # README can pass here and fail at release time, when the fix is a new
+        # version rather than a new commit.
+        run: uv run --with "twine" --with "readme-renderer[md]" twine check --strict dist/*
 
       - name: Install the wheel into a clean environment
         run: |
@@ -171,40 +174,11 @@ jobs:
           VIRTUAL_ENV=/tmp/smoke uv pip install dist/*.whl
 
       - name: Start Django against the installed package
+        # Shared verbatim with publish.yml's build job, which runs the same
+        # check before anything reaches PyPI. Inlining it in both files is
+        # inlining it in one of them a year from now.
         working-directory: /tmp
-        run: |
-          /tmp/smoke/bin/python - <<'PY'
-          import django
-          from django.conf import settings
-          settings.configure(
-              DEBUG=False, SECRET_KEY="x", ALLOWED_HOSTS=["example.com"],
-              DATABASES={"default": {"ENGINE": "django.db.backends.sqlite3",
-                                     "NAME": ":memory:"}},
-              INSTALLED_APPS=["django.contrib.auth", "django.contrib.contenttypes",
-                              "django.contrib.staticfiles", "django_mfa"],
-              MIDDLEWARE=[], MFA_FIDO2_RP_ID="example.com", USE_TZ=True,
-              STATIC_URL="/static/",
-              TEMPLATES=[{"BACKEND": "django.template.backends.django.DjangoTemplates",
-                          "APP_DIRS": True, "DIRS": [], "OPTIONS": {}}],
-              # Required, or django_mfa.E003 fails the check below -- which is
-              # the check working as intended, not a packaging problem.
-              AUTHENTICATION_BACKENDS=["django_mfa.backends.WebAuthnBackend",
-                                       "django.contrib.auth.backends.ModelBackend"],
-          )
-          django.setup()
-          from django.core.management import call_command
-          call_command("check")
-          call_command("migrate", run_syncdb=True, verbosity=0)
-
-          # Templates and static files are the parts that ride on file
-          # inclusion rather than package discovery, so prove them explicitly.
-          from django.template.loader import get_template
-          from django.contrib.staticfiles import finders
-          get_template("django_mfa/security.html")
-          assert finders.find("django_mfa/webauthn.js"), "webauthn.js missing"
-          assert finders.find("django_mfa/style.css"), "style.css missing"
-          print("installed package starts, checks, migrates, renders, serves static")
-          PY
+        run: /tmp/smoke/bin/python "$GITHUB_WORKSPACE/.github/scripts/smoke_installed_wheel.py"
 
       - uses: actions/upload-artifact@v4
         with:
