@@ -1,0 +1,42 @@
+# Read the Docs build configuration.
+#
+# This file is REQUIRED. Read the Docs stopped falling back to implicit
+# defaults in September 2023: a project without it does not build at all.
+#
+# It is also the only thing that tells Read the Docs the docs need
+# myst-parser. That matters more than it looks: the pages are Markdown, and
+# Sphinx cannot read Markdown on its own -- without myst-parser it finds zero
+# documents and publishes an empty site rather than failing loudly.
+#
+# See docs/conf.py for the Sphinx configuration itself.
+version: 2
+
+build:
+  os: ubuntu-24.04
+  tools:
+    python: "3.13"
+  jobs:
+    install:
+      # uv is this project's only environment tool -- CI, the sandbox, and
+      # the contributor workflow all go through it, and pyproject.toml is the
+      # single source of dependency truth. Installing it here means Read the
+      # Docs resolves the `docs` dependency group from the same pyproject.toml
+      # and uv.lock as everything else, instead of a docs/requirements.txt
+      # that would immediately start drifting from them.
+      - pip install uv
+      - uv sync --group docs --frozen
+    build:
+      html:
+        # -W (warnings are errors) matches the `docs` job in CI, so a broken
+        # cross-reference fails the Read the Docs build too rather than
+        # quietly publishing a dead link.
+        #
+        # Note what -W CANNOT catch, and why the CI job does more than this:
+        # with myst_enable_extensions misconfigured, MyST renders the literal
+        # text ":::{warning}" into the page and still reports success. See
+        # django_mfa/tests/test_docs.py.
+        - uv run sphinx-build -W -b html docs $READTHEDOCS_OUTPUT/html
+
+# Deliberately no `sphinx:` or `python:` key: defining build.jobs.build.html
+# above replaces Read the Docs' own Sphinx invocation, so those keys would be
+# read and then ignored -- config that looks load-bearing but isn't.

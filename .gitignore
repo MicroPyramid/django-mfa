@@ -63,3 +63,12 @@ media/
 *~
 *.swp
 *.swo
+
+# uv / packaging
+# NOTE: uv.lock is deliberately NOT ignored. It pins the DEV toolchain
+# (ruff, coverage, build) so CI and every contributor resolve the same
+# versions. It has no effect on projects that install django-mfa: consumers
+# resolve against the loose ranges in pyproject.toml's [project.dependencies],
+# never against this lock.
+.venv/
+*.egg-info/

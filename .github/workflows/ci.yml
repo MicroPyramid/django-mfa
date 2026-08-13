@@ -1,0 +1,212 @@
+name: CI
+
+on:
+  push:
+    branches: [master, dev]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # The matrix replaces tox.ini. uv creates each combination's environment
+    # from scratch in seconds and fetches the interpreter itself, so there is
+    # no second config file to keep in sync with this one.
+    name: py${{ matrix.python-version }} / Django ${{ matrix.django }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        django: ["4.2", "5.2"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Run the test suite
+        # --with pins Django for this run only, on top of the project's own
+        # `Django>=4.2`. test_runner.py is self-contained (it calls
+        # settings.configure()), so there is no settings module to point at.
+        run: >
+          uv run
+          --python ${{ matrix.python-version }}
+          --with "django~=${{ matrix.django }}.0"
+          python test_runner.py
+
+      - name: Report the Django version actually resolved
+        # Cheap insurance against the matrix silently testing one version
+        # twice because a constraint failed to apply.
+        run: >
+          uv run
+          --python ${{ matrix.python-version }}
+          --with "django~=${{ matrix.django }}.0"
+          python -c "import django; print('Django', django.get_version())"
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv run coverage run --source=django_mfa test_runner.py
+      - run: uv run coverage report
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Build the docs, treating warnings as errors
+        run: uv run --group docs sphinx-build -W -b html docs docs/_build/html
+
+      - name: Assert the rendered pages are actually correct
+        # -W above cannot catch any of this. With the colon_fence extension
+        # off, MyST renders the literal text ":::{warning}" into the page and
+        # the build still succeeds with zero warnings.
+        run: |
+          python - <<'PY'
+          import html, pathlib, re, sys
+
+          SRC, OUT = pathlib.Path("docs"), pathlib.Path("docs/_build/html")
+          # search/genindex are Sphinx's own pages -- search.html ships a
+          # warning admonition of its own ("Please activate JavaScript..."),
+          # which would inflate the count below.
+          pages = {p.name: p.read_text() for p in OUT.glob("*.html")
+                   if p.name not in {"search.html", "genindex.html"}}
+          failures = []
+
+          # 1. Every :::{warning} in the sources became a real admonition box.
+          #    Derived from the sources, not a hardcoded number, so adding a
+          #    warning to a page cannot quietly fall below a fixed threshold.
+          want = sum(len(re.findall(r"^:::\{warning\}", p.read_text(), re.M))
+                     for p in SRC.glob("*.md"))
+          got = sum(t.count("admonition warning") for t in pages.values())
+          print(f"admonitions: {want} in source, {got} rendered")
+          if not want or want != got:
+              failures.append(f"admonitions: expected {want}, rendered {got}")
+
+          # 2. No MyST syntax survived as literal body text. Occurrences
+          #    inside <code> are prose ABOUT the syntax -- contributing.md
+          #    documents this very failure mode -- so strip inline code first.
+          #    Without that, this check fails on a page for describing it.
+          def prose(t):
+              return html.unescape(re.sub(r"<code[^>]*>.*?</code>", "", t, flags=re.S))
+
+          leaked = sorted(n for n, t in pages.items()
+                          if any(x in prose(t) for x in (":::", "{doc}`", "```{")))
+          print(f"pages leaking MyST syntax: {leaked or 'none'}")
+          if leaked:
+              failures.append(f"leaked MyST syntax: {leaked}")
+
+          # 3. Every {doc} cross-reference resolved to a page that exists.
+          roles = sorted({m for p in SRC.glob("*.md")
+                          for m in re.findall(r"\{doc\}`([\w_]+)`", p.read_text())})
+          unresolved = [r for r in roles if f"{r}.html" not in pages]
+          print(f"{{doc}} targets: {len(roles)} distinct, unresolved: {unresolved or 'none'}")
+          if unresolved:
+              failures.append(f"unresolved {{doc}} targets: {unresolved}")
+
+          # 4. Every anchor link points at an id that exists. Sphinx warns on
+          #    a bad {doc}/{ref}, but a plain Markdown [x](settings.md#y) with
+          #    a stale anchor builds clean and 404s in the fragment.
+          broken = []
+          for name, t in pages.items():
+              for target, anchor in re.findall(r'href="([\w_]+)\.html#([\w-]+)"', t):
+                  if f'id="{anchor}"' not in pages.get(f"{target}.html", ""):
+                      broken.append(f"{name} -> {target}.html#{anchor}")
+              for anchor in re.findall(r'href="#([\w-]+)"', t):
+                  if f'id="{anchor}"' not in t:
+                      broken.append(f"{name}#{anchor}")
+          print(f"broken anchors: {broken or 'none'}")
+          if broken:
+              failures.append(f"broken anchors: {broken}")
+
+          if failures:
+              sys.exit("Rendered docs are wrong:\n  " + "\n  ".join(failures))
+          print("rendered docs verified")
+          PY
+
+  package:
+    # The job that would have caught the wheel shipping without
+    # django_mfa/adapters/ and django_mfa/views/. Builds the distribution and
+    # starts Django against the INSTALLED package, from a directory that is
+    # not the source tree -- so a missing module cannot be masked by the
+    # checkout sitting on sys.path.
+    name: Build and install-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Check the README renders on PyPI
+        # PyPI's renderer is not Sphinx. When README.rst carried a Sphinx-only
+        # `:doc:` role, PyPI rendered NO project description at all -- and
+        # nothing else in this pipeline noticed. Still worth running now that
+        # the README is Markdown: MyST syntax valid in docs/ (```{toctree},
+        # :::{warning}, {doc} roles) is equally meaningless to PyPI.
+        run: uv run --with twine twine check dist/*
+
+      - name: Install the wheel into a clean environment
+        run: |
+          uv venv /tmp/smoke
+          VIRTUAL_ENV=/tmp/smoke uv pip install dist/*.whl
+
+      - name: Start Django against the installed package
+        working-directory: /tmp
+        run: |
+          /tmp/smoke/bin/python - <<'PY'
+          import django
+          from django.conf import settings
+          settings.configure(
+              DEBUG=False, SECRET_KEY="x", ALLOWED_HOSTS=["example.com"],
+              DATABASES={"default": {"ENGINE": "django.db.backends.sqlite3",
+                                     "NAME": ":memory:"}},
+              INSTALLED_APPS=["django.contrib.auth", "django.contrib.contenttypes",
+                              "django.contrib.staticfiles", "django_mfa"],
+              MIDDLEWARE=[], MFA_FIDO2_RP_ID="example.com", USE_TZ=True,
+              STATIC_URL="/static/",
+              TEMPLATES=[{"BACKEND": "django.template.backends.django.DjangoTemplates",
+                          "APP_DIRS": True, "DIRS": [], "OPTIONS": {}}],
+              # Required, or django_mfa.E003 fails the check below -- which is
+              # the check working as intended, not a packaging problem.
+              AUTHENTICATION_BACKENDS=["django_mfa.backends.WebAuthnBackend",
+                                       "django.contrib.auth.backends.ModelBackend"],
+          )
+          django.setup()
+          from django.core.management import call_command
+          call_command("check")
+          call_command("migrate", run_syncdb=True, verbosity=0)
+
+          # Templates and static files are the parts that ride on file
+          # inclusion rather than package discovery, so prove them explicitly.
+          from django.template.loader import get_template
+          from django.contrib.staticfiles import finders
+          get_template("django_mfa/security.html")
+          assert finders.find("django_mfa/webauthn.js"), "webauthn.js missing"
+          assert finders.find("django_mfa/style.css"), "style.css missing"
+          print("installed package starts, checks, migrates, renders, serves static")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/

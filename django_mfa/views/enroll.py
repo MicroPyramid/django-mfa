@@ -6,7 +6,6 @@ from django.urls import reverse
 from django_mfa import session
 from django_mfa.conf import settings as mfa_settings
 from django_mfa.models import Authenticator
-from django_mfa.registry import registry
 from django_mfa.views.verify import GENERIC_ERROR, _adapter_or_404
 
 

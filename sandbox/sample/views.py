@@ -20,7 +20,7 @@ def index(request):
             # this user, and the old u2f_pre_verify_user_pk/
             # u2f_pre_verify_user_backend session dance (and the U2F-specific
             # is_u2f_enabled() check that gated it) is gone. See
-            # docs/upgrading.rst item 6.
+            # docs/upgrading.md item 6.
             login(request, form.user)
             return JsonResponse({"error": False})
         else:

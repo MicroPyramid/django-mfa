@@ -158,12 +158,11 @@ STATIC_URL = '/static/'
 #   }
 #
 # with 'whitenoise.middleware.WhiteNoiseMiddleware' added to MIDDLEWARE
-# (directly after SecurityMiddleware) and 'whitenoise' in requirements.txt.
+# (directly after SecurityMiddleware) and whitenoise installed.
 # Not wired in here: this sandbox targets local `manage.py runserver`, which
 # serves static files itself via django.contrib.staticfiles without any
-# storage backend needing to be importable, and task 19 could not add a new
-# runtime dependency to verify against. Wire up the STORAGES block above (and
-# add whitenoise back to sandbox/requirements.txt) before deploying this
+# storage backend needing to be importable. Wire up the STORAGES block above
+# (and add whitenoise, e.g. `uv run --with whitenoise`) before deploying this
 # sandbox anywhere `runserver` isn't serving static files for you.
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -173,7 +172,7 @@ STORAGES = {
 }
 
 # Required for WebAuthn (security keys/passkeys) -- see the warning in
-# docs/installation_setup.rst: this cannot be changed later without
+# docs/settings.md: this cannot be changed later without
 # invalidating every credential registered against it. "localhost" is only
 # appropriate because this sandbox is for local development; a real
 # deployment must set this to its actual registrable domain.
@@ -181,5 +180,5 @@ MFA_FIDO2_RP_ID = 'localhost'
 
 # Without this, a user stuck pending a second factor (lost device, no
 # recovery codes) could never reach /logout/ -- see the warning in
-# docs/installation_setup.rst.
+# docs/settings.md.
 MFA_EXEMPT_PATHS = ['/logout/']

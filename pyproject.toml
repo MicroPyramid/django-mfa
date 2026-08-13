@@ -1,0 +1,120 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "django-mfa"
+version = "4.0.0a1"
+description = "Second-factor authentication for Django: authenticator apps (TOTP), security keys and passkeys (WebAuthn), and recovery codes."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Micropyramid", email = "hello@micropyramid.com" }]
+keywords = ["django", "mfa", "2fa", "totp", "webauthn", "passkey", "fido2"]
+
+dependencies = [
+    "Django>=4.2",
+    "fido2>=1.1.2,<3",
+    "qrcode>=7.0.0,<9",
+]
+
+# No "License ::" classifier: PyPI rejects a license classifier alongside the
+# SPDX `license` expression above (PEP 639). The expression is the source of
+# truth.
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: Django",
+    "Framework :: Django :: 4.2",
+    "Framework :: Django :: 5.2",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Security",
+]
+
+[project.urls]
+Homepage = "https://github.com/MicroPyramid/django-mfa"
+Documentation = "http://django-mfa.readthedocs.io/en/latest/"
+Source = "https://github.com/MicroPyramid/django-mfa"
+Issues = "https://github.com/MicroPyramid/django-mfa/issues"
+
+# PEP 735 dependency groups. These are DEVELOPMENT-ONLY and are never seen by
+# a project that installs django-mfa -- unlike `dependencies` above, they are
+# not published in the wheel's metadata. `uv sync` installs them by default;
+# pip needs `pip install --group dev`.
+[dependency-groups]
+dev = [
+    "coverage>=7",
+    "ruff>=0.14",
+    # Required by django_mfa/tests/test_packaging.py, which builds a real
+    # wheel and asserts every package on disk ships in it. Without this the
+    # packaging tests skip -- and skipping is exactly how the missing
+    # adapters/ and views/ packages went unnoticed in the first place.
+    "build>=1.2",
+]
+# The docs are Markdown; myst-parser is what lets Sphinx read them at all.
+# Kept as its own group so a test run doesn't pull the whole Sphinx stack.
+docs = [
+    "sphinx>=7",
+    "sphinx-rtd-theme>=2",
+    "myst-parser>=3",
+]
+
+# ---------------------------------------------------------------------------
+# Build configuration
+#
+# `packages` names the ROOT package only. Hatchling then ships every module
+# under it -- django_mfa.adapters, django_mfa.views, and anything added later
+# -- with nothing to enumerate and therefore nothing to forget. The setup.py
+# this replaced hardcoded a three-entry `packages=[...]` list that predated
+# django_mfa/adapters/ and django_mfa/views/, so the built wheel omitted both
+# and `pip install django-mfa` raised ImportError on startup. See
+# django_mfa/tests/test_packaging.py, which builds a wheel and asserts every
+# package present on disk is actually in it.
+#
+# Templates and static files live inside the package directory, so they are
+# included automatically -- the MANIFEST.in that used to declare them is gone.
+# ---------------------------------------------------------------------------
+[tool.hatch.build.targets.wheel]
+packages = ["django_mfa"]
+
+[tool.hatch.build.targets.sdist]
+# Ship what a consumer or packager might need to build and verify the project,
+# and nothing else. The sandbox is a demo host project, not part of the
+# distribution.
+include = [
+    "/django_mfa",
+    "/docs",
+    "/test_runner.py",
+    "/README.md",
+    "/LICENSE",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+# migrations are generated; docs/conf.py is Sphinx boilerplate; sandbox is a
+# throwaway demo host project, not part of the distribution.
+extend-exclude = ["django_mfa/migrations", "sandbox", "docs/conf.py"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "DJ",   # flake8-django
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["django_mfa"]

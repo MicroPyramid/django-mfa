@@ -12,9 +12,12 @@
 import json
 
 from fido2.server import Fido2Server
-from fido2.webauthn import (AttestedCredentialData, AuthenticationResponse,
-                            PublicKeyCredentialRpEntity,
-                            PublicKeyCredentialUserEntity)
+from fido2.webauthn import (
+    AttestedCredentialData,
+    AuthenticationResponse,
+    PublicKeyCredentialRpEntity,
+    PublicKeyCredentialUserEntity,
+)
 
 from django_mfa.conf import settings as mfa_settings
 from django_mfa.handles import user_handle_for

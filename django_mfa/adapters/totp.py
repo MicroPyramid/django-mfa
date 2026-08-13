@@ -9,7 +9,6 @@ from django_mfa.crypto import decrypt, encrypt
 from django_mfa.models import Authenticator
 from django_mfa.registry import Adapter
 
-
 #: Accept the previous and next 30-second code as well as the current one.
 #: The legacy code used 0 (no tolerance), which rejects a correct code when the
 #: phone's clock drifts a few seconds or the user submits across a window
@@ -20,7 +19,7 @@ TOTP_VALID_WINDOW = 1
 
 
 def generate_secret():
-    raw = codecs.decode(codecs.encode("{0:020x}".format(random.getrandbits(80))),
+    raw = codecs.decode(codecs.encode(f"{random.getrandbits(80):020x}"),
                         "hex_codec")
     return base64.b32encode(raw).decode("utf-8")
 
@@ -39,7 +38,8 @@ class TOTPAdapter(Adapter):
 
     def complete_enroll(self, request, data):
         secret = data["secret_key"]
-        if not totp_mod.TOTP(secret).verify(data["code"], valid_window=TOTP_VALID_WINDOW):
+        if not totp_mod.TOTP(secret).verify(
+                data["code"], valid_window=TOTP_VALID_WINDOW):
             raise ValueError("Verification code did not match.")
         return Authenticator.objects.create(
             user=request.user, type=self.type, data={"secret": encrypt(secret)})

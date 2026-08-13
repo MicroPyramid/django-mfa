@@ -32,14 +32,12 @@ from base64 import urlsafe_b64encode
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
-
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.models import User
 from django.contrib.sessions.backends.db import SessionStore
 from django.http import HttpResponse
 from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
-
 from fido2.webauthn import AuthenticatorData
 
 from django_mfa.backends import user_from_handle, user_handle_for
@@ -221,7 +219,8 @@ class PasswordlessLoginTests(TestCase):
         # is (falsely) tagged with this user's real handle.
         impostor = SoftwareAuthenticator(origin="https://testserver",
                                          rp_id="testserver")
-        impostor.create({"publicKey": {"challenge": "AAAA"}})  # mint local key material only
+        # mint local key material only
+        impostor.create({"publicKey": {"challenge": "AAAA"}})
         begin = self.client.get(reverse("mfa:passkey_begin"))
         assertion = impostor.get(json.loads(begin.json()["options"]),
                                  user_handle=self._handle_bytes(self.user))
@@ -277,7 +276,8 @@ class PasswordlessLoginTests(TestCase):
         victim = User.objects.create_user("victim@example.com", password="pw")
         begin = self.client.get(reverse("mfa:passkey_begin"))
         assertion = self.device.get(json.loads(begin.json()["options"]))
-        forged = urlsafe_b64encode(self._handle_bytes(victim)).rstrip(b"=").decode("ascii")
+        forged = urlsafe_b64encode(
+            self._handle_bytes(victim)).rstrip(b"=").decode("ascii")
         assertion["response"]["userHandle"] = forged
 
         response = self.client.post(reverse("mfa:passkey_complete"),
@@ -301,7 +301,8 @@ class PasswordlessLoginTests(TestCase):
         auth.save()
 
         begin = self.client.get(reverse("mfa:passkey_begin"))
-        assertion = self.device.get(json.loads(begin.json()["options"]))  # counter -> 2, still < 99
+        # counter -> 2, still < 99
+        assertion = self.device.get(json.loads(begin.json()["options"]))
         response = self.client.post(reverse("mfa:passkey_complete"),
                                     {"credential": json.dumps(assertion)})
 
@@ -433,7 +434,8 @@ class UpOnlyPasskeySoleFactorRegressionTests(TestCase):
         # Step 1: passwordless login with a UP-only assertion from the
         # enrolled device. _UpOnlyAuthenticator is a distinct Python object
         # from self.device sharing the same key material (see
-        # PasswordlessLoginTests.test_up_only_assertion_authenticates_but_leaves_second_factor_pending
+        # PasswordlessLoginTests.
+        #   test_up_only_assertion_authenticates_but_leaves_second_factor_pending
         # above for why this class exists) -- its sign_count starts wherever
         # self.device's does and is copied back afterwards so the ordinary
         # get() in step 4 doesn't trip clone detection against a counter the

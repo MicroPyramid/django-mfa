@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import os
 import sys
+
 import django
 from django.conf import settings
 from django.test.utils import get_runner

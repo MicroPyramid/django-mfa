@@ -1,13 +1,16 @@
 {% extends base_template %}
 {% load i18n %}
 {% block content %}
-<h1>{% trans "Verify your identity" %}</h1>
-<p>{% trans "Choose how you'd like to verify it's you." %}</p>
-<ul class="mfa-picker">
-  {% for adapter in adapters %}
-  <li>
-    <a class="btn btn-default" href="{% url 'mfa:verify_factor' adapter.type %}">{{ adapter.verbose_name }}</a>
-  </li>
-  {% endfor %}
-</ul>
+<section class="mfa-card">
+  <h1>{% trans "Verify it's you" %}</h1>
+  <p class="mfa-lede">{% trans "Choose how you'd like to confirm your identity." %}</p>
+
+  <ul class="mfa-picker">
+    {% for adapter in adapters %}
+    <li>
+      <a href="{% url 'mfa:verify_factor' adapter.type %}">{{ adapter.verbose_name }}</a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
 {% endblock %}

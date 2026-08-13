@@ -81,7 +81,7 @@ class RememberMyBrowserEnforcementTests(TestCase):
         response = self.client.post(
             reverse("mfa:verify_factor", args=["totp"]),
             {"code": totp_mod.TOTP(self.secret).now()})
-        cookie_name = "RMB_%d" % self.user.pk
+        cookie_name = f"RMB_{self.user.pk}"
         self.assertIn(cookie_name, response.cookies)
         return cookie_name, response.cookies[cookie_name].value
 
@@ -141,7 +141,7 @@ class RememberMyBrowserOffByDefaultTests(TestCase):
         response = self.client.post(
             reverse("mfa:verify_factor", args=["totp"]),
             {"code": totp_mod.TOTP(self.secret).now()})
-        self.assertNotIn("RMB_%d" % self.user.pk, response.cookies)
+        self.assertNotIn(f"RMB_{self.user.pk}", response.cookies)
 
     def test_every_login_is_still_challenged(self):
         self.client.login(username="a@example.com", password="pw")
@@ -207,12 +207,12 @@ class NoFactorsCannotBeLockedOutTests(TestCase):
         response = self.client.get(reverse("mfa:enroll_factor", args=["totp"]))
         self.assertEqual(response.status_code, 200)
 
-    def test_factorless_user_can_still_reach_security_settings_after_visiting_verify(self):
+    def test_factorless_user_still_reaches_security_settings_after_verify(self):
         self.client.get(reverse("mfa:verify_factor", args=["totp"]))
         response = self.client.get(reverse("mfa:security_settings"))
         self.assertEqual(response.status_code, 200)
 
-    def test_user_with_a_primary_factor_is_still_stamped_pending_on_a_stale_session(self):
+    def test_user_with_a_primary_factor_is_stamped_pending_on_stale_session(self):
         """Regression guard: the new no-factors guard must not weaken the
         existing behaviour for a user who DOES have a primary factor -- a
         stale/pre-existing session reaching this view directly (without

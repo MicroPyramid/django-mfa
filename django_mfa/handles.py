@@ -47,6 +47,12 @@ class MfaUserHandle(models.Model):
                                 on_delete=models.CASCADE)
     handle = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
+    def __str__(self):
+        # Deliberately does NOT include the handle itself: this string ends up
+        # in admin pages and log lines, and the handle is the identifier a
+        # passwordless login resolves a user from.
+        return f"WebAuthn user handle for {self.user}"
+
 
 def user_handle_for(user):
     """Return a stable, opaque WebAuthn user handle for ``user``.

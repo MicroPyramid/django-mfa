@@ -1,6 +1,6 @@
-from __future__ import print_function, unicode_literals, division, absolute_import
 
 import unicodedata
+
 try:
     from itertools import izip_longest
 except ImportError:
@@ -36,23 +36,19 @@ def build_uri(secret, name, initial_count=None, issuer_name=None):
     is_initial_count_present = (initial_count is not None)
 
     otp_type = 'hotp' if is_initial_count_present else 'totp'
-    base = 'otpauth://%s/' % otp_type
+    base = f'otpauth://{otp_type}/'
 
     if issuer_name:
         issuer_name = quote(issuer_name)
-        base += '%s:' % issuer_name
+        base += f'{issuer_name}:'
 
-    uri = '%(base)s%(name)s?secret=%(secret)s' % {
-        'name': quote(name, safe='@'),
-        'secret': secret,
-        'base': base,
-    }
+    uri = f"{base}{quote(name, safe='@')}?secret={secret}"
 
     if is_initial_count_present:
-        uri += '&counter=%s' % initial_count
+        uri += f'&counter={initial_count}'
 
     if issuer_name:
-        uri += '&issuer=%s' % issuer_name
+        uri += f'&issuer={issuer_name}'
 
     return uri
 
@@ -86,10 +82,12 @@ def strings_equal(s1, s2):
     still reveal to a timing attack whether the strings are the same
     length.
     """
-    try:
-        s1 = unicodedata.normalize('NFKC', str(s1))
-        s2 = unicodedata.normalize('NFKC', str(s2))
-    except:
-        s1 = unicodedata.normalize('NFKC', unicode(s1))
-        s2 = unicodedata.normalize('NFKC', unicode(s2))
+    # This used to be a try/except around str() whose handler called unicode()
+    # -- a Python 2 fallback that, on Python 3, raises NameError instead of
+    # doing anything. Since the except was bare, ANY failure in the try block
+    # (including KeyboardInterrupt) landed in a handler that could only ever
+    # raise NameError, on the timing-safe comparison used for recovery codes.
+    # str() is always available here, so there is nothing left to fall back to.
+    s1 = unicodedata.normalize('NFKC', str(s1))
+    s2 = unicodedata.normalize('NFKC', str(s2))
     return compare_digest(s1, s2)

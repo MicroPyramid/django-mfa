@@ -1,3 +1,0 @@
-black==20.8b1
-django-argonauts==1.2.0
-python-u2flib-server==5.0.0

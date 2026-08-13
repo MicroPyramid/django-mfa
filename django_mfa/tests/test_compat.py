@@ -8,6 +8,7 @@ class ImportCompatTests(TestCase):
 
     def test_no_removed_symbols_referenced(self):
         import inspect
+
         import django_mfa.views as views
 
         source = inspect.getsource(views)

@@ -1,11 +1,10 @@
-from __future__ import print_function, unicode_literals, division, absolute_import
 
 import base64
 import hashlib
 import hmac
 
 
-class OTP(object):
+class OTP:
     def __init__(self, s, digits=6, digest=hashlib.sha1):
         """
         @param [String] secret in the form of base32

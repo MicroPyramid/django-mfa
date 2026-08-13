@@ -1,68 +1,78 @@
 {% extends base_template %}
 {% load i18n %}
+{% block main_modifier %} mfa-main--wide{% endblock %}
 {% block content %}
-<h1>{% trans "Two-Factor Settings" %}</h1>
+<h1>{% trans "Two-factor authentication" %}</h1>
+<p class="mfa-lede">{% trans "Add a second step to your sign-in so a stolen password isn't enough on its own." %}</p>
 
-<div class="panel panel-default">
-  <div class="panel-heading">
-    <h3>{% trans "Enabled methods" %}</h3>
+<section class="mfa-card">
+  <div class="mfa-card__title">
+    <h2>{% trans "Your methods" %}</h2>
   </div>
-  <div class="panel-body">
-    {% if authenticators %}
-    <ul>
-      {% for authenticator in authenticators %}
-      <li>
-        {{ authenticator.get_type_display }}{% if authenticator.name %} &mdash; {{ authenticator.name }}{% endif %}
-        <span class="text-muted">{% blocktrans with created=authenticator.created_at %}(added {{ created }}){% endblocktrans %}</span>
+
+  {% if authenticators %}
+  <ul class="mfa-list">
+    {% for authenticator in authenticators %}
+    <li>
+      <div class="mfa-item">
+        <div class="mfa-item__text">
+          <span class="mfa-item__name">
+            {{ authenticator.get_type_display }}{% if authenticator.name %} &mdash; {{ authenticator.name }}{% endif %}
+          </span>
+          <span class="mfa-item__meta">
+            {% blocktrans with created=authenticator.created_at|date:"j M Y" %}Added {{ created }}{% endblocktrans %}
+            {% if authenticator.last_used_at %}
+            &middot; {% blocktrans with used=authenticator.last_used_at|date:"j M Y" %}last used {{ used }}{% endblocktrans %}
+            {% endif %}
+          </span>
+        </div>
         {% if authenticator.type != "webauthn" or not owned_by_enterprise %}
-        <form method="post" action="{% url 'mfa:manage' %}" style="display:inline">
+        <form method="post" action="{% url 'mfa:manage' %}">
           {% csrf_token %}
           <input type="hidden" name="pk" value="{{ authenticator.pk }}">
-          <button type="submit" class="btn btn-danger btn-xs"
+          <button type="submit" class="btn btn-danger btn-sm"
                   onclick="return confirm('{% trans "Remove this method?" %}')">
             {% trans "Remove" %}
           </button>
         </form>
         {% else %}
-        <span class="text-muted">{% trans "Managed by your organization" %}</span>
+        <span class="mfa-item__meta">{% trans "Managed by your organization" %}</span>
         {% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p>{% trans "You have not enabled two-factor authentication." %}</p>
-    {% endif %}
-  </div>
-</div>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="mfa-empty">{% trans "You haven't set up two-factor authentication yet." %}</p>
+  {% endif %}
+</section>
 
-<br>
-
-<div class="panel panel-default">
-  <div class="panel-heading">
-    <h3>{% trans "Add a method" %}</h3>
+<section class="mfa-card">
+  <div class="mfa-card__title">
+    <h2>{% trans "Add a method" %}</h2>
   </div>
-  <div class="panel-body">
-    {% if available_adapters %}
-    <ul>
-      {% for adapter in available_adapters %}
-      <li><a href="{% url 'mfa:enroll_factor' adapter.type %}" class="btn btn-default">{{ adapter.verbose_name }}</a></li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p>{% trans "There is nothing left to add." %}</p>
-    {% endif %}
-  </div>
-</div>
 
-<br>
+  {% if available_adapters %}
+  <ul class="mfa-picker">
+    {% for adapter in available_adapters %}
+    <li><a href="{% url 'mfa:enroll_factor' adapter.type %}">{{ adapter.verbose_name }}</a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="mfa-empty">{% trans "There is nothing left to add." %}</p>
+  {% endif %}
+</section>
 
-<div class="panel panel-default">
-  <div class="panel-heading">
-    <h3>{% trans "Recovery codes" %}</h3>
+<section class="mfa-card">
+  <div class="mfa-card__title">
+    <h2>{% trans "Recovery codes" %}</h2>
   </div>
-  <div class="panel-body">
-    <p>{% blocktrans %}Recovery codes remaining: {{ recovery_codes_remaining }}{% endblocktrans %}</p>
+  <p class="mfa-muted">
+    {% blocktrans count remaining=recovery_codes_remaining %}{{ remaining }} code remaining.{% plural %}{{ remaining }} codes remaining.{% endblocktrans %}
+    {% trans "Use one to sign in if you lose access to your other methods." %}
+  </p>
+  <div class="mfa-actions">
     <a href="{% url 'mfa:recovery_codes' %}" class="btn btn-default">{% trans "View recovery codes" %}</a>
   </div>
-</div>
+</section>
 {% endblock %}

@@ -113,7 +113,8 @@ class DataMigrationTests(TransactionTestCase):
         otp = self.UserOTP.objects.get(user_id=self.user.pk)
         self.assertEqual(otp.secret_key, "JBSWY3DPEHPK3PXP")
         self.assertEqual(
-            sorted(self.UserRecoveryCodes.objects.values_list("secret_code", flat=True)),
+            sorted(self.UserRecoveryCodes.objects.values_list(
+                "secret_code", flat=True)),
             ["aaaaaaaaaa", "bbbbbbbbbb"],
         )
 

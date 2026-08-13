@@ -1,4 +1,3 @@
-from __future__ import division
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -43,6 +42,12 @@ class Authenticator(models.Model):
                 name="mfa_one_singleton_authenticator_per_user",
             ),
         ]
+
+    def __str__(self):
+        # `name` is WebAuthn-only and optional; without it several security
+        # keys belonging to one user are indistinguishable in the admin.
+        label = self.get_type_display()
+        return f"{label} ({self.name})" if self.name else label
 
     def record_usage(self):
         self.last_used_at = timezone.now()

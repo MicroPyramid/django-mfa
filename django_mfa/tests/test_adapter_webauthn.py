@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase, override_settings
-
 from fido2.server import Fido2Server
 
 from django_mfa.adapters.webauthn import WebAuthnAdapter

@@ -1,26 +1,34 @@
 {% extends base_template %}
 {% load i18n static webauthn_tags %}
 {% block content %}
-<h1>{% trans "Verify with your security key or passkey" %}</h1>
-<p>{% trans "Use your registered security key or passkey to finish signing in." %}</p>
+<section class="mfa-card">
+  <h1>{% trans "Use your security key" %}</h1>
+  <p class="mfa-lede">{% trans "Select the button below, then follow your browser's prompt to use your security key or passkey." %}</p>
 
-<div id="webauthn-unsupported" class="help-block text-danger" hidden>
-  {% trans "Your browser does not support security keys or passkeys (WebAuthn). Try a different browser, or use another two-factor method." %}
-</div>
+  {% comment %}webauthn.js reveals this by setting .hidden = false when the
+  browser has no WebAuthn support. It MUST render with `hidden` set.{% endcomment %}
+  <div id="webauthn-unsupported" class="mfa-alert" hidden>
+    {% trans "This browser doesn't support security keys or passkeys. Try another browser, or choose a different method." %}
+  </div>
 
-{% if error_message %}
-<p class="help-block text-danger">{{ error_message }}</p>
-{% endif %}
-<p id="webauthn-error" class="help-block text-danger"></p>
+  {% if error_message %}
+  <p class="mfa-alert">{{ error_message }}</p>
+  {% endif %}
+  {# Left empty on purpose: webauthn.js writes ceremony errors here. #}
+  <p id="webauthn-error" class="mfa-alert" role="alert"></p>
 
-{% webauthn_options_script options "webauthn-options" %}
+  {% webauthn_options_script options "webauthn-options" %}
 
-<form accept-charset="UTF-8" method="post" action="" id="webauthn-form" data-mode="get">
-  {% csrf_token %}
-  <input type="hidden" name="next" value="{{ next }}">
-  <input type="hidden" name="credential" value="">
-  <button type="button" id="webauthn-start" class="btn btn-primary">{% trans "Verify" %}</button>
-</form>
+  <form accept-charset="UTF-8" method="post" action="" id="webauthn-form" data-mode="get">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <input type="hidden" name="credential" value="">
+    <div class="mfa-actions">
+      <button type="button" id="webauthn-start" class="btn btn-primary">{% trans "Verify" %}</button>
+      <a href="{% url 'mfa:verify' %}" class="btn btn-default">{% trans "Use another method" %}</a>
+    </div>
+  </form>
+</section>
 
 <script src="{% static 'django_mfa/webauthn.js' %}" defer></script>
 {% endblock %}

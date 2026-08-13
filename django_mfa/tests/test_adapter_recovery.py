@@ -34,7 +34,7 @@ class RecoveryCodesAdapterTests(TestCase):
         """
         codes = self.adapter.generate(self.user)
         auth = Authenticator.objects.get(user=self.user, type="recovery_codes")
-        for plaintext, stored in zip(codes, auth.data["codes"]):
+        for plaintext, stored in zip(codes, auth.data["codes"], strict=True):
             self.assertNotEqual(plaintext, stored)
             self.assertTrue(check_password(plaintext, stored))
 

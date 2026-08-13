@@ -18,7 +18,9 @@ class ConfTests(TestCase):
 
     def test_unknown_setting_raises(self):
         with self.assertRaises(AttributeError):
-            mfa_settings.MFA_NOT_A_REAL_SETTING
+            # The bare attribute access IS the assertion -- evaluating it is
+            # what must raise. Binding it to a name would not change that.
+            mfa_settings.MFA_NOT_A_REAL_SETTING  # noqa: B018
 
 
 class ChecksTests(TestCase):

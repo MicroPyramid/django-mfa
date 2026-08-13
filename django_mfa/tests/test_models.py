@@ -31,7 +31,8 @@ class AuthenticatorTests(TestCase):
 
     def test_for_user_returns_only_that_users_authenticators(self):
         other = User.objects.create_user("b@example.com", password="pw")
-        mine = Authenticator.objects.create(user=self.user, type=Authenticator.Type.TOTP)
+        mine = Authenticator.objects.create(
+            user=self.user, type=Authenticator.Type.TOTP)
         Authenticator.objects.create(user=other, type=Authenticator.Type.TOTP)
         self.assertEqual(list(Authenticator.objects.for_user(self.user)), [mine])
 

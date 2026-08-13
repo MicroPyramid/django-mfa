@@ -1,38 +1,45 @@
 {% extends base_template %}
 {% load i18n %}
 {% block content %}
-<div class="panel panel-default">
-  <div class="panel-heading">
-    <h3>{% trans "Recovery Codes" %}</h3>
-  </div>
-  <div class="panel-body">
-    {% if codes %}
+<section class="mfa-card">
+  <h1>{% trans "Recovery codes" %}</h1>
+
+  {% if codes %}
+  <p class="mfa-lede">{% trans "Save these somewhere safe. Each code works once, and this is the only time they'll be shown." %}</p>
+
+  <div class="mfa-codes">
     {% for code in codes %}
     <p class="recovery-code">{{ code }}</p>
     {% endfor %}
-    {% else %}
-    <p>{% trans "Recovery codes were already generated and can no longer be displayed. Remove and re-add two-factor authentication if you need a fresh set." %}</p>
-    {% endif %}
   </div>
-</div>
-{% if codes %}
-<!--
-  The download is built client-side, from the codes already rendered above,
-  so the server never has to hold onto the plaintext beyond this one
-  response -- see django_mfa/views/manage.py:recovery_codes.
--->
-<a id="mfa-download-codes" download="recovery_codes.txt" class="btn btn-default">{% trans "Download" %}</a>
-<script>
-  (function () {
-    var nodes = document.querySelectorAll(".recovery-code");
-    var codes = Array.prototype.map.call(nodes, function (el) {
-      return el.textContent.trim();
-    });
-    document.getElementById("mfa-download-codes").href =
-      URL.createObjectURL(new Blob([codes.join("\n") + "\n"],
-                                   {type: "text/plain"}));
-  })();
-</script>
-{% endif %}
-<a href="{{ next_url }}" class="btn btn-default">{% trans "Home Page" %}</a>
+
+  <!--
+    The download is built client-side, from the codes already rendered above,
+    so the server never has to hold onto the plaintext beyond this one
+    response -- see django_mfa/views/manage.py:recovery_codes.
+  -->
+  <div class="mfa-actions">
+    <a id="mfa-download-codes" download="recovery_codes.txt" class="btn btn-primary">{% trans "Download" %}</a>
+    <a href="{{ next_url }}" class="btn btn-default">{% trans "Done" %}</a>
+  </div>
+  <script>
+    (function () {
+      var nodes = document.querySelectorAll(".recovery-code");
+      var codes = Array.prototype.map.call(nodes, function (el) {
+        return el.textContent.trim();
+      });
+      document.getElementById("mfa-download-codes").href =
+        URL.createObjectURL(new Blob([codes.join("\n") + "\n"],
+                                     {type: "text/plain"}));
+    })();
+  </script>
+  {% else %}
+  <p class="mfa-empty">
+    {% trans "Your recovery codes were generated earlier and can't be shown again. If you've lost them, remove and re-add two-factor authentication to get a fresh set." %}
+  </p>
+  <div class="mfa-actions">
+    <a href="{{ next_url }}" class="btn btn-default">{% trans "Done" %}</a>
+  </div>
+  {% endif %}
+</section>
 {% endblock %}

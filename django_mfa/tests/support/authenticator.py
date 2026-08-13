@@ -18,7 +18,6 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
-
 from fido2 import cbor  # cbor2 is NOT installed; fido2 vendors its own
 from fido2.cose import ES256
 from fido2.webauthn import AttestedCredentialData, AuthenticatorData

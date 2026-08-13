@@ -1040,7 +1040,7 @@ class HiddenAttributeStylesheetTests(TestCase):
     def setUpClass(cls):
         super().setUpClass()
         css_path = os.path.join(
-            os.path.dirname(__file__), "..", "static", "style.css")
+            os.path.dirname(__file__), "..", "static", "django_mfa", "style.css")
         with open(css_path) as fh:
             cls.raw = fh.read()
         # Strip comments before matching: the rule is explained by a comment
@@ -1061,12 +1061,29 @@ class HiddenAttributeStylesheetTests(TestCase):
         # `display` still wins, which is the exact bug this guards.
         self.assertIn("!important", body)
 
-    def test_hidden_rule_precedes_any_display_setting_class_rule(self):
+    def test_hidden_rule_precedes_every_display_setting_class_rule(self):
         """Order matters for equal specificity, and `!important` on the UA-
         level rule is what actually settles it -- but keeping the rule ahead
         of the class rules it protects makes the intent legible to whoever
         edits this file next.
+
+        Checks EVERY class rule that sets `display`, not just `.help-block`.
+        The earlier version named that one selector, so it kept passing as
+        new display-setting classes were added after it -- including
+        `.mfa-alert`, which is on the very banner this guards.
         """
         hidden_at = self.source.index("[hidden]")
-        help_block_at = self.source.index(".help-block")
-        self.assertLess(hidden_at, help_block_at)
+        offenders = [
+            (m.start(), m.group(1).strip())
+            for m in re.finditer(r"(\.[\w-]+[^{}]*)\{([^}]*)\}", self.source)
+            if re.search(r"(^|;)\s*display\s*:", m.group(2))
+        ]
+        self.assertTrue(
+            offenders,
+            "expected at least one class rule setting `display` -- if none "
+            "remain, this guard is no longer testing anything")
+        too_early = [name for at, name in offenders if at < hidden_at]
+        self.assertEqual(
+            too_early, [],
+            f"these class rules set `display` before the [hidden] rule: "
+            f"{too_early}")

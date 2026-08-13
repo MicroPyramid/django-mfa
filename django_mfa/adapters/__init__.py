@@ -19,8 +19,8 @@ from django.core.exceptions import ImproperlyConfigured
 from django_mfa.conf import settings as mfa_settings
 from django_mfa.registry import registry
 
-from .totp import TOTPAdapter
 from .recovery_codes import RecoveryCodesAdapter
+from .totp import TOTPAdapter
 from .webauthn import WebAuthnAdapter
 
 #: Every built-in adapter class, keyed by the same type string MFA_FACTORS
@@ -53,7 +53,7 @@ def register_default_adapters(target_registry, factor_types):
             raise ImproperlyConfigured(
                 f"MFA_FACTORS contains unknown factor {factor_type!r}. "
                 f"Valid values are: {', '.join(sorted(BUILTIN_ADAPTERS))}."
-            )
+            ) from None
         target_registry.register(adapter_class())
 
 

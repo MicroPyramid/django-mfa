@@ -7,7 +7,6 @@ from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render, resolve_url
 from django.utils.http import url_has_allowed_host_and_scheme
-
 from fido2.webauthn import AuthenticationResponse
 
 from django_mfa import ratelimit, session
@@ -51,7 +50,7 @@ def _adapter_or_404(factor_type):
     try:
         return registry.get(factor_type)
     except KeyError:
-        raise Http404(f"Unknown factor {factor_type!r}")
+        raise Http404(f"Unknown factor {factor_type!r}") from None
 
 
 def _safe_next(request):
@@ -313,7 +312,8 @@ def update_rmb_cookie(request, response):
         # better not to reveal the username.  Revealing the number seems harmless
         cookie_name = MFA_COOKIE_PREFIX + str(request.user.pk)
         cookie_salt = _generate_cookie_salt(request.user)
-        response.set_signed_cookie(cookie_name, True, salt=cookie_salt, max_age=remember_days * 24 * 3600,
+        response.set_signed_cookie(cookie_name, True, salt=cookie_salt,
+                                   max_age=remember_days * 24 * 3600,
                                    secure=(not settings.DEBUG), httponly=True)
     return response
 
@@ -332,7 +332,8 @@ def verify_rmb_cookie(request):
         return False
     cookie_value = request.get_signed_cookie(
         cookie_name, False, max_age=max_cookie_age, salt=cookie_salt)
-    # if the cookie value is True and the signature is good than the browser can be trusted
+    # if the cookie value is True and the signature is good then the browser
+    # can be trusted
     return cookie_value
 
 

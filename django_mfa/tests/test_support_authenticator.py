@@ -1,7 +1,6 @@
 import base64
 
 from django.test import TestCase
-
 from fido2.server import Fido2Server
 from fido2.webauthn import (
     AuthenticationResponse,

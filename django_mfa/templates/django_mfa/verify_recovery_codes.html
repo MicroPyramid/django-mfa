@@ -1,21 +1,29 @@
 {% extends base_template %}
 {% load i18n %}
 {% block content %}
-<h1>{% trans "Enter a recovery code" %}</h1>
-<p>{% blocktrans %}You have {{ remaining }} recovery codes remaining.{% endblocktrans %}</p>
-<form accept-charset="UTF-8" method="post" action="">
-  {% csrf_token %}
-  <input type="hidden" name="next" value="{{ next }}">
-  <dl class="form-group">
-    <dt><label for="id_code">{% trans "Recovery code" %}</label></dt>
-    <dd>
-      <input class="form-control" id="id_code" type="text" name="code" value=""
-             autocomplete="off" autofocus>
-      {% if error_message %}
-      <p class="help-block text-danger">{{ error_message }}</p>
-      {% endif %}
-    </dd>
-  </dl>
-  <button type="submit" class="btn btn-primary">{% trans "Verify" %}</button>
-</form>
+<section class="mfa-card">
+  <h1>{% trans "Enter a recovery code" %}</h1>
+  <p class="mfa-lede">
+    {% blocktrans count remaining=remaining %}You have {{ remaining }} recovery code left. Each one works only once.{% plural %}You have {{ remaining }} recovery codes left. Each one works only once.{% endblocktrans %}
+  </p>
+
+  <form accept-charset="UTF-8" method="post" action="">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <dl class="form-group">
+      <dt><label for="id_code">{% trans "Recovery code" %}</label></dt>
+      <dd>
+        <input class="form-control mfa-code-input mfa-code-input--wide" id="id_code"
+               type="text" name="code" value=""
+               autocomplete="off" autocapitalize="none" spellcheck="false" autofocus
+               aria-describedby="id_code_error">
+        <p class="help-block text-danger" id="id_code_error">{% if error_message %}{{ error_message }}{% endif %}</p>
+      </dd>
+    </dl>
+    <div class="mfa-actions">
+      <button type="submit" class="btn btn-primary">{% trans "Verify" %}</button>
+      <a href="{% url 'mfa:verify' %}" class="btn btn-default">{% trans "Use another method" %}</a>
+    </div>
+  </form>
+</section>
 {% endblock %}

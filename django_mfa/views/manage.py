@@ -71,7 +71,7 @@ def manage_factors(request):
         # ValueError/TypeError: int() rejects it outright. OverflowError: it
         # parses but exceeds what the column can hold, which only surfaces
         # when the query executes.
-        raise Http404("No such authenticator")
+        raise Http404("No such authenticator") from None
     if (authenticator.type == Authenticator.Type.WEBAUTHN
             and mfa_settings.MFA_OWNED_BY_ENTERPRISE):
         return HttpResponseForbidden(
