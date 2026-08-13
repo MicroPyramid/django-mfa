@@ -158,7 +158,14 @@ class EnrollFactorTests(TestCase):
         response = self.client.get(reverse("mfa:enroll_factor", args=["totp"]))
         content = response.content.decode()
         self.assertIn("data:image/svg+xml;base64,", content)
-        self.assertNotIn("chart.apis.google.com", content)
+        # Assert the property, not one bad hostname. Upstream later replaced
+        # the Google endpoint with qrcode.tec-it.com -- equally third-party,
+        # equally handed the secret -- and a check naming only Google would
+        # have waved that straight through. No <img> here may point off-box.
+        for src in re.findall(r'<img[^>]*\bsrc="([^"]*)"', content):
+            with self.subTest(src=src[:40]):
+                self.assertTrue(src.startswith("data:"),
+                                f"QR <img> points off this server: {src[:80]}")
 
         match = re.search(r'src="data:image/svg\+xml;base64,([^"]+)"', content)
         self.assertIsNotNone(match, "no inline SVG data URI in the response")

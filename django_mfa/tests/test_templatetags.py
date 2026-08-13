@@ -53,11 +53,27 @@ class QrcodeTagTests(TestCase):
         self.assertTrue(long_path.get("d"))
         self.assertGreater(len(long_path.get("d")), len(short_path.get("d")))
 
-    def test_does_not_call_out_to_google_charts(self):
-        html = qrcode("otpauth://totp/x")
-        self.assertNotIn("chart.apis.google.com", html)
-        self.assertNotIn("http://", html)
-        self.assertNotIn("https://", html)
+    def test_the_secret_never_leaves_this_server(self):
+        """The provisioning URI CONTAINS the TOTP shared secret.
+
+        Rendering it through any third-party QR service therefore hands that
+        secret to a third party, in a URL, in plaintext -- which is what the
+        original `chart.apis.google.com` implementation did, and what an
+        upstream commit later re-did by swapping in `qrcode.tec-it.com`
+        (merged here as dd5f7a1 and deliberately not taken).
+
+        That second swap is why this asserts a property rather than naming a
+        host: a guard that denylists one domain reads as protection and stops
+        the next domain not at all. The only safe output is a self-contained
+        data: URI with no network reference of any kind.
+        """
+        html = qrcode("otpauth://totp/x?secret=SUPERSECRET")
+        self.assertIn("src=\"data:image/svg+xml;base64,", html)
+        for network_marker in ("http://", "https://", "//", "src=\"/"):
+            with self.subTest(marker=network_marker):
+                self.assertNotIn(network_marker, html.replace(
+                    "data:image/svg+xml;base64,", ""))
+        self.assertNotIn("SUPERSECRET", html)
 
     def test_alt_text_is_escaped(self):
         html = qrcode("otpauth://totp/x", alt='"><script>alert(1)</script>')
