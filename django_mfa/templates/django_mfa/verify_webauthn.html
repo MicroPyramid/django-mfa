@@ -1,0 +1,26 @@
+{% extends base_template %}
+{% load i18n static webauthn_tags %}
+{% block content %}
+<h1>{% trans "Verify with your security key or passkey" %}</h1>
+<p>{% trans "Use your registered security key or passkey to finish signing in." %}</p>
+
+<div id="webauthn-unsupported" class="help-block text-danger" hidden>
+  {% trans "Your browser does not support security keys or passkeys (WebAuthn). Try a different browser, or use another two-factor method." %}
+</div>
+
+{% if error_message %}
+<p class="help-block text-danger">{{ error_message }}</p>
+{% endif %}
+<p id="webauthn-error" class="help-block text-danger"></p>
+
+{% webauthn_options_script options "webauthn-options" %}
+
+<form accept-charset="UTF-8" method="post" action="" id="webauthn-form" data-mode="get">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ next }}">
+  <input type="hidden" name="credential" value="">
+  <button type="button" id="webauthn-start" class="btn btn-primary">{% trans "Verify" %}</button>
+</form>
+
+<script src="{% static 'django_mfa/webauthn.js' %}" defer></script>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends base_template %}
+{% load i18n %}
+{% block content %}
+<h1>{% trans "Enter your authentication code" %}</h1>
+<p>{% trans "Enter the six-digit code from your authenticator app." %}</p>
+<form accept-charset="UTF-8" method="post" action="">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ next }}">
+  <dl class="form-group">
+    <dt><label for="id_code">{% trans "Code" %}</label></dt>
+    <dd>
+      <input class="form-control" id="id_code" type="text" name="code" value=""
+             placeholder="{% trans 'Enter six digit number.' %}" autocomplete="one-time-code" autofocus>
+      {% if error_message %}
+      <p class="help-block text-danger">{{ error_message }}</p>
+      {% endif %}
+    </dd>
+  </dl>
+  <button type="submit" class="btn btn-primary">{% trans "Verify" %}</button>
+</form>
+{% endblock %}

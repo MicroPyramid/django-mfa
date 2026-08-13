@@ -1,0 +1,23 @@
+{% extends base_template %}
+{% load i18n otp_tags %}
+{% block content %}
+<h1>{% trans "Set up an authenticator app" %}</h1>
+<p>{% trans "Scan this barcode with your two-factor authentication app." %}</p>
+{% qrcode provisioning_uri "Scan this code" %}
+<p>{% trans "Or enter this code manually:" %} <code>{{ secret_key }}</code></p>
+<form accept-charset="UTF-8" method="post" action="">
+  {% csrf_token %}
+  <input type="hidden" name="secret_key" value="{{ secret_key }}">
+  <dl class="form-group">
+    <dt><label for="id_code">{% trans "Enter the six-digit code from the app" %}</label></dt>
+    <dd>
+      <input class="form-control" id="id_code" type="text" name="code" value=""
+             placeholder="{% trans 'Enter six digit number.' %}" autocomplete="one-time-code" autofocus>
+      {% if error_message %}
+      <p class="help-block text-danger">{{ error_message }}</p>
+      {% endif %}
+    </dd>
+  </dl>
+  <button type="submit" class="btn btn-primary">{% trans "Enable two-factor authentication" %}</button>
+</form>
+{% endblock %}

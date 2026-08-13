@@ -1,127 +1,286 @@
 /*
- * Base structure
+ * django-mfa standalone styling
+ *
+ * The shipped templates use Bootstrap 3 class names (panel, panel-default,
+ * btn, btn-default, the col-sm-*/col-md-* grid, ...) but this package does
+ * not ship Bootstrap and django_mfa/base.html no longer pulls it in from a
+ * CDN. These rules give every one of those classes a reasonable look on
+ * their own, so the package renders sensibly with no host styling and no
+ * network access at all -- only the classes actually used by templates in
+ * this package are defined here.
  */
 
-/* Move down content because we have a fixed navbar that is 50px tall */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
+  margin: 0;
   padding-top: 50px;
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.42857143;
+  color: #333;
+  background-color: #fff;
 }
 
+a {
+  color: #337ab7;
+}
+
+h1, h3 {
+  font-weight: 500;
+  color: #222;
+}
+
+code {
+  padding: 2px 4px;
+  font-size: 90%;
+  color: #c7254e;
+  background-color: #f9f2f4;
+  border-radius: 4px;
+}
 
 /*
- * Global add-ons
+ * Top navigation bar
  */
 
-.sub-header {
-  padding-bottom: 10px;
-  border-bottom: 1px solid #eee;
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  min-height: 50px;
+  padding: 0 15px;
+  display: flex;
+  align-items: center;
 }
 
-/*
- * Top navigation
- * Hide default border to remove 1px line.
- */
-.navbar-fixed-top {
-  border: 0;
+.navbar-dark,
+.navbar.bg-inverse {
+  background-color: #222;
 }
 
-/*
- * Sidebar
- */
-
-/* Hide for mobile, show later */
-.sidebar {
-  display: none;
-}
-@media (min-width: 768px) {
-  .sidebar {
-    position: fixed;
-    top: 51px;
-    bottom: 0;
-    left: 0;
-    z-index: 1000;
-    display: block;
-    padding: 20px;
-    overflow-x: hidden;
-    overflow-y: auto; /* Scrollable contents if viewport is shorter than content. */
-    background-color: #f5f5f5;
-    border-right: 1px solid #eee;
-  }
-}
-
-/* Sidebar navigation */
-.nav-sidebar {
-  margin-right: -21px; /* 20px padding + 1px border */
-  margin-bottom: 20px;
-  margin-left: -20px;
-}
-.nav-sidebar > li > a {
-  padding-right: 20px;
-  padding-left: 20px;
-}
-.nav-sidebar > .active > a,
-.nav-sidebar > .active > a:hover,
-.nav-sidebar > .active > a:focus {
+.navbar-brand {
+  font-size: 18px;
+  line-height: 20px;
   color: #fff;
-  background-color: #428bca;
+  text-decoration: none;
+  padding: 15px 0;
 }
 
+.navbar-brand:hover {
+  color: #fff;
+  text-decoration: none;
+}
 
 /*
- * Main content
+ * Grid: a plain, non-nesting subset of the Bootstrap 3 grid covering only
+ * the columns actually used by these templates (col-sm-3/9, col-md-2/10,
+ * and their offsets).
  */
+
+.container {
+  max-width: 970px;
+  margin: 0 auto;
+  padding: 0 15px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 -15px;
+}
+
+.row > [class*="col-"] {
+  padding: 0 15px;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .col-sm-3 { width: 25%; }
+  .col-sm-9 { width: 75%; }
+  .col-sm-offset-3 { margin-left: 25%; }
+}
+
+@media (min-width: 992px) {
+  .col-md-2 { width: 16.66666667%; margin-left: 0; }
+  .col-md-10 { width: 83.33333333%; margin-left: 0; }
+  .col-md-offset-2 { margin-left: 16.66666667%; }
+}
 
 .main {
   padding: 20px;
 }
+
 @media (min-width: 768px) {
   .main {
     padding-right: 40px;
     padding-left: 40px;
   }
 }
-.main .page-header {
-  margin-top: 0;
-}
-
 
 /*
- * Placeholder dashboard ideas
+ * Panels
  */
 
-.placeholders {
-  margin-bottom: 30px;
-  text-align: center;
-}
-.placeholders h4 {
-  margin-bottom: 0;
-}
-.placeholder {
+.panel {
   margin-bottom: 20px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
 }
-.placeholder img {
+
+.panel-default {
+  border-color: #ddd;
+}
+
+.panel-heading {
+  padding: 10px 15px;
+  border-bottom: 1px solid #ddd;
+  border-top-left-radius: 3px;
+  border-top-right-radius: 3px;
+  background-color: #f5f5f5;
+}
+
+.panel-heading h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.panel-body {
+  padding: 15px;
+}
+
+.panel-body ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+/*
+ * Buttons
+ */
+
+.btn {
   display: inline-block;
-  border-radius: 50%;
+  margin-bottom: 0;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.42857143;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 4px;
 }
 
-/* style for table in key_list.html start's here */
-
-.key_list_table{
-  border: 1px solid black;
-
+.btn-default {
+  color: #333;
+  background-color: #fff;
+  border-color: #ccc;
 }
 
-.key_list_table td{
-  border: 1px solid black;
-  padding: 5px;
-
+.btn-default:hover {
+  background-color: #e6e6e6;
 }
 
-.key_list_table th{
-  border: 1px solid black;
-  padding: 5px;
-
+.btn-primary {
+  color: #fff;
+  background-color: #337ab7;
+  border-color: #2e6da4;
 }
 
+.btn-primary:hover {
+  background-color: #286090;
+}
 
-/* style for table in key_list.html end's here */
+/*
+ * Forms
+ */
+
+.form-group {
+  margin: 0 0 15px;
+}
+
+.form-group dt {
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+
+.form-group dd {
+  margin: 0;
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: 34px;
+  padding: 6px 12px;
+  font-size: 14px;
+  line-height: 1.42857143;
+  color: #555;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+/* The HTML `hidden` attribute is implemented by a user-agent rule
+   ([hidden] { display: none }) whose specificity is lower than ANY class
+   selector that sets `display`. `.help-block { display: block }` below is
+   exactly such a selector, and webauthn.js toggles precisely these elements
+   by setting `.hidden` -- so without this rule the "your browser does not
+   support security keys" banner rendered with `hidden` stays visible on
+   every browser that DOES support WebAuthn. Keep this ahead of any rule
+   that sets `display` on a class those scripts toggle. */
+[hidden] {
+  display: none !important;
+}
+
+.help-block {
+  display: block;
+  margin: 5px 0 0;
+}
+
+.text-danger {
+  color: #a94442;
+}
+
+/*
+ * django-mfa specific
+ */
+
+.mfa-picker {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mfa-picker li {
+  margin-bottom: 10px;
+}
+
+.qrcode {
+  display: block;
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  margin: 15px 0;
+  image-rendering: pixelated;
+  border: 1px solid #ddd;
+  padding: 8px;
+  background: #fff;
+}
+
+.recovery-code {
+  font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 16px;
+  margin: 4px 0;
+}

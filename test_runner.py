@@ -21,7 +21,6 @@ if __name__ == "__main__":
             'django.contrib.messages',
             'django.contrib.staticfiles',
             'django_mfa',
-            'argonauts',
         ),
         MIDDLEWARE=(
             'django.middleware.security.SecurityMiddleware',
@@ -51,10 +50,29 @@ if __name__ == "__main__":
             },
         ],
         SECRET_KEY='test_secret_key',
+        MFA_FIDO2_RP_ID='testserver',
+        ALLOWED_HOSTS=['testserver', 'localhost'],
+        # django_mfa.checks.E003 (task 19) flags a WebAuthn-capable install
+        # that is missing this backend -- without it, passkey login "works"
+        # once and then silently degrades to an anonymous session on the
+        # very next request (see checks.py). The registry always registers
+        # a WebAuthn adapter by default, so these settings need it too, the
+        # same way MFA_FIDO2_RP_ID/ALLOWED_HOSTS above exist to keep E001/
+        # E002 clean.
+        AUTHENTICATION_BACKENDS=[
+            'django_mfa.backends.WebAuthnBackend',
+            'django.contrib.auth.backends.ModelBackend',
+        ],
+        CACHES={"default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache"}},
     )
 
     django.setup()
     TestRunner = get_runner(settings)
     test_runner = TestRunner()
-    failures = test_runner.run_tests(["django_mfa"])
+    # Accepts an optional test label on argv, e.g.
+    # `python test_runner.py django_mfa.tests.test_conf`, to narrow a run
+    # without editing this file (see CLAUDE.md).
+    labels = sys.argv[1:] or ["django_mfa"]
+    failures = test_runner.run_tests(labels)
     sys.exit(bool(failures))

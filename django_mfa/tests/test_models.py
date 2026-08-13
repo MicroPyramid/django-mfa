@@ -1,62 +1,56 @@
-from django_mfa.models import *
-from django.test import TestCase, Client
 from django.contrib.auth.models import User
-from django.contrib import auth
+from django.db.utils import IntegrityError
+from django.test import TestCase
+
+from django_mfa.models import Authenticator
 
 
-class Test_Models_Mfa_U2f(TestCase):
-
+class AuthenticatorTests(TestCase):
     def setUp(self):
-        self.client = Client()
-        self.user = User.objects.create_user(
-            username='djangomfa@mp.com', email='djangomfa@mp.com', password='djangomfa')
-        self.userotp = UserOTP.objects.create(
-            otp_type='TOTP', user=self.user, secret_key='secret_key')
-        self.user_codes = UserRecoveryCodes.objects.create(user=UserOTP.objects.get(
-            user=self.user), secret_code="secret_code")
-        self.u2f_keys = self.user.u2f_keys.create(
-            public_key='publicKey',
-            key_handle='keyHandle',
-            app_id='https://appId',
-        )
-        self.client.login(username='djangomfa@mp.com', password="djangomfa")
+        self.user = User.objects.create_user("a@example.com", password="pw")
 
-    def test_mfa_enabled(self):
+    def test_one_totp_per_user(self):
+        Authenticator.objects.create(user=self.user, type=Authenticator.Type.TOTP)
+        with self.assertRaises(IntegrityError):
+            Authenticator.objects.create(user=self.user, type=Authenticator.Type.TOTP)
 
-        self.assertTrue(is_mfa_enabled(auth.get_user(self.client)))
+    def test_many_webauthn_per_user(self):
+        Authenticator.objects.create(user=self.user,
+                                     type=Authenticator.Type.WEBAUTHN, name="key 1")
+        Authenticator.objects.create(user=self.user,
+                                     type=Authenticator.Type.WEBAUTHN, name="key 2")
+        self.assertEqual(self.user.mfa_authenticators.count(), 2)
 
-    def test_u2f_enabled(self):
+    def test_record_usage_sets_last_used_at(self):
+        auth = Authenticator.objects.create(user=self.user,
+                                            type=Authenticator.Type.TOTP)
+        self.assertIsNone(auth.last_used_at)
+        auth.record_usage()
+        auth.refresh_from_db()
+        self.assertIsNotNone(auth.last_used_at)
 
-        self.assertTrue(is_u2f_enabled(auth.get_user(self.client)))
+    def test_for_user_returns_only_that_users_authenticators(self):
+        other = User.objects.create_user("b@example.com", password="pw")
+        mine = Authenticator.objects.create(user=self.user, type=Authenticator.Type.TOTP)
+        Authenticator.objects.create(user=other, type=Authenticator.Type.TOTP)
+        self.assertEqual(list(Authenticator.objects.for_user(self.user)), [mine])
 
-    def test_user_data_saved_correctly(self):
-        user_details = auth.get_user(self.client)
-        self.assertEqual(self.user.username, user_details.username)
-        self.assertEqual(self.user.email, user_details.email)
-        self.assertEqual(self.user.password, user_details.password)
 
-    def test_userotp_data_saved_correctly(self):
-        user_otp = UserOTP.objects.filter(
-            user=auth.get_user(self.client)).first()
-        self.assertEqual(self.userotp.otp_type, user_otp.otp_type)
-        self.assertEqual(self.userotp.user, user_otp.user)
-        self.assertEqual(self.userotp.secret_key, user_otp.secret_key)
+class LegacyModelRemovalTests(TestCase):
+    def test_legacy_models_are_gone(self):
+        import django_mfa.models as models
 
-    def test_u2f_key_user(self):
-        user_u2f = U2FKey.objects.filter(
-            user=auth.get_user(self.client)).first()
-        self.assertEqual(self.u2f_keys.user, user_u2f.user)
-        self.assertEqual(self.u2f_keys.public_key, user_u2f.public_key)
-        self.assertEqual(self.u2f_keys.key_handle, user_u2f.key_handle)
-        self.assertEqual(self.u2f_keys.app_id, user_u2f.app_id)
+        for name in ("UserOTP", "UserRecoveryCodes", "U2FKey"):
+            self.assertFalse(hasattr(models, name), f"{name} should be removed")
 
-    def test_u2f_to_json_function(self):
-        user_u2f = U2FKey.objects.filter(
-            user=auth.get_user(self.client)).first()
-        self.assertEqual(self.u2f_keys.to_json(), user_u2f.to_json())
+    def test_authenticator_is_the_only_registered_model(self):
+        # Note: MfaUserHandle (django_mfa/handles.py, added by Task 15 for the
+        # stored WebAuthn user handle) is also registered under the django_mfa
+        # app label. The original brief predates that addition and asserted
+        # {"Authenticator"} alone; the task-20 instructions explicitly say
+        # Authenticator and MfaUserHandle are the only models the app
+        # registers, so that is what this test checks.
+        from django.apps import apps
 
-    def test_recovery_codes_generated(self):
-        user_codes = UserRecoveryCodes.objects.filter(user=UserOTP.objects.filter(
-            user=auth.get_user(self.client)).first()).first()
-
-        self.assertEqual(self.user_codes, user_codes)
+        names = {m.__name__ for m in apps.get_app_config("django_mfa").get_models()}
+        self.assertEqual(names, {"Authenticator", "MfaUserHandle"})
