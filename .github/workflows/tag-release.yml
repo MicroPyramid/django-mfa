@@ -1,0 +1,126 @@
+name: Tag release
+
+# The tag is DERIVED from pyproject.toml. Nobody types it.
+#
+# Typing it by hand is what produced tag v4.0.0 on a tree that said 4.0.0a1
+# (2026-08-13): the release was created, publish.yml refused it, and the fix
+# was to delete a tag and a GitHub Release. pyproject.toml is already the only
+# place a version string is written -- django_mfa.__version__ and docs/conf.py
+# both read it back from the installed package metadata -- so a hand-typed tag
+# was the single remaining thing that could disagree with it. Now it can't.
+#
+# The whole release process:
+#
+#     bump `version` in pyproject.toml, open a PR, merge it
+#
+# That's the end of the list. This workflow creates tag v<version>, publishes
+# a GitHub Release, and starts publish.yml.
+on:
+  push:
+    branches: [master]
+    # pyproject.toml changes for plenty of reasons that are not a version
+    # bump. This only narrows what wakes the workflow up; the real decision is
+    # "does tag v<version> already exist", below, which makes re-running it
+    # harmless.
+    paths: ["pyproject.toml"]
+  # Lets you release a version that is already on master without touching the
+  # file -- including the very first run, when the version predates this
+  # workflow and no push will ever mention it.
+  workflow_dispatch:
+
+permissions:
+  contents: write # create the tag and the GitHub Release
+  actions: write # dispatch publish.yml
+
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag and release if the version changed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Existing tags are how this decides whether the version was already
+          # released, and a shallow clone fetches none of them -- it would
+          # re-release every version, every time.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Read the version and decide whether it needs releasing
+        id: v
+        run: |
+          version=$(python3 -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          if git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            # Say so where a human will actually see it. A no-op run is green
+            # and its logs are collapsed, so "did nothing" and "released it"
+            # look identical from the Actions list. This matters most in the
+            # case that bites: a LEFTOVER tag from an abandoned release means
+            # bumping to that same version later silently publishes nothing.
+            echo "::warning::No release: tag v${version} already exists. If you meant to release ${version}, delete that tag and its GitHub Release first."
+            {
+              echo "### No release"
+              echo "\`pyproject.toml\` says **${version}**, and tag \`v${version}\` already exists."
+              echo "Nothing to do. If this was meant to be a release, delete that tag and its GitHub Release, then re-run this workflow."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Releasing ${version}"
+              echo "Creating tag \`v${version}\` on \`${GITHUB_SHA}\` and starting \`publish.yml\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # PEP 440 decides this, not a substring search: 4.0.0a1 is a
+          # pre-release and 4.0.0.post1 is not, and GitHub labels the release
+          # from the answer. Getting it wrong shows a pre-release to everyone
+          # watching the repo as though it were final.
+          prerelease=$(uv run --with packaging python -c "from packaging.version import Version; print(str(Version('${version}').is_prerelease).lower())")
+          echo "prerelease=${prerelease}" >> "$GITHUB_OUTPUT"
+          echo "django-mfa ${version} (prerelease: ${prerelease})"
+
+      - name: Create the tag and the GitHub Release
+        if: steps.v.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.v.outputs.version }}
+          PRERELEASE: ${{ steps.v.outputs.prerelease }}
+        run: |
+          flags=""
+          if [ "$PRERELEASE" = "true" ]; then
+            flags="--prerelease"
+          fi
+          # --target pins the tag to the exact commit that carried the bump,
+          # not to whatever master has drifted to since this run started.
+          gh release create "v${VERSION}" \
+            --target "$GITHUB_SHA" \
+            --title "v${VERSION}" \
+            --generate-notes \
+            $flags
+
+      - name: Start the publish workflow
+        if: steps.v.outputs.release == 'true'
+        # Creating that Release with GITHUB_TOKEN does NOT fire publish.yml's
+        # `release: published` trigger. GitHub suppresses workflow runs caused
+        # by its own token so workflows cannot loop -- the two documented
+        # exceptions are workflow_dispatch and repository_dispatch. Chaining
+        # on the release event instead would fail silently: the release
+        # appears, nothing publishes, and no run shows up anywhere to explain
+        # why.
+        #
+        # --ref also keeps github.ref on refs/tags/v*, which is what the
+        # `pypi` deployment environment allows and what publish.yml's version
+        # guard reads.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: gh workflow run publish.yml --ref "v${VERSION}"

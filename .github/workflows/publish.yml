@@ -15,18 +15,31 @@ name: Publish
 # `v*`, so a release cut from a branch, or tagged `4.0.0` without the `v`,
 # never reaches the publish job at all.
 #
-# One trigger, deliberately: a published GitHub Release. The tag on that
-# release is what the version guard checks the package against. Note that
-# ci.yml's `push` trigger is branch-scoped, so pushing a tag runs NO tests of
-# its own -- that is why this workflow re-runs the corners of the test matrix
-# before it builds anything.
+# Two ways in, and both arrive on a TAG ref, which is what the version guard
+# and the environment rule both key off:
 #
-# GitHub resolves `release` triggers against the DEFAULT branch, so this file
-# does nothing until it is on master -- having it on a feature branch is not
-# enough, and there is no warning to that effect anywhere.
+#   1. workflow_dispatch, from tag-release.yml, against the tag it just made.
+#      This is the normal path. It exists because a Release created by
+#      tag-release.yml's GITHUB_TOKEN does NOT fire the `release` trigger
+#      below -- GitHub suppresses workflow runs from events its own token
+#      caused, so workflows cannot loop. workflow_dispatch is one of the two
+#      documented exceptions, which is the only reason this chain works.
+#   2. release: published, for a Release a HUMAN publishes from the GitHub UI.
+#      A person's token is not suppressed, so this fires normally.
+#
+# Exactly one of the two fires per release; they do not double-publish.
+#
+# Note that ci.yml's `push` trigger is branch-scoped, so pushing a tag runs NO
+# tests of its own -- that is why this workflow re-runs the corners of the test
+# matrix before it builds anything.
+#
+# GitHub resolves both triggers against the DEFAULT branch, so this file does
+# nothing until it is on master -- having it on a feature branch is not enough,
+# and there is no warning to that effect anywhere.
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 # Read-only by default. Only the `publish` job gets id-token: write, and it is
 # the only job that can reach the `pypi` environment.
@@ -85,8 +98,20 @@ jobs:
         # pyproject.toml and never looks at the tag, so a release tagged
         # v4.0.0 cut from a tree still saying 4.0.0a1 would publish 4.0.0a1
         # and report success -- the mismatch would surface only to users, and
-        # PyPI does not allow re-uploading a version to fix it.
+        # PyPI does not allow re-uploading a version to fix it. This has
+        # already happened once, on the v4.0.0 release of 2026-08-13.
+        #
+        # Deliberately NOT conditioned on the event name. An earlier version
+        # guarded this with `if: github.event_name == 'release'`, which meant
+        # the workflow_dispatch path skipped the check entirely and reported a
+        # green tick for having done nothing. A skipped guard reads exactly
+        # like a passing one.
         run: |
+          case "$GITHUB_REF" in
+            refs/tags/*) ;;
+            *) echo "::error::publish must run on a tag ref, got $GITHUB_REF"
+               exit 1 ;;
+          esac
           tag="${GITHUB_REF_NAME#v}"
           version=$(python3 -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
           if [ "$tag" != "$version" ]; then
