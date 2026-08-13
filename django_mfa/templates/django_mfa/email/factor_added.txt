@@ -1,0 +1,3 @@
+{% load i18n %}{% blocktrans %}A new two-factor method was added to your account: {{ factor }}{% endblocktrans %}{% if name %} ({{ name }}){% endif %}
+
+{% trans "If this wasn't you, remove it and change your password immediately." %}

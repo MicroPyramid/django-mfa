@@ -254,6 +254,10 @@ kbd {
   font-size: 0.875rem;
 }
 
+.mfa-notice { border-radius: 6px; padding: 12px 16px; margin: 0 0 20px; }
+.mfa-notice--warning { background: #fff8e1; border: 1px solid #f0c36d; color: #6b4e00; }
+.mfa-notice p { margin: 4px 0 0; }
+
 /* --------------------------------------------------------------------------
  * Lists of enrolled methods / pickable methods
  * ---------------------------------------------------------------------- */

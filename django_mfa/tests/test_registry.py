@@ -96,6 +96,51 @@ class RegistryTests(TestCase):
         self.assertIn("totp", enabled)
         self.assertIn("totp", primary)
 
+    def test_has_primary_factor_agrees_with_primary_enabled_for(self):
+        """has_primary_factor() is the boolean counterpart to
+        primary_enabled_for() -- Important 4. The two must never disagree,
+        since counts_as_primary_factor on the adapters is the single source
+        of truth both derive their type list from.
+        """
+        self.assertFalse(self.registry.has_primary_factor(self.user))
+        self.assertEqual(self.registry.primary_enabled_for(self.user), [])
+
+        # Recovery codes alone: enabled, but not primary -- must not flip
+        # has_primary_factor() to True.
+        Authenticator.objects.create(user=self.user, type="recovery_codes")
+        self.assertFalse(self.registry.has_primary_factor(self.user))
+        self.assertEqual(self.registry.primary_enabled_for(self.user), [])
+
+        # A real primary factor: both must now agree it's True.
+        Authenticator.objects.create(user=self.user, type="totp")
+        self.assertTrue(self.registry.has_primary_factor(self.user))
+        self.assertTrue(self.registry.primary_enabled_for(self.user))
+
+    def test_has_primary_factor_runs_a_single_query(self):
+        """Important 4: primary_enabled_for() runs one .exists() query per
+        registered adapter (via enabled_for()), which on a fully-enrolled,
+        verified user cost +3 queries on every authenticated request under
+        MFA_REQUIRED=True. has_primary_factor() must cost exactly one query,
+        regardless of how many adapters are registered -- this registry has
+        three (totp, webauthn, recovery_codes).
+        """
+        Authenticator.objects.create(user=self.user, type="totp")
+        with self.assertNumQueries(1):
+            self.registry.has_primary_factor(self.user)
+
+    def test_primary_enabled_for_costs_one_query_per_adapter_by_contrast(self):
+        """Documents the exact cost has_primary_factor() replaces callers
+        away from, for the callers that only need the boolean: three
+        adapters registered here (totp, webauthn, recovery_codes) means
+        three .exists() queries, one per adapter, every time
+        primary_enabled_for() runs -- this is what MfaMiddleware,
+        the enforcement decorator, and the notifications module used to pay
+        on every relevant request before Important 4's fix.
+        """
+        Authenticator.objects.create(user=self.user, type="totp")
+        with self.assertNumQueries(3):
+            self.registry.primary_enabled_for(self.user)
+
     def test_unregister_removes_adapter(self):
         self.registry.unregister("totp")
         with self.assertRaises(KeyError):

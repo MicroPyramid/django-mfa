@@ -91,3 +91,45 @@ def strings_equal(s1, s2):
     s1 = unicodedata.normalize('NFKC', str(s1))
     s2 = unicodedata.normalize('NFKC', str(s2))
     return compare_digest(s1, s2)
+
+
+def user_email(user):
+    """The user's email address, via the swappable user model's own field.
+
+    AUTH_USER_MODEL is swappable and a host project's user model need not
+    call the field "email" -- get_email_field_name() is the same indirection
+    django_mfa.admin already uses for USERNAME_FIELD.
+    """
+    from django.contrib.auth import get_user_model
+
+    field = get_user_model().get_email_field_name()
+    return (getattr(user, field, "") or "").strip()
+
+
+def mask_email(address):
+    """Show enough of an address to recognise, not enough to learn.
+
+    ashwin@example.com -> a****n@example.com
+
+    A local part of one or two characters is masked completely rather than
+    partially revealed: "a*@example.com" gives away half of a two-character
+    mailbox name. Anything that isn't an address at all returns "", so a
+    template can test the value rather than rendering nonsense.
+
+    isinstance-checked before the "@" test, not just falsiness-checked: this
+    is reachable from otp_tags.py's template filter on a value that came
+    straight out of Authenticator.data, a JSONField a host project could
+    write to directly. A truthy non-string there (an int, a list) is not
+    caught by `not address`, and "@" not in address raises TypeError on
+    anything that isn't a string or a container of strings -- an unhandled
+    500 on the security page rather than the "" this function exists to
+    return for exactly this kind of garbage input.
+    """
+    if not isinstance(address, str) or "@" not in address:
+        return ""
+    local, _, domain = address.partition("@")
+    if not local or not domain:
+        return ""
+    if len(local) <= 2:
+        return f"{'*' * len(local)}@{domain}"
+    return f"{local[0]}{'*' * (len(local) - 2)}{local[-1]}@{domain}"

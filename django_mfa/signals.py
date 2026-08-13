@@ -3,6 +3,17 @@ from django.dispatch import receiver
 
 from django_mfa import session
 from django_mfa.conf import settings as mfa_settings
+
+# Re-exported so `from django_mfa.signals import factor_added` works -- the
+# import path a Django developer tries first. The definitions live in
+# django_mfa/events.py; see that module's docstring for why.
+from django_mfa.events import (  # noqa: F401
+    factor_added,
+    factor_removed,
+    mfa_verification_failed,
+    mfa_verified,
+    recovery_code_used,
+)
 from django_mfa.registry import registry
 from django_mfa.views import verify_rmb_cookie
 

@@ -1,0 +1,3 @@
+{% load i18n %}{% trans "Your account is no longer protected by two-factor authentication. A password is now all that's needed to sign in." %}
+
+{% trans "If this wasn't you, change your password and set up two-factor authentication again immediately." %}

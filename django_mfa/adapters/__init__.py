@@ -19,6 +19,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django_mfa.conf import settings as mfa_settings
 from django_mfa.registry import registry
 
+from .email import EmailAdapter
 from .recovery_codes import RecoveryCodesAdapter
 from .totp import TOTPAdapter
 from .webauthn import WebAuthnAdapter
@@ -29,6 +30,7 @@ BUILTIN_ADAPTERS = {
     "totp": TOTPAdapter,
     "recovery_codes": RecoveryCodesAdapter,
     "webauthn": WebAuthnAdapter,
+    "email": EmailAdapter,
 }
 
 

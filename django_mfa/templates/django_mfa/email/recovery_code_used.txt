@@ -1,0 +1,5 @@
+{% load i18n %}{% trans "A recovery code was just used to sign in to your account." %}
+
+{% blocktrans %}You have {{ remaining }} recovery codes left.{% endblocktrans %}
+
+{% trans "If this wasn't you, change your password and generate a fresh set of codes." %}

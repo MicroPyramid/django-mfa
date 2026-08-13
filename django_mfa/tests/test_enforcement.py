@@ -2,10 +2,13 @@ from django.contrib.auth import login as auth_login
 from django.contrib.auth.models import User
 from django.contrib.sessions.backends.db import SessionStore
 from django.core.cache import cache
+from django.db import connection
 from django.test import Client, RequestFactory, TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from django_mfa import totp as totp_mod
+from django_mfa.adapters.totp import generate_secret
 from django_mfa.models import Authenticator
 
 
@@ -274,3 +277,155 @@ class ThirdPartyPrimaryFactorSignalTests(TestCase):
         client = Client()
         client.login(username="d@example.com", password="pw")
         self.assertNotIn("mfa", client.session)
+
+
+class PendingUserCannotReachEnrollmentTests(TestCase):
+    """A pending user must never reach an enroll page.
+
+    enroll_factor() calls session.mark_verified() on success -- correct on
+    its own terms, since enrolling proves possession. But it means a user who
+    is mid-challenge could enroll a *fresh* TOTP with a secret of their own
+    choosing and be marked verified without ever presenting the factor they
+    already hold. The pending exempt set and the enrollment exempt set are
+    therefore different sets, and unioning them is a vulnerability.
+
+    This passes against the code as it was before the enrollment wall existed
+    and must keep passing after.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user("a@example.com", password="pw")
+        Authenticator.objects.create(user=self.user, type="totp")
+        self.client = Client()
+        self.client.login(username="a@example.com", password="pw")
+
+    def test_enroll_page_redirects_a_pending_user_to_verify(self):
+        response = self.client.get(reverse("mfa:enroll_factor", args=["totp"]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("mfa:verify"), response.url)
+
+    def test_enrolling_cannot_be_posted_by_a_pending_user(self):
+        secret = totp_mod.TOTP(generate_secret())
+        response = self.client.post(
+            reverse("mfa:enroll_factor", args=["totp"]),
+            {"secret_key": secret.secret, "code": secret.now()})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("mfa:verify"), response.url)
+        self.assertFalse(self.client.session["mfa"]["verified"])
+
+
+@override_settings(MFA_REQUIRED=True)
+class EnrollmentWallTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("a@example.com", password="pw")
+        self.client = Client()
+        self.client.login(username="a@example.com", password="pw")
+
+    def test_a_required_user_with_no_factors_is_walled(self):
+        response = self.client.get("/some/other/page/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("mfa:security_settings"), response.url)
+
+    def test_the_wall_records_next_in_the_redirect_url(self):
+        """Only that the parameter is *recorded*, not that anything reads it
+        back -- neither enroll_factor nor security_settings look at `next`,
+        so a user who enrolls here does not land back on this page. See the
+        "What a required user sees" section of docs/enforcement.md.
+        """
+        response = self.client.get("/some/other/page/")
+        # django.contrib.auth.views.redirect_to_login builds the querystring
+        # via QueryDict.urlencode(safe="/"), which deliberately leaves "/"
+        # unescaped -- so this is "/some/other/page/", not the %2F-escaped
+        # form. Confirmed against the real redirect: assert on the decoded
+        # form actually produced rather than a hand-guessed encoding.
+        self.assertIn("next=/some/other/page/", response.url)
+
+    def test_security_settings_itself_is_reachable(self):
+        response = self.client.get(reverse("mfa:security_settings"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_enroll_pages_are_reachable(self):
+        response = self.client.get(reverse("mfa:enroll_factor", args=["totp"]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_recovery_codes_page_is_reachable(self):
+        response = self.client.get(reverse("mfa:recovery_codes"))
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(MFA_EXEMPT_PATHS=["/logout/"])
+    def test_exempt_paths_apply_to_the_wall_too(self):
+        """Without this a required user who cannot enroll -- no phone, no
+        security key -- is trapped with no way even to log out."""
+        response = self.client.get("/logout/")
+        self.assertNotEqual(response.status_code, 302)
+
+    def test_recovery_codes_alone_do_not_satisfy_the_requirement(self):
+        Authenticator.objects.create(user=self.user, type="recovery_codes")
+        response = self.client.get("/some/other/page/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("mfa:security_settings"), response.url)
+
+    def test_a_primary_factor_releases_the_wall(self):
+        Authenticator.objects.create(user=self.user, type="totp")
+        session = self.client.session
+        session["mfa"] = {"verified": True, "method": "totp", "at": 0}
+        session.save()
+        response = self.client.get("/some/other/page/")
+        self.assertEqual(response.status_code, 404)  # walled off -> not found
+
+    def test_the_security_page_explains_why(self):
+        response = self.client.get(reverse("mfa:security_settings"))
+        self.assertTrue(response.context["mfa_enrollment_required"])
+
+
+class WallIsOffByDefaultTests(TestCase):
+    def test_an_unrequired_user_with_no_factors_is_untouched(self):
+        User.objects.create_user("b@example.com", password="pw")
+        client = Client()
+        client.login(username="b@example.com", password="pw")
+        response = client.get("/some/other/page/")
+        self.assertEqual(response.status_code, 404)
+
+
+class MfaRequiredQueryCostTests(TestCase):
+    """Important 4, end-to-end: the reviewer measured 2 queries for a
+    fully-enrolled, verified user requesting an unrelated page with
+    MFA_REQUIRED=False, and 5 with it on -- +3, one .exists() query per
+    registered adapter (totp, webauthn, recovery_codes here), from
+    MfaMiddleware's second rung calling registry.primary_enabled_for() where
+    only the yes/no answer was ever needed.
+
+    registry.has_primary_factor() (Important 4's fix) must bring that delta
+    down to +1 -- has_primary_factor's own single .exists() query -- no
+    matter how many adapters are registered, since MFA_REQUIRED=True is the
+    only thing that makes the middleware's second rung run at all.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user("a@example.com", password="pw")
+        for factor_type in ("totp", "webauthn", "recovery_codes"):
+            Authenticator.objects.create(user=self.user, type=factor_type)
+        self.client = Client()
+        self.client.login(username="a@example.com", password="pw")
+        session = self.client.session
+        session["mfa"] = {"verified": True, "method": "totp", "at": 0}
+        session.save()
+
+    def test_requiring_mfa_costs_exactly_one_extra_query(self):
+        with override_settings(MFA_REQUIRED=False):
+            with CaptureQueriesContext(connection) as unrequired:
+                response = self.client.get("/some/other/page/")
+            self.assertEqual(response.status_code, 404)
+
+        with override_settings(MFA_REQUIRED=True):
+            with CaptureQueriesContext(connection) as required:
+                response = self.client.get("/some/other/page/")
+            self.assertEqual(response.status_code, 404)
+
+        delta = len(required.captured_queries) - len(unrequired.captured_queries)
+        self.assertEqual(
+            delta, 1,
+            "MFA_REQUIRED=True should cost exactly one extra query over "
+            "MFA_REQUIRED=False (has_primary_factor's own .exists()), not "
+            "one per registered adapter. Queries when required: "
+            f"{[q['sql'] for q in required.captured_queries]}")

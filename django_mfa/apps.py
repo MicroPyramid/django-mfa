@@ -10,13 +10,16 @@ class DjangoMfaAppConfig(AppConfig):
     def ready(self):
         from django_mfa.checks import (
             check_fido2_rp_id,
+            check_mfa_required_predicate,
             check_webauthn_backend_configured,
         )
 
         register(check_fido2_rp_id)
         register(check_webauthn_backend_configured)
+        register(check_mfa_required_predicate)
 
         from django_mfa import (
             adapters,  # noqa: F401  (registers built-ins)
+            notifications,  # noqa: F401  (connects notification receivers)
             signals,  # noqa: F401
         )

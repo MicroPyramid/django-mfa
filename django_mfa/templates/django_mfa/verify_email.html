@@ -1,0 +1,36 @@
+{% extends base_template %}
+{% load i18n %}
+{% block content %}
+<section class="mfa-card">
+  <h1>{% trans "Enter your code" %}</h1>
+  {% if address %}
+  <p class="mfa-lede">
+    {% blocktrans %}We've emailed a code to {{ address }}. It expires shortly.{% endblocktrans %}
+  </p>
+
+  <form accept-charset="UTF-8" method="post" action="">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <dl class="form-group">
+      <dt><label for="id_code">{% blocktrans %}{{ code_length }}-digit code{% endblocktrans %}</label></dt>
+      <dd>
+        <input class="form-control mfa-code-input" id="id_code" type="text" name="code" value=""
+               inputmode="numeric" pattern="[0-9]*" maxlength="{{ code_length }}"
+               autocomplete="one-time-code" spellcheck="false" autofocus
+               aria-describedby="id_code_error">
+        <p class="help-block text-danger" id="id_code_error">{% if error_message %}{{ error_message }}{% endif %}</p>
+      </dd>
+    </dl>
+    <div class="mfa-actions">
+      <button type="submit" class="btn btn-primary">{% trans "Verify" %}</button>
+      <a href="{% url 'mfa:verify' %}" class="btn btn-default">{% trans "Use another method" %}</a>
+    </div>
+  </form>
+  {% else %}
+  <p class="mfa-lede">{% trans "This account has no email code to verify. Use another method, or contact support if you believe this is a mistake." %}</p>
+  <div class="mfa-actions">
+    <a href="{% url 'mfa:verify' %}" class="btn btn-default">{% trans "Use another method" %}</a>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

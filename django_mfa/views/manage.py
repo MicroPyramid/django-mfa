@@ -4,6 +4,7 @@ from django.http import Http404, HttpResponseForbidden, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.urls import reverse
 
+from django_mfa import events, policy
 from django_mfa.adapters.recovery_codes import RecoveryCodesAdapter
 from django_mfa.conf import settings as mfa_settings
 from django_mfa.models import Authenticator
@@ -25,6 +26,15 @@ def security_settings(request):
         "recovery_codes_remaining": RecoveryCodesAdapter().remaining(request.user),
         "owned_by_enterprise": mfa_settings.MFA_OWNED_BY_ENTERPRISE,
         "base_template": mfa_settings.MFA_BASE_TEMPLATE,
+        # True only when this user is *both* required to hold a factor and
+        # holds none -- i.e. exactly when MfaMiddleware walled them here.
+        # has_primary_factor, not primary_enabled_for: only the yes/no answer
+        # is needed here, and this view is the one every enrollment-required
+        # user lands back on after every action, so it runs on every one of
+        # those requests.
+        "mfa_enrollment_required": (
+            policy.mfa_required_for(request.user)
+            and not registry.has_primary_factor(request.user)),
     }
     return render(request, "django_mfa/security.html", context)
 
@@ -45,7 +55,14 @@ def recovery_codes(request):
     """
     has_codes = Authenticator.objects.filter(
         user=request.user, type=Authenticator.Type.RECOVERY_CODES).exists()
-    codes = None if has_codes else RecoveryCodesAdapter().generate(request.user)
+    codes = None
+    if not has_codes:
+        codes = RecoveryCodesAdapter().generate(request.user)
+        events.factor_added.send_robust(
+            sender=RecoveryCodesAdapter, user=request.user,
+            authenticator=Authenticator.objects.get(
+                user=request.user, type=Authenticator.Type.RECOVERY_CODES),
+            request=request)
     next_url = resolve_url(settings.LOGIN_REDIRECT_URL)
     return render(request, "django_mfa/recovery_codes.html", {
         "codes": codes,
@@ -78,5 +95,19 @@ def manage_factors(request):
             "This security key is managed by your organization and cannot "
             "be removed here.")
 
+    factor_type, name = authenticator.type, authenticator.name
     authenticator.delete()
+    try:
+        sender = type(registry.get(factor_type))
+    except KeyError:
+        # A row whose type is no longer registered -- MFA_FACTORS narrowed,
+        # or registry.unregister() (which checks.py recommends as the
+        # WebAuthn opt-out). security_settings lists every row regardless of
+        # the registry, so removing one of these is a supported action and
+        # must not 500 after the delete has already committed. There is no
+        # adapter class to name as the sender in that case.
+        sender = None
+    events.factor_removed.send_robust(
+        sender=sender, user=request.user,
+        factor_type=factor_type, name=name, request=request)
     return redirect(reverse("mfa:security_settings"))

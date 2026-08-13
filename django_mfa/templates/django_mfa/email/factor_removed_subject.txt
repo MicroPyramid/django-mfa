@@ -1,0 +1,1 @@
+{% load i18n %}{% trans "A two-factor method was removed from your account" %}

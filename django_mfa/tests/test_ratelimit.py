@@ -165,3 +165,42 @@ class RateLimitAtomicityTests(TestCase):
         self.assertEqual(self._count(), 1)
         if ttl is not None:
             self.assertGreater(ttl, 0)
+
+
+class AlternateScopeTests(TestCase):
+    """A second budget, under a different setting, that cannot collide with
+    the verification budget for the same user."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user("a@example.com", password="pw")
+
+    @override_settings(MFA_EMAIL_SEND_RATE_LIMIT="2/5m")
+    def test_a_named_setting_supplies_the_limit(self):
+        setting = "MFA_EMAIL_SEND_RATE_LIMIT"
+        self.assertTrue(ratelimit.check(self.user, "email:send", setting=setting))
+        ratelimit.record(self.user, "email:send", setting=setting)
+        self.assertTrue(ratelimit.check(self.user, "email:send", setting=setting))
+        ratelimit.record(self.user, "email:send", setting=setting)
+        self.assertFalse(ratelimit.check(self.user, "email:send", setting=setting))
+
+    @override_settings(MFA_EMAIL_SEND_RATE_LIMIT="1/5m",
+                       MFA_VERIFY_RATE_LIMIT="5/5m")
+    def test_scopes_do_not_share_a_counter(self):
+        ratelimit.record(self.user, "email:send",
+                         setting="MFA_EMAIL_SEND_RATE_LIMIT")
+        self.assertFalse(ratelimit.check(self.user, "email:send",
+                                         setting="MFA_EMAIL_SEND_RATE_LIMIT"))
+        self.assertTrue(ratelimit.check(self.user, "email"))
+
+    @override_settings(MFA_EMAIL_SEND_RATE_LIMIT="0/5m")
+    def test_the_error_names_the_setting_that_is_wrong(self):
+        with self.assertRaises(ValueError) as ctx:
+            ratelimit.check(self.user, "email:send",
+                            setting="MFA_EMAIL_SEND_RATE_LIMIT")
+        self.assertIn("MFA_EMAIL_SEND_RATE_LIMIT", str(ctx.exception))
+        self.assertNotIn("MFA_VERIFY_RATE_LIMIT", str(ctx.exception))
+
+    def test_record_failure_is_still_the_verify_budget(self):
+        """Existing callers (views/verify.py) are untouched by the refactor."""
+        self.assertIs(ratelimit.record_failure, ratelimit.record)

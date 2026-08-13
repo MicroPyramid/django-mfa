@@ -59,6 +59,15 @@ class Adapter:
         raise NotImplementedError
 
     def complete_enroll(self, request, data):
+        """Validate ``data`` and create the Authenticator row.
+
+        MUST return the created ``Authenticator``: ``views.enroll`` passes it
+        straight to the ``factor_added`` signal, so a factor that returns
+        ``None`` here silently degrades every host project's audit log and
+        notification for that factor type. Raise ``ValueError`` to reject the
+        submission -- the view turns that into the same generic 400 a wrong
+        code gets.
+        """
         raise NotImplementedError
 
     def begin_verify(self, request, user):
@@ -123,8 +132,50 @@ class Registry:
         Use this to decide whether to CHALLENGE a user. Use enabled_for() to
         decide what to OFFER them once challenged — that one includes recovery
         codes, which are a valid way to verify but not a factor in themselves.
+
+        Runs one .exists() query per registered adapter (via enabled_for()),
+        because it hands back actual Adapter instances. A caller that only
+        needs the yes/no answer — "is this user protected at all" — should
+        use has_primary_factor() below instead: same predicate, one query
+        total. The two must keep agreeing, since counts_as_primary_factor is
+        the single source of truth for both.
         """
         return [a for a in self.enabled_for(user) if a.counts_as_primary_factor]
+
+    def has_primary_factor(self, user):
+        """True if this user holds at least one factor that counts as
+        primary — the boolean counterpart to primary_enabled_for(), for
+        callers (MfaMiddleware, the enforcement decorator, the security-page
+        context, the notifications module) that only need the yes/no answer
+        and would otherwise pay for one .exists() query per registered
+        adapter just to throw the list away.
+
+        One query total: Authenticator.objects.filter(user=user,
+        type__in=[...]).exists(). The type list is derived from the registry
+        at call time (``[a.type for a in self.all() if
+        a.counts_as_primary_factor]``) rather than hardcoded here, which is
+        deliberate and load-bearing — Adapter.counts_as_primary_factor is the
+        single, explicit source of truth for what counts as a primary
+        factor (see its docstring). This project once had a second,
+        independent definition of that list (models.PRIMARY_FACTOR_TYPES)
+        that silently drifted out of sync with the registry and was removed
+        for exactly that reason; do not reintroduce one here by hardcoding
+        `type__in=["totp", "webauthn", ...]`.
+
+        Callers that need the actual adapter list, not just whether it's
+        non-empty, must keep using primary_enabled_for() instead — this
+        method throws that information away by design, in exchange for the
+        single query.
+
+        signals.stamp_pending_verification and views/verify.py:verify_factor
+        still call primary_enabled_for() even though both use the result as a
+        bare boolean. That is not because they need the list: they run once
+        per login rather than once per request, so the query saving does not
+        arise there, and leaving them alone kept this change off the
+        authentication path. Switching them later is safe.
+        """
+        types = [a.type for a in self.all() if a.counts_as_primary_factor]
+        return Authenticator.objects.filter(user=user, type__in=types).exists()
 
     def available_for(self, user):
         """Adapters this user could add right now, via the enroll flow.

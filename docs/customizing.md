@@ -49,9 +49,11 @@ The full set:
 | `django_mfa/picker.html` | `mfa:verify` | at login, when the user holds more than one method |
 | `django_mfa/enroll_totp.html` | `mfa:enroll_factor` | setting up an authenticator app |
 | `django_mfa/enroll_webauthn.html` | `mfa:enroll_factor` | registering a security key or passkey |
+| `django_mfa/enroll_email.html` | `mfa:enroll_factor` | confirming an emailed one-time code (`"email"` in `MFA_FACTORS`, off by default — see {doc}`security`) |
 | `django_mfa/verify_totp.html` | `mfa:verify_factor` | the TOTP challenge |
 | `django_mfa/verify_webauthn.html` | `mfa:verify_factor` | the WebAuthn challenge |
 | `django_mfa/verify_recovery_codes.html` | `mfa:verify_factor` | the recovery-code challenge |
+| `django_mfa/verify_email.html` | `mfa:verify_factor` | the emailed-code challenge |
 | `django_mfa/recovery_codes.html` | `mfa:recovery_codes` | displaying freshly generated codes |
 
 Enroll and verify templates are resolved from the factor type, as
@@ -73,6 +75,7 @@ what the `{% extends base_template %}` line at the top resolves.
 | `authenticators` | The individual `Authenticator` rows, ordered by type then creation. This — not `enabled_adapters` — is what lets you list three security keys separately so a user can tell them apart and remove exactly one. |
 | `recovery_codes_remaining` | Integer count of unused codes. |
 | `owned_by_enterprise` | The `MFA_OWNED_BY_ENTERPRISE` setting, so the template can hide the remove button for WebAuthn. |
+| `mfa_enrollment_required` | `True` only when this user is both required to hold a factor (`MFA_REQUIRED`, see {doc}`enforcement`) and holds none yet — i.e. exactly when `MfaMiddleware` walled them onto this page. If you shadow this template, render something here: without it, a required user lands on a security page that gives no reason for the wall they just hit. |
 
 ### `picker.html`
 
@@ -93,6 +96,8 @@ being seen.
 | *(TOTP)* `secret_key` | The freshly generated Base32 secret. Must be POSTed back in a hidden field — the server does not stash it in the session. |
 | *(TOTP)* `provisioning_uri` | The `otpauth://` URI. Render it with `{% qrcode provisioning_uri "alt text" %}`. |
 | *(WebAuthn)* `options` | JSON ceremony options. Render with `{% webauthn_options_script options "webauthn-options" %}`. |
+| *(email)* `address` | The account's address, masked (`a****n@example.com`) — never the plaintext. `None` when the account has no usable address; `enroll_email.html` shows a "no address on file" message instead of the form in that case (guard on it if you shadow this page). |
+| *(email)* `code_length` | Digit count of the code just emailed — tracks `MFA_EMAIL_CODE_LENGTH` rather than assuming 6, so the input's `maxlength` and label stay correct if you change that setting. Only present alongside a non-`None` `address`. |
 
 ### Verify pages
 
@@ -103,6 +108,8 @@ being seen.
 | `error_message` | Present only after a failed attempt; the page re-renders with HTTP 400. |
 | *(recovery codes)* `remaining` | How many unused codes are left, so you can warn people running low. |
 | *(WebAuthn)* `options` | JSON ceremony options, as above. |
+| *(email)* `address` | The enrolled address, masked — the address captured at enrollment time, not necessarily the account's current one (see {doc}`security`). `None` when there is no live ceremony to challenge (e.g. the factor was removed after this page was linked to); `verify_email.html` shows a fallback message instead of the form in that case (guard on it if you shadow this page). |
+| *(email)* `code_length` | Digit count of the code just emailed, as on the enroll page above. Only present alongside a non-`None` `address`. |
 
 ### `recovery_codes.html`
 

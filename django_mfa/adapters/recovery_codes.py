@@ -4,6 +4,7 @@ import string
 
 from django.contrib.auth.hashers import check_password, make_password
 
+from django_mfa import events
 from django_mfa.atomic import update_data
 from django_mfa.models import Authenticator
 from django_mfa.registry import Adapter
@@ -78,4 +79,7 @@ class RecoveryCodesAdapter(Adapter):
         if not update_data(auth, spend):
             return False
         auth.record_usage()
+        events.recovery_code_used.send_robust(
+            sender=type(self), user=user,
+            remaining=self.remaining(user), request=request)
         return True

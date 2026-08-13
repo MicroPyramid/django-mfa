@@ -18,8 +18,9 @@ WebAuthn** — see {doc}`installation_setup`.
 | Setting | Default | Purpose |
 |---|---|---|
 | `MFA_FACTORS` | `["totp", "recovery_codes", "webauthn"]` | Which built-in factor adapters get registered at startup. See [Choosing which factors to offer](#choosing-which-factors-to-offer) below. |
+| `MFA_REQUIRED` | `False` | Who must hold a second factor. `False` (nobody), `True` (every authenticated user), a callable taking a user and returning a bool, or a dotted path to one. A required user with no factor is walled to the security page until they enroll — see {doc}`enforcement`. |
 | `MFA_ISSUER_NAME` | `None` | Issuer label shown next to the username in the user's authenticator app when enrolling TOTP. Set it to your product name; without it the app shows the username alone, which is confusing for anyone with more than one account. |
-| `MFA_EXEMPT_PATHS` | `[]` | URL paths reachable while a session is pending a second factor. **Must include your logout URL** — see the warning below. |
+| `MFA_EXEMPT_PATHS` | `[]` | URL paths reachable through either of `MfaMiddleware`'s walls: a session pending a second factor, and — when `MFA_REQUIRED` applies — a required user who hasn't enrolled one yet. **Must include your logout URL** — see the warning below. |
 
 ## Appearance
 
@@ -40,8 +41,28 @@ WebAuthn** — see {doc}`installation_setup`.
 | Setting | Default | Purpose |
 |---|---|---|
 | `MFA_VERIFY_RATE_LIMIT` | `"5/5m"` | Failed second-factor attempts allowed per user per factor type, as `"<count>/<window><unit>"` where unit is `s`, `m`, or `h`. See {doc}`security`. |
+| `MFA_EMAIL_SEND_RATE_LIMIT` | `"3/5m"` | How many emailed codes a user can be sent per window, same `"<count>/<window><unit>"` grammar as above. Refreshing a challenge page reuses a still-valid code rather than spending budget; past the limit no mail is sent and the page looks exactly the same. Only consulted when `"email"` is in `MFA_FACTORS`. |
 | `MFA_SECRET_ENCRYPTION_KEYS` | `None` | **Deprecated, and does not encrypt.** List of keys used to *sign* TOTP secrets at rest. The first key signs; every key is tried when reading. See [Signing stored secrets](#signing-stored-secrets-deprecated). |
 | `MFA_OWNED_BY_ENTERPRISE` | `False` | When `True`, users cannot remove their own WebAuthn authenticators from the security settings page — e.g. an organization-issued security key an administrator manages instead. |
+| `MFA_NOTIFY_ON_CHANGE` | `False` | When `True`, emails the user when a factor is added or removed, when a recovery code is spent, and when their last factor goes. Off by default so an upgrade doesn't start sending mail unannounced. The `django_mfa.events` signals fire either way — connect your own receiver for async delivery or for routing somewhere other than email. Sending is synchronous and best-effort: a failure is logged, never raised. |
+
+## Email codes
+
+Only consulted when `"email"` is in `MFA_FACTORS`, which it is not by default —
+add it to offer emailed one-time codes.
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `MFA_EMAIL_CODE_LENGTH` | `6` | Digits in an emailed code. |
+| `MFA_EMAIL_CODE_VALIDITY` | `300` | How long an emailed code stays usable, in seconds. |
+| `MFA_EMAIL_SUBJECT` | `None` | Subject line for the code email. `None` renders `django_mfa/email/otp_code_subject.txt`, which you can override instead. |
+| `MFA_FROM_EMAIL` | `None` | From address for every email django-mfa sends. `None` falls back to Django's `DEFAULT_FROM_EMAIL`. |
+
+Codes go to the address the factor was **enrolled with**, which the security
+page shows masked — not to whatever `user.email` currently says. A factor is
+possession of a specific mailbox; following a mutable profile field would mean
+that whoever can change that field can redirect the factor. Changing the
+address therefore means removing the factor and enrolling it again.
 
 ## WebAuthn (security keys and passkeys)
 
@@ -100,13 +121,22 @@ narrow the list, not after.
 
 :::{warning}
 **Set `MFA_EXEMPT_PATHS` to include your project's logout URL.**
-`MfaMiddleware` redirects any authenticated, not-yet-verified request to the
-second-factor picker, for every path except the ones it derives automatically (the
-picker itself and each registered factor's verify page) plus whatever you list here.
-A user who cannot complete their second factor — lost device, no recovery codes left
-— and whose logout view isn't exempt has **no way to log out**: every request they
-make, including to `/logout/`, bounces back to the picker. django-mfa cannot know
-your logout URL on its own; list it explicitly:
+`MfaMiddleware` enforces two separate walls, and `MFA_EXEMPT_PATHS` is consulted by
+both of them:
+
+- An authenticated, not-yet-verified session is redirected to the second-factor
+  picker, for every path except the ones derived automatically (the picker itself
+  and each registered factor's verify page) plus whatever you list here.
+- When `MFA_REQUIRED` applies to a user holding no primary factor, they are instead
+  redirected to the security page, for every path except the enroll pages, recovery
+  codes, and — again — whatever you list here. See {doc}`enforcement`.
+
+Either wall traps a user with **no way to log out** unless your logout URL is
+exempt: a pending user who cannot complete their second factor (lost device, no
+recovery codes left), or a required user who cannot enroll one yet (no phone at
+their desk, no security key issued). Every request they make, including to
+`/logout/`, bounces back to a page that isn't where they were headed. django-mfa
+cannot know your logout URL on its own; list it explicitly:
 
     MFA_EXEMPT_PATHS = ["/logout/"]
 
@@ -117,19 +147,23 @@ mounted, with its trailing slash.
 ## System checks
 
 django-mfa registers system checks that run on `manage.py check` — and therefore on
-`migrate` and `runserver`, which run checks first — to catch the WebAuthn
-misconfigurations above before they can affect a real user.
+`migrate` and `runserver`, which run checks first — to catch the misconfigurations
+described above before they can affect a real user.
 
-All three are WebAuthn-only. They return no errors at all unless WebAuthn is
+E001–E003 are WebAuthn-only: they return no errors at all unless WebAuthn is
 actually switched on for this install, meaning `MFA_QUICKLOGIN` is on or a WebAuthn
 adapter is registered (true by default). A project with
-`MFA_FACTORS = ["totp", "recovery_codes"]` never trips any of them.
+`MFA_FACTORS = ["totp", "recovery_codes"]` never trips any of them. `E004` is not
+gated the same way — `MFA_REQUIRED` is not a WebAuthn setting, so there is nothing
+to gate on, and it applies to every install regardless of which factors are
+registered.
 
 | Check ID | Severity | Condition |
 |---|---|---|
 | `django_mfa.E001` | Error | WebAuthn is active and `MFA_FIDO2_RP_ID` is unset. |
 | `django_mfa.E002` | Error | WebAuthn is active and `MFA_FIDO2_RP_ID` is not a suffix of any `ALLOWED_HOSTS` entry. |
 | `django_mfa.E003` | Error | WebAuthn is active and `django_mfa.backends.WebAuthnBackend` is missing from `AUTHENTICATION_BACKENDS`. |
+| `django_mfa.E004` | Error | `MFA_REQUIRED` is a dotted path that fails to import, or resolves to a value that isn't callable. |
 
 `E003` exists because the failure it prevents is otherwise completely silent.
 Passwordless login logs a user in by calling `django.contrib.auth.login()` with an
@@ -140,8 +174,15 @@ resolves `request.user` to `AnonymousUser` — no exception, no log line, just a
 who was "logged in" a moment ago and is now anonymous again. Catching this at startup
 is far cheaper than a support ticket.
 
-All three are `Error` rather than `Warning` deliberately: each guards a failure mode
-that is otherwise silent in production, not a style nit. If a check fires for a
+All four are `Error` rather than `Warning` deliberately, though what each guards
+against differs slightly. E001–E003 guard a failure mode that is otherwise silent
+in production (see E003's own explanation below). A misconfigured `MFA_REQUIRED`
+is not silent even without E004 — `policy.resolve()` raises `ImproperlyConfigured`
+or `ImportError` the first time `mfa_required_for()` runs, which is a loud 500 on
+whichever live request gets there first. What E004 changes is *when* that failure
+surfaces: at `manage.py check` (and therefore at `migrate`/`runserver`, and in CI if
+you run checks there), before any request has been served, rather than as a 500 on
+some user's request in production. If a check fires for a
 reason you understand and have already accounted for — say you provision
 `MFA_FIDO2_RP_ID` from a source Django's check framework can't see at check time —
 the standard Django escape hatch applies:

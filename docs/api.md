@@ -38,6 +38,7 @@ singleton — do not construct your own:
 | Method | Returns |
 |---|---|
 | `primary_enabled_for(user)` | Adapters that mean this user **is protected**. Excludes recovery codes. **This is the predicate for "does this user have MFA".** |
+| `has_primary_factor(user)` | The same question as a `bool`, in **one** query rather than one per registered adapter. Use this when you only need yes/no — the enrollment wall, `@mfa_required` and the notification receivers all do, and on a busy site the difference is per request. Both methods read `Adapter.counts_as_primary_factor`, so they cannot disagree. |
 | `enabled_for(user)` | Adapters this user can **verify with right now**. Includes recovery codes. This is what to offer on a challenge screen. |
 | `available_for(user)` | Adapters the user could still **add**. Excludes singletons they already hold and factors that aren't enrolled at all. |
 | `all()` | Every registered adapter. |
@@ -159,6 +160,54 @@ need to reset it.
 
 ## Signals
 
-django-mfa sends no signals of its own. It **receives** `user_logged_in` (to stamp
-the session pending) and `user_logged_out` (to clear the quicklogin hint). To react
-to enrollment or verification, use `post_save` on `Authenticator`.
+django-mfa also **receives** `user_logged_in` (to stamp the session pending) and
+`user_logged_out` (to clear the quicklogin hint) — you don't connect anything for
+those, they're internal.
+
+It **sends** five signals of its own, defined in `django_mfa.events` and re-exported
+from `django_mfa.signals` (either import path works):
+
+| Signal | kwargs | Fires when |
+|---|---|---|
+| `factor_added` | `user`, `authenticator`, `request` | An adapter's `complete_enroll()` succeeds — every ordinary enrollment, plus the first time a user generates recovery codes. `authenticator` is the created `Authenticator` row. |
+| `factor_removed` | `user`, `factor_type`, `name`, `request` | `mfa:manage` deletes a row. `factor_type` and `name` are passed by value, not as an instance — the row is already gone by the time this fires. |
+| `mfa_verified` | `user`, `method`, `request` | A second-factor challenge succeeds — from `verify_factor`'s success branch, and from `passkey_complete` when the passkey assertion carries User Verification (a UP-only passkey login logs the user in but has not satisfied a second factor, so it does not fire this). |
+| `mfa_verification_failed` | `user`, `method`, `request` | A challenge fails: a wrong code, a caught adapter exception (`ValueError`/`TypeError`/`KeyError`), **or an attempt refused outright by the rate limiter** — no adapter call happens in that last case, so a receiver watching for brute force needs to see refused attempts too, not only evaluated ones. |
+| `recovery_code_used` | `user`, `remaining`, `request` | A recovery code is spent. Sent from the adapter itself, not the view — only the adapter knows how many codes are left. |
+
+Read the user off the `user` kwarg, never off `request.user`. On the passkey path
+`mfa_verified` fires between `session.mark_verified()` and `auth.login()` — the
+order is forced, since the login signal's own receiver checks whether the session is
+already verified — so `request.user` is still `AnonymousUser` there, while the `user`
+kwarg is correct on every path.
+
+`sender` is the `Adapter` **class** for the factor involved (e.g. `TOTPAdapter`), so
+a receiver can narrow with `sender=TOTPAdapter` — except on `factor_removed`, whose
+`sender` is `None` when the removed row's type is no longer registered (`MFA_FACTORS`
+was narrowed since it was enrolled, or a third-party adapter was unregistered): match
+on the `factor_type` kwarg instead of `sender` if you need to handle that case.
+
+A receiver:
+
+    import logging
+
+    from django.dispatch import receiver
+    from django_mfa.signals import factor_removed
+
+    logger = logging.getLogger("myapp.security")
+
+    @receiver(factor_removed)
+    def audit_factor_removal(sender, user, factor_type, name, request, **kwargs):
+        logger.info("factor removed: user=%s type=%s name=%r",
+                    user.pk, factor_type, name)
+
+All five are sent with `send_robust()`, not `send()`: a raising receiver cannot break
+the security action it's observing — enrolling, verifying, or removing a factor
+succeeds or fails independently of what your receiver does with the event. The other
+side of that trade is that `send_robust()` catches and discards the exception rather
+than letting it propagate, so a receiver that fails does so **silently** unless it
+logs its own failure.
+
+To react with something other than a signal receiver, `post_save` on `Authenticator`
+still works too — these signals are additional, not a replacement for the model
+layer.

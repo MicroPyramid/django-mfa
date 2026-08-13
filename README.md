@@ -42,6 +42,7 @@ Django's own `user_logged_in` signal.
 | 🔑 **Passkeys & security keys** | WebAuthn/FIDO2 — Touch ID, Windows Hello, Face ID, YubiKey. Usable as a second factor *or* for full passwordless login, with no username typed. |
 | 📱 **Authenticator apps** | Standard TOTP (RFC 6238) — Google Authenticator, 1Password, Aegis, anything. QR code rendered server-side as inline SVG; no third-party service ever sees your users' secrets. |
 | 🧾 **Recovery codes** | Ten single-use codes, hashed at rest, shown exactly once. The answer to "I lost my phone" that isn't a support ticket. |
+| ✉️ **Emailed codes** | Opt-in (`"email"` in `MFA_FACTORS`): a one-time code sent to the address on file, for a user who's lost everything else. Not in the default factor list — an existing install has to opt in. |
 | 🖥️ **Remember this browser** | Optional, off by default. Trust a browser for N days after one successful challenge. |
 | ➕ **Several keys at once** | A user can register a work laptop's Touch ID *and* a backup YubiKey, each with its own name. |
 
@@ -116,9 +117,12 @@ built-in view, allauth, or your own SSO handler, all django-mfa needs is that
 `login()` gets called. A `user_logged_in` receiver marks the session pending, and the
 middleware takes it from there.
 
-**Users without a second factor are never blocked.** Someone with no factor enrolled
-logs in exactly as before. Enforcement applies only to users who actually have one, so
-you can roll MFA out gradually instead of on a flag day.
+**Users without a second factor are never blocked, unless you ask for it.** Someone
+with no factor enrolled logs in exactly as before, so you can roll MFA out gradually
+instead of on a flag day. Want to *require* it instead — for everyone, for staff, for
+one group — set `MFA_REQUIRED`; a required user with no factor is walled to the
+security page until they enroll one. See
+[Enforcing MFA](http://django-mfa.readthedocs.io/en/latest/enforcement.html).
 
 **The screens are yours.** Every page extends `MFA_BASE_TEMPLATE`, so pointing that at
 your own base template is usually all the theming you need. Want more? Shadow any
@@ -163,7 +167,7 @@ The parts that are easy to get subtly wrong, done deliberately:
 
 ### It tells you when you've misconfigured it
 
-Three system checks run on `manage.py check` (and therefore on `migrate` and
+Four system checks run on `manage.py check` (and therefore on `migrate` and
 `runserver`), because each one guards a failure that is otherwise *silent in
 production*:
 
@@ -172,6 +176,7 @@ production*:
 | `django_mfa.E001` | `MFA_FIDO2_RP_ID` is unset |
 | `django_mfa.E002` | `MFA_FIDO2_RP_ID` doesn't match any `ALLOWED_HOSTS` entry |
 | `django_mfa.E003` | `WebAuthnBackend` is missing from `AUTHENTICATION_BACKENDS` |
+| `django_mfa.E004` | `MFA_REQUIRED` is a dotted path that fails to import, or resolves to something that isn't callable |
 
 `E003` is the instructive one. Passwordless login calls `login()` with an explicit
 `backend=`, which succeeds no matter what `AUTHENTICATION_BACKENDS` says. One request
@@ -196,8 +201,8 @@ class Adapter:
 
 Add `enroll_<type>.html` and `verify_<type>.html`, register the adapter, and it appears
 in the security page, the picker, and the middleware's exempt set automatically. The
-three built-ins (`totp`, `webauthn`, `recovery_codes`) are written against this same
-API — there's no privileged path.
+four built-ins (`totp`, `webauthn`, `recovery_codes`, `email`) are written against
+this same API — there's no privileged path.
 
 ## Compatibility
 
@@ -217,6 +222,7 @@ outside the source tree.
 - [Getting started](http://django-mfa.readthedocs.io/en/latest/installation_setup.html) — install and wire it up in five minutes
 - [Settings reference](http://django-mfa.readthedocs.io/en/latest/settings.html) — every setting, its default, and what it does
 - [Customizing the UI](http://django-mfa.readthedocs.io/en/latest/customizing.html) — templates, context, and the WebAuthn JS contract
+- [Enforcing MFA](http://django-mfa.readthedocs.io/en/latest/enforcement.html) — requiring it for some or all users, and per-view enforcement
 - [Integration recipes](http://django-mfa.readthedocs.io/en/latest/recipes.html) — allauth, passkey buttons, APIs, testing, troubleshooting
 - [Writing a custom factor](http://django-mfa.readthedocs.io/en/latest/custom_factors.html) — the Adapter API, with a worked example
 - [Security model](http://django-mfa.readthedocs.io/en/latest/security.html) — controls, non-goals, and a production checklist
