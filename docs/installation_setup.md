@@ -17,14 +17,6 @@ breaking, and one migration is irreversible.
 
     pip install django-mfa      # or: uv add django-mfa
 
-:::{warning}
-**While 4.0 is in pre-release**, the current PyPI release is 3.2, which predates
-WebAuthn and passkeys and does not match this documentation. Install it explicitly
-until 4.0 is final:
-
-    pip install --pre django-mfa
-:::
-
 ## Wiring it up
 
 ### 1. Add the app and the middleware

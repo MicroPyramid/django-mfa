@@ -52,10 +52,7 @@ pip install django-mfa      # or: uv add django-mfa
 python manage.py migrate
 ```
 
-> **Heads-up while 4.0 is in pre-release.** The current PyPI release is 3.2, which
-> predates WebAuthn/passkeys and the architecture described here. Until 4.0 is final,
-> install it explicitly: `pip install --pre django-mfa`. Upgrading an existing
-> project? Read the [upgrade notes](http://django-mfa.readthedocs.io/en/latest/upgrading.html)
+> **Upgrading from 2.x or 3.x?** Read the [upgrade notes](https://django-mfa.readthedocs.io/en/latest/upgrading.html)
 > first — several changes are breaking, and one migration is deliberately irreversible.
 
 ## Quick start
