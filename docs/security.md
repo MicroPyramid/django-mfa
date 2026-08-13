@@ -104,6 +104,44 @@ show.
 `counts_as_primary_factor = False`: a user holding only recovery codes is offered
 them at the picker but is never challenged on their strength alone.
 
+### Emailed codes
+
+Emailing a one-time code (`"email"` in `MFA_FACTORS`, off by default — see
+{doc}`settings`) is the "lost my phone" factor, but it inherits whatever the
+mailbox it's sent to is worth as a credential.
+
+**It's usually also your password-reset channel.** An attacker who already has a
+victim's password and can reach their inbox — a shared family computer, a mail
+client left signed in, a compromised email provider — can satisfy both factors
+through the same channel. Recommend it as a *fallback* for someone who has lost
+their authenticator and their recovery codes, not as the factor you steer a
+high-value account (an administrator, anyone with billing access) toward. TOTP and
+WebAuthn don't share this property: neither can be satisfied by reading mail.
+
+**The enrolled address is fixed.** A code is sent to the address captured in
+`Authenticator.data` at enrollment time, not to whatever `user.email` says right
+now. A factor is possession of a specific mailbox; following a mutable profile
+field would mean that changing it — by whatever means the host project allows —
+silently redirects the factor to a mailbox chosen by whoever changed it. Changing
+the enrolled address is therefore a remove-and-re-enroll, not an edit.
+
+### Notifications
+
+`MFA_NOTIFY_ON_CHANGE` (off by default) emails a user when a factor is added or
+removed, when a recovery code is spent, or when their last remaining primary factor
+goes. Treat it as a courtesy, not a control:
+
+- **Sending is best-effort.** A mail-backend failure is logged at `ERROR` and
+  dropped, never raised — the security action it's reporting on (removing a key you
+  believe is compromised, say) has already succeeded and must not be rolled back or
+  blocked by a mail outage. A notification not arriving in someone's inbox says
+  nothing about whether the underlying action happened.
+- **Don't build alerting on it.** A delivered email is not a durable audit record,
+  and there is no retry or dead-letter queue behind it. The `django_mfa.events`
+  signals it's built on (see {doc}`api`) fire unconditionally, whether or not
+  `MFA_NOTIFY_ON_CHANGE` is on — connect your own receiver to a logging pipeline or
+  a queue if you need something you can actually alert on.
+
 ### Secrets at rest
 
 TOTP secrets are stored in plaintext. WebAuthn stores only a public key, so there is

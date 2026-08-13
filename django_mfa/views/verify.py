@@ -9,7 +9,7 @@ from django.shortcuts import redirect, render, resolve_url
 from django.utils.http import url_has_allowed_host_and_scheme
 from fido2.webauthn import AuthenticationResponse
 
-from django_mfa import ratelimit, session
+from django_mfa import events, ratelimit, session
 from django_mfa.adapters.webauthn import AUTH_STATE_KEY, WebAuthnAdapter, get_server
 from django_mfa.backends import WebAuthnBackend, user_from_handle
 from django_mfa.conf import settings as mfa_settings
@@ -112,6 +112,9 @@ def verify_factor(request, factor_type):
         if verified:
             ratelimit.clear(request.user, factor_type)
             session.mark_verified(request, factor_type)
+            events.mfa_verified.send_robust(
+                sender=type(adapter), user=request.user,
+                method=factor_type, request=request)
             # Trust this browser for MFA_REMEMBER_DAYS so a future login can
             # skip the challenge (see the user_logged_in signal in
             # signals.py, which checks verify_rmb_cookie()). update_rmb_cookie
@@ -119,6 +122,14 @@ def verify_factor(request, factor_type):
             return update_rmb_cookie(request, redirect(next_url))
         if allowed:
             ratelimit.record_failure(request.user, factor_type)
+        # Emitted for a refused (rate-limited) attempt too -- see the signal's
+        # own comment in events.py. This is below the `if allowed` guard on
+        # purpose: record_failure is budget accounting and must not run when
+        # the attempt was never evaluated, while the event is an observation
+        # and must fire either way.
+        events.mfa_verification_failed.send_robust(
+            sender=type(adapter), user=request.user,
+            method=factor_type, request=request)
         context["error_message"] = GENERIC_ERROR
         context.update(adapter.begin_verify(request, request.user))
         return render(request, adapter.verify_template, context, status=400)
@@ -273,6 +284,9 @@ def passkey_complete(request):
     # that point -- the user must still complete a second-factor challenge.
     if parsed.response.authenticator_data.is_user_verified():
         session.mark_verified(request, "webauthn")
+        events.mfa_verified.send_robust(
+            sender=type(adapter), user=user,
+            method="webauthn", request=request)
 
     auth.login(request, user, backend=BACKEND_PATH)
     return redirect(_safe_next(request))

@@ -22,7 +22,22 @@ import qrcode.image.svg as qrcode_svg
 from django import template
 from django.utils.html import conditional_escape, format_html
 
+from django_mfa.utils import mask_email as _mask_email
+
 register = template.Library()
+
+
+@register.filter(name="mask_email")
+def mask_email(address):
+    """Expose django_mfa.utils.mask_email() as a filter.
+
+    security.html uses this to show which mailbox an email-type
+    Authenticator row is bound to (masked, not the full address) --
+    docs/settings.md promises this and, until this filter existed, the
+    template had no way to keep that promise: authenticator.name is
+    WebAuthn-only and always blank for an emailed-code row.
+    """
+    return _mask_email(address)
 
 
 @register.simple_tag(name="qrcode")

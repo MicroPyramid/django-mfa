@@ -1,5 +1,5 @@
 from django.contrib.auth.models import User
-from django.db.utils import IntegrityError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from django_mfa.models import Authenticator
@@ -55,3 +55,37 @@ class LegacyModelRemovalTests(TestCase):
 
         names = {m.__name__ for m in apps.get_app_config("django_mfa").get_models()}
         self.assertEqual(names, {"Authenticator", "MfaUserHandle"})
+
+
+class EmailIsASingletonFactorTests(TestCase):
+    """supports_multiple = False is an adapter-level promise; this is the
+    database keeping it. Without the constraint covering "email", a second row
+    races the adapter's get_instances(user).first() and which address receives
+    the code becomes non-deterministic."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("a@example.com", password="pw")
+
+    def test_a_second_email_authenticator_is_rejected(self):
+        Authenticator.objects.create(
+            user=self.user, type="email", data={"address": "a@example.com"})
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Authenticator.objects.create(
+                    user=self.user, type="email",
+                    data={"address": "other@example.com"})
+
+    def test_two_users_may_each_have_one(self):
+        other = User.objects.create_user("b@example.com", password="pw")
+        Authenticator.objects.create(user=self.user, type="email", data={})
+        Authenticator.objects.create(user=other, type="email", data={})
+        self.assertEqual(Authenticator.objects.filter(type="email").count(), 2)
+
+    def test_webauthn_is_still_allowed_to_repeat(self):
+        Authenticator.objects.create(user=self.user, type="webauthn", data={})
+        Authenticator.objects.create(user=self.user, type="webauthn", data={})
+        self.assertEqual(Authenticator.objects.filter(type="webauthn").count(), 2)
+
+    def test_email_is_a_declared_choice(self):
+        self.assertEqual(Authenticator.Type.EMAIL, "email")
+        self.assertIn("email", [value for value, _ in Authenticator.Type.choices])

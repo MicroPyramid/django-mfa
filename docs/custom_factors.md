@@ -2,8 +2,8 @@
 
 Adding a factor type means writing one class and registering it. You do not write
 views, URLs, or middleware changes — those are generic and dispatch to whatever the
-registry holds. The three built-ins (`totp`, `webauthn`, `recovery_codes`) are
-written against exactly the API below; there is no privileged path.
+registry holds. The four built-ins (`totp`, `webauthn`, `recovery_codes`, `email`)
+are written against exactly the API below; there is no privileged path.
 
 ## The shape of it
 
@@ -26,83 +26,94 @@ The `begin_*` methods return a dict that is merged into the template context. Th
 Once registered, `type` is what appears in `/mfa/enroll/<type>/` and
 `/mfa/verify/<type>/`, and what gets stored in `Authenticator.type`.
 
-## A worked example: email codes
+## A worked example: a printed backup token
 
-A complete second factor that emails a one-time code. Roughly 40 lines.
+A factor django-mfa doesn't ship: one static, hashed backup token, handed to a user
+in person or by post, entered once to activate it, and consumed the moment it's used.
+Unlike a TOTP secret it never changes and needs no clock sync; unlike ten recovery
+codes it's a single value, closer to what an administrator would issue someone who's
+lost both their authenticator and their recovery codes. Roughly 40 lines.
 
     # myapp/mfa.py
     import secrets
 
-    from django.core.mail import send_mail
-    from django.utils import timezone
+    from django.contrib.auth.hashers import check_password, make_password
 
     from django_mfa.models import Authenticator
     from django_mfa.registry import Adapter
-    from django_mfa.utils import strings_equal
 
-    SESSION_KEY = "myapp_email_code"
+    SESSION_KEY = "myapp_backup_token"
 
 
-    class EmailAdapter(Adapter):
-        type = "email"
-        verbose_name = "Emailed code"
+    class BackupTokenAdapter(Adapter):
+        type = "backup_token"
+        verbose_name = "Backup token"
 
-        # One enrollment per user: the address lives on the row, and a second
-        # row would just be a duplicate. (This is the default; shown for
-        # clarity — set it True only if several instances make sense, the way
-        # several security keys do.)
+        # One at a time: once the token is spent, complete_verify() below
+        # deletes the row outright, so there's never a second one to hold.
+        # (This is the default; shown for clarity — set it True only if
+        # several instances make sense, the way several security keys do.)
         supports_multiple = False
 
-        def _issue(self, user):
-            code = f"{secrets.randbelow(1_000_000):06d}"
-            send_mail("Your sign-in code", f"Your code is {code}.",
-                      None, [user.email])
-            return code
-
         def begin_enroll(self, request):
-            request.session[SESSION_KEY] = self._issue(request.user)
-            return {"email": request.user.email}
+            # Generated here to keep the example self-contained. Swap this for
+            # your own issuing step if you want tokens minted out of band by
+            # an administrator and handed to users in person or by post —
+            # begin_enroll would then look up an already-issued token instead
+            # of minting one, but complete_enroll's job (confirm they have it
+            # right) stays the same.
+            token = secrets.token_hex(8)
+            request.session[SESSION_KEY] = make_password(token)
+            return {"token": token}  # shown once: "write this down"
 
         def complete_enroll(self, request, data):
-            expected = request.session.pop(SESSION_KEY, None)
-            if not expected or not strings_equal(data["code"], expected):
-                raise ValueError("Code did not match.")
+            # Confirms the user actually recorded the token shown above, the
+            # same way TOTP's enrollment confirms a scanned secret rather than
+            # trusting that the QR code was read correctly.
+            expected_hash = request.session.pop(SESSION_KEY, None)
+            if not expected_hash or not check_password(
+                    data.get("token", ""), expected_hash):
+                raise ValueError("Token did not match.")
             return Authenticator.objects.create(
-                user=request.user, type=self.type,
-                data={"email": request.user.email})
+                user=request.user, type=self.type, data={"hash": expected_hash})
 
         def begin_verify(self, request, user):
-            request.session[SESSION_KEY] = self._issue(user)
-            return {"email": user.email}
+            # Nothing to send: unlike a delivery-based factor, the token was
+            # already handed to the user at enrollment, so re-rendering this
+            # page on a failed attempt has no side effect to worry about.
+            return {}
 
         def complete_verify(self, request, user, data):
-            expected = request.session.pop(SESSION_KEY, None)
-            if not expected or not strings_equal(data.get("code", ""), expected):
-                return False
             auth = self.get_instances(user).first()
             if auth is None:
                 return False
-            auth.record_usage()
+            if not check_password(data.get("token", ""), auth.data["hash"]):
+                return False
+            # Single-use: spending it deletes the factor outright rather than
+            # marking it used, so a stolen-and-reused token is impossible and
+            # re-issuing one (self-service, or through an administrator) is
+            # the same complete_enroll() flow as the first time.
+            auth.delete()
             return True
 
 Two templates, which can be as short as this:
 
-    {% comment %} myapp/templates/django_mfa/verify_email.html {% endcomment %}
+    {% comment %} myapp/templates/django_mfa/verify_backup_token.html {% endcomment %}
     {% extends base_template %}
     {% block content %}
-    <h1>Check your email</h1>
-    <p>We sent a code to {{ email }}.</p>
+    <h1>Enter your backup token</h1>
     <form method="post">
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ next }}">
-      <input type="text" name="code" autocomplete="one-time-code" autofocus>
+      <input type="text" name="token" autofocus>
       {% if error_message %}<p class="text-danger">{{ error_message }}</p>{% endif %}
       <button type="submit">Verify</button>
     </form>
     {% endblock %}
 
-`enroll_email.html` is the same minus the `next` field. See {doc}`customizing` for
-the context every page receives.
+`enroll_backup_token.html` is the same minus the `next` field, plus showing `{{
+token }}` once so the user can copy it down before confirming. See {doc}`customizing`
+for the context every page receives.
 
 Then register it once, at startup:
 
@@ -114,12 +125,17 @@ Then register it once, at startup:
 
         def ready(self):
             from django_mfa.registry import registry
-            from myapp.mfa import EmailAdapter
-            registry.register(EmailAdapter())
+            from myapp.mfa import BackupTokenAdapter
+            registry.register(BackupTokenAdapter())
 
 That's the whole integration. The factor now appears on the security page, in the
 picker, in the middleware's exempt set, and under rate limiting — none of which you
 touched.
+
+For a fuller worked example of a *delivery-based* factor — one with a send step, a
+throttle on how often it can be resent, and a masked address shown back to the user —
+see the built-in `django_mfa/adapters/email.py`, which this page used to reproduce
+here before emailed codes shipped as `"email"` in `MFA_FACTORS`.
 
 ## What you get for free
 
@@ -163,10 +179,11 @@ failure by raising `ValueError`; its return value is the created `Authenticator`
 different: enrollment has nothing meaningful to return on failure.
 
 **`begin_verify` runs again on failure.** After a wrong code the view re-renders the
-challenge page, which means `begin_verify` is called a second time. If yours has a
-side effect — sending an email, as above — every wrong code sends another one. That
-may be what you want, or you may want to cache the issued code with a TTL and reuse
-it; decide deliberately.
+challenge page, which means `begin_verify` is called a second time. The worked
+example above has no side effect to worry about, but a factor that sends something
+(an email, an SMS) on `begin_verify` — see `django_mfa/adapters/email.py` — will send
+another one on every wrong-code retry unless you cache the issued value with a TTL
+and reuse it, the way `EmailAdapter._ensure_code()` does; decide deliberately.
 
 **Store state in `data`, not in new columns.** `Authenticator.data` is a `JSONField`.
 There is no per-factor table and adding one is not the intended extension point.
@@ -183,17 +200,18 @@ it. For values you never need to read back, hash instead, as recovery codes do.
 
 Being honest about where a custom factor is a slightly second-class citizen:
 
-- **`Authenticator.Type` is a fixed `TextChoices`** with the three built-ins. A row
+- **`Authenticator.Type` is a fixed `TextChoices`** with the four built-ins. A row
   with a custom `type` saves and queries fine — Django only validates choices in
   `full_clean()`, which these code paths don't call — but `get_type_display()`
   returns the raw string rather than a label, so `security.html` shows `my_factor`
   instead of `My factor`. Override `security.html` and render
   `adapter.verbose_name` if that matters to you.
 - **The singleton database constraint names its types explicitly**
-  (`mfa_one_singleton_authenticator_per_user` covers `totp` and `recovery_codes`).
-  `supports_multiple = False` is enforced in `is_available()` at the application
-  level, not by your database. For most factors that's fine; if you need the
-  guarantee, add your own constraint in a migration in your app.
+  (`mfa_one_singleton_authenticator_per_user` covers `totp`, `recovery_codes`, and
+  `email`). `supports_multiple = False` is enforced in `is_available()` at the
+  application level, not by your database, for anything outside that list. For most
+  factors that's fine; if you need the guarantee, add your own constraint in a
+  migration in your app.
 - **`MFA_FACTORS` only controls the built-ins.** Your adapter is registered by your
   own `ready()`, so listing it there does nothing — and an unrecognized name raises
   `ImproperlyConfigured`. Gate registration on your own setting if you need it
@@ -211,16 +229,17 @@ is the best reference. A minimal check that yours is wired up end to end:
     from django.test import TestCase
     from django_mfa.registry import registry
 
-    class EmailFactorTests(TestCase):
+    class BackupTokenFactorTests(TestCase):
         def setUp(self):
             self.user = get_user_model().objects.create_user(
                 "u", "u@example.com", "pw")
             self.client.force_login(self.user)
 
         def test_enrolling_protects_the_user(self):
-            self.client.get("/mfa/enroll/email/")           # issues a code
-            code = self.client.session["myapp_email_code"]
-            response = self.client.post("/mfa/enroll/email/", {"code": code})
+            response = self.client.get("/mfa/enroll/backup_token/")  # issues a token
+            token = response.context["token"]
+            response = self.client.post(
+                "/mfa/enroll/backup_token/", {"token": token})
             self.assertEqual(response.status_code, 302)
             self.assertTrue(registry.primary_enabled_for(self.user))
 

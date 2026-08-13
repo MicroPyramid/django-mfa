@@ -7,8 +7,8 @@ Once basic setup (see {doc}`installation_setup`) is done, django-mfa exposes the
 | `mfa:security_settings` | `security/`             | Overview: enabled factors, factors still available to add, recovery codes remaining.                            |
 | `mfa:manage`            | `manage/`               | POST-only: delete one of the user's own authenticators.                                                         |
 | `mfa:verify`            | `verify/`               | The second-factor picker (see below).                                                                           |
-| `mfa:verify_factor`     | `verify/<factor_type>/` | Challenge screen for one specific factor (`totp`, `webauthn`, or `recovery_codes`).                             |
-| `mfa:enroll_factor`     | `enroll/<factor_type>/` | Enrollment screen for one specific factor (`totp` or `webauthn` -- recovery codes are generated, not enrolled). |
+| `mfa:verify_factor`     | `verify/<factor_type>/` | Challenge screen for one specific factor (`totp`, `webauthn`, `recovery_codes`, or the opt-in `email`).         |
+| `mfa:enroll_factor`     | `enroll/<factor_type>/` | Enrollment screen for one specific factor (`totp`, `webauthn`, or the opt-in `email` -- recovery codes are generated, not enrolled). |
 | `mfa:recovery_codes`    | `recovery/codes/`       | View (and, on first visit, generate) recovery codes.                                                            |
 | `mfa:passkey_begin`     | `passkey/begin/`        | GET: start a passwordless WebAuthn ceremony (see below).                                                        |
 | `mfa:passkey_complete`  | `passkey/complete/`     | POST: finish it and log the resolved user in.                                                                   |
@@ -23,12 +23,23 @@ Once basic setup (see {doc}`installation_setup`) is done, django-mfa exposes the
 
 ## Logging in with a second factor
 
-1.  The host project's own login view authenticates the user as usual (username/password, SSO, etc.) and calls `django.contrib.auth.login()`. A `user_logged_in` signal handler (`django_mfa/signals.py`) then marks the session pending a second factor, if -- and only if -- the user has at least one factor counted as a primary factor (`totp` or `webauthn`; recovery codes alone do not count, since they're exhaustible). This replaces the old contract where a host project's login view had to set session keys by hand.
+1.  The host project's own login view authenticates the user as usual (username/password, SSO, etc.) and calls `django.contrib.auth.login()`. A `user_logged_in` signal handler (`django_mfa/signals.py`) then marks the session pending a second factor, if -- and only if -- the user has at least one factor counted as a primary factor (`totp`, `webauthn`, or the opt-in `email` factor -- see {doc}`security`; recovery codes alone do not count, since they're exhaustible). This replaces the old contract where a host project's login view had to set session keys by hand.
 2.  From that point on, `MfaMiddleware` redirects every request from that session to `mfa:verify` except the picker itself, each registered factor's own verify page, and anything listed in `MFA_EXEMPT_PATHS` (see the warning in {doc}`settings` -- this should include your logout URL).
 3.  `mfa:verify` (the picker) looks at which factors this user actually holds. If there's exactly one, it redirects straight to `mfa:verify_factor/<type>/` -- no need to make a user with a single factor choose from a list of one. Otherwise it renders a list to choose from.
 4.  `GET mfa:verify_factor/<type>/` renders that factor's challenge screen; POSTing the code/assertion marks the session fully verified on success (or a generic error on failure -- see the rate-limiting note below) and redirects to `next` (validated against open redirects) or `LOGIN_REDIRECT_URL`.
 
 Failed attempts against a single factor are rate-limited (`MFA_VERIFY_RATE_LIMIT`, default 5 per 5 minutes per user per factor type); a locked-out attempt gets the exact same response as a wrong code, so the lockout itself never reveals whether MFA is even enabled for that account.
+
+## Being required to enroll
+
+Everything above only applies to a user who already holds a factor -- enrollment is
+opt-in by default, and a user who never enrolls is never prompted or blocked. A
+separate, opt-in wall changes that: if `MFA_REQUIRED` (`django_mfa.policy`) applies
+to a user and they hold no primary factor yet, `MfaMiddleware` redirects every
+request from that user to `mfa:security_settings` instead of to the picker --
+there is nothing to challenge them on until they enroll something. See
+{doc}`enforcement` for the settings, the exact pages still reachable while walled,
+and the equivalent per-view `@mfa_required` decorator.
 
 ## Passwordless (passkey) login
 

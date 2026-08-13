@@ -7,9 +7,11 @@ DEFAULTS = {
     "MFA_BASE_TEMPLATE": "django_mfa/base.html",
     "MFA_SECRET_ENCRYPTION_KEYS": None,
     "MFA_VERIFY_RATE_LIMIT": "5/5m",
+    "MFA_EMAIL_SEND_RATE_LIMIT": "3/5m",
     "MFA_QUICKLOGIN": False,
     "MFA_OWNED_BY_ENTERPRISE": False,
     "MFA_FACTORS": ["totp", "recovery_codes", "webauthn"],
+    "MFA_REQUIRED": False,
     "MFA_FIDO2_RP_ID": None,
     "MFA_FIDO2_RP_NAME": "django-mfa",
     "MFA_FIDO2_RESIDENT_KEY": "preferred",
@@ -17,6 +19,11 @@ DEFAULTS = {
     "MFA_FIDO2_USER_VERIFICATION": "preferred",
     "MFA_FIDO2_ATTESTATION_PREFERENCE": "none",
     "MFA_EXEMPT_PATHS": [],
+    "MFA_EMAIL_CODE_LENGTH": 6,
+    "MFA_EMAIL_CODE_VALIDITY": 300,
+    "MFA_EMAIL_SUBJECT": None,
+    "MFA_FROM_EMAIL": None,
+    "MFA_NOTIFY_ON_CHANGE": False,
 }
 
 

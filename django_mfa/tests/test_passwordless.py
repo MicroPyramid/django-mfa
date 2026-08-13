@@ -40,6 +40,7 @@ from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from fido2.webauthn import AuthenticatorData
 
+from django_mfa import events
 from django_mfa.backends import user_from_handle, user_handle_for
 from django_mfa.conf import settings as mfa_settings
 from django_mfa.middleware import MfaMiddleware
@@ -144,6 +145,21 @@ class PasswordlessLoginTests(TestCase):
 
     def _handle_bytes(self, user):
         return user_handle_for(user).encode("utf-8")
+
+    def _record(self, signal):
+        """Collect every kwargs dict `signal` is sent with, for the duration
+        of one test. Mirrors test_events.SignalRecorder's shape (strong
+        reference, connect/disconnect) without importing that module's
+        Client-driven EventTestCase fixtures, which this file doesn't use.
+        """
+        calls = []
+
+        def receiver(sender, **kwargs):
+            calls.append({"sender": sender, **kwargs})
+
+        signal.connect(receiver)
+        self.addCleanup(signal.disconnect, receiver)
+        return calls
 
     # -- Core ceremony: property 2 (a valid assertion actually authenticates) --
 
@@ -350,6 +366,50 @@ class PasswordlessLoginTests(TestCase):
         # MfaMiddleware will still challenge this user for a real second
         # factor before letting them reach anything non-exempt.
         self.assertFalse(self.client.session["mfa"]["verified"])
+
+    def test_uv_assertion_emits_mfa_verified(self):
+        """Review Important 2: a UV-carrying passkey login genuinely
+        satisfies the second factor (see
+        test_uv_assertion_marks_the_session_fully_verified above) and must
+        emit the same mfa_verified signal verify_factor's own success branch
+        does -- a host project doing audit logging off this signal would
+        otherwise have a silent hole for the strongest login path.
+        """
+        calls = self._record(events.mfa_verified)
+        begin = self.client.get(reverse("mfa:passkey_begin"))
+        assertion = self.device.get(json.loads(begin.json()["options"]))
+
+        response = self.client.post(reverse("mfa:passkey_complete"),
+                                    {"credential": json.dumps(assertion)})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["user"], self.user)
+        self.assertEqual(calls[0]["method"], "webauthn")
+        self.assertIsNotNone(calls[0]["request"])
+
+    def test_up_only_assertion_does_not_emit_mfa_verified(self):
+        """The other half of Important 2: a UP-only passkey login logs the
+        user in but does NOT satisfy the second factor (see
+        test_up_only_assertion_authenticates_but_leaves_second_factor_pending
+        above), so it must not claim it did by emitting this signal either.
+        """
+        up_only_device = _UpOnlyAuthenticator(origin="https://testserver",
+                                              rp_id="testserver")
+        up_only_device.private_key = self.device.private_key
+        up_only_device.credential_id = self.device.credential_id
+        up_only_device.sign_count = self.device.sign_count
+
+        calls = self._record(events.mfa_verified)
+        begin = self.client.get(reverse("mfa:passkey_begin"))
+        assertion = up_only_device.get(json.loads(begin.json()["options"]),
+                                       user_handle=self._handle_bytes(self.user))
+        response = self.client.post(reverse("mfa:passkey_complete"),
+                                    {"credential": json.dumps(assertion)})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(self.client.session["mfa"]["verified"])
+        self.assertEqual(calls, [])
 
     # -- MFA_QUICKLOGIN rides on this same view; confirm it still works end
     #    to end when enabled (unit-level coverage lives in QuickLoginTests

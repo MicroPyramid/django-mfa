@@ -1,0 +1,35 @@
+{% extends base_template %}
+{% load i18n %}
+{% block content %}
+<section class="mfa-card">
+  <h1>{% trans "Set up email codes" %}</h1>
+  {% if address %}
+  <p class="mfa-lede">
+    {% blocktrans %}We've emailed a code to {{ address }}. Enter it below to turn on email codes.{% endblocktrans %}
+  </p>
+
+  <form accept-charset="UTF-8" method="post" action="">
+    {% csrf_token %}
+    <dl class="form-group">
+      <dt><label for="id_code">{% blocktrans %}{{ code_length }}-digit code{% endblocktrans %}</label></dt>
+      <dd>
+        <input class="form-control mfa-code-input" id="id_code" type="text" name="code" value=""
+               inputmode="numeric" pattern="[0-9]*" maxlength="{{ code_length }}"
+               autocomplete="one-time-code" spellcheck="false" autofocus
+               aria-describedby="id_code_error">
+        <p class="help-block text-danger" id="id_code_error">{% if error_message %}{{ error_message }}{% endif %}</p>
+      </dd>
+    </dl>
+    <div class="mfa-actions">
+      <button type="submit" class="btn btn-primary">{% trans "Turn on email codes" %}</button>
+      <a href="{% url 'mfa:security_settings' %}" class="btn btn-default">{% trans "Cancel" %}</a>
+    </div>
+  </form>
+  {% else %}
+  <p class="mfa-lede">{% trans "Your account has no email address, so codes can't be delivered. Add one to your profile first." %}</p>
+  <div class="mfa-actions">
+    <a href="{% url 'mfa:security_settings' %}" class="btn btn-default">{% trans "Back" %}</a>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

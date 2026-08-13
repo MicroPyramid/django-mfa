@@ -3,7 +3,7 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
-from django_mfa import session
+from django_mfa import events, session
 from django_mfa.conf import settings as mfa_settings
 from django_mfa.models import Authenticator
 from django_mfa.views.verify import GENERIC_ERROR, _adapter_or_404
@@ -24,7 +24,7 @@ def enroll_factor(request, factor_type):
 
     if request.method == "POST":
         try:
-            adapter.complete_enroll(request, request.POST)
+            authenticator = adapter.complete_enroll(request, request.POST)
         except (ValueError, TypeError, KeyError):
             # ValueError: the adapter's own "this ceremony/code is invalid"
             #   signal (e.g. TOTP's wrong code, or a stale/replayed WebAuthn
@@ -46,6 +46,9 @@ def enroll_factor(request, factor_type):
         # Enrolling a factor satisfies this session's requirement — the user
         # just proved possession.
         session.mark_verified(request, factor_type)
+        events.factor_added.send_robust(
+            sender=type(adapter), user=request.user,
+            authenticator=authenticator, request=request)
 
         has_codes = Authenticator.objects.filter(
             user=request.user, type=Authenticator.Type.RECOVERY_CODES).exists()

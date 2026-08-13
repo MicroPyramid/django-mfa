@@ -22,6 +22,7 @@ class Authenticator(models.Model):
         TOTP = "totp", "Authenticator app"
         WEBAUTHN = "webauthn", "Security key or passkey"
         RECOVERY_CODES = "recovery_codes", "Recovery codes"
+        EMAIL = "email", "Emailed code"
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL,
                              related_name="mfa_authenticators",
@@ -38,7 +39,7 @@ class Authenticator(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["user", "type"],
-                condition=models.Q(type__in=["totp", "recovery_codes"]),
+                condition=models.Q(type__in=["totp", "recovery_codes", "email"]),
                 name="mfa_one_singleton_authenticator_per_user",
             ),
         ]

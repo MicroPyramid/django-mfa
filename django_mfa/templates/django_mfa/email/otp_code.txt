@@ -1,0 +1,5 @@
+{% load i18n %}{% blocktrans %}Your sign-in code is {{ code }}.{% endblocktrans %}
+
+{% blocktrans %}It expires in {{ validity_minutes }} minutes and can be used once.{% endblocktrans %}
+
+{% trans "If you didn't try to sign in, someone may know your password. Change it." %}

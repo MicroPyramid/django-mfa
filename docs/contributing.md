@@ -43,7 +43,8 @@ upload token for that workflow alone.
 
 To cut a release, in full:
 
-1.  Bump `version` in `pyproject.toml`, open a PR, merge it to `master`.
+1.  Bump `version` in `pyproject.toml` and add that version's section to
+    `CHANGELOG.md`, in the same PR. Merge it to `master`.
 
 There is no step 2. You never create a tag and you never create a GitHub
 Release -- `.github/workflows/tag-release.yml` sees the version change, creates

@@ -23,34 +23,18 @@ have that code, delete it — see {doc}`upgrading`.
 
 ## Sending people to set up MFA
 
-There is no built-in "you must enroll" enforcement, deliberately: whether MFA is
-mandatory, and for whom, is a policy decision. Point users at `mfa:security_settings`
-from your account area:
+Whether MFA is mandatory, and for whom, is a policy decision — `MFA_REQUIRED`
+answers it. See {doc}`enforcement` for the full reference: the four shapes the
+setting takes (`True`, a predicate, `is_staff`, `in_groups(...)`), what a
+required-but-unenrolled user can still reach before locking themselves out, and
+`@mfa_required`/`MfaRequiredMixin` for requiring it per view instead of per user.
+That page also covers `MFA_EXEMPT_PATHS`, which the enrollment wall needs the same
+way the pending-verification wall does — skip it and you build a redirect loop.
+
+For MFA that's entirely opt-in (the default, and still the right choice for most
+projects), just point users at the settings page from your account area:
 
     <a href="{% url 'mfa:security_settings' %}">Two-factor authentication</a>
-
-To *require* it for some group, write a small middleware of your own. Note what has
-to be exempt, or you build a redirect loop:
-
-    from django.shortcuts import redirect
-    from django.urls import reverse
-    from django_mfa.registry import registry
-
-    class RequireMfaForStaff:
-        def __init__(self, get_response):
-            self.get_response = get_response
-
-        def __call__(self, request):
-            user = request.user
-            if (user.is_authenticated and user.is_staff
-                    and not registry.primary_enabled_for(user)
-                    and not request.path.startswith("/mfa/")
-                    and request.path != reverse("logout")):
-                return redirect("mfa:security_settings")
-            return self.get_response(request)
-
-Use `registry.primary_enabled_for()` rather than counting `Authenticator` rows — a
-user holding only recovery codes has rows but is not protected.
 
 ## Checking whether the current session passed MFA
 

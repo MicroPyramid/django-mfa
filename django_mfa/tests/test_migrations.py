@@ -304,5 +304,25 @@ class Migration0007ForwardFromZeroTests(TestCase):
                 "0005_migrate_to_authenticator",
                 "0006_mfa_user_handle",
                 "0007_drop_legacy_models",
+                "0008_email_factor",
             },
         )
+
+
+class NoMissingMigrationsTests(TestCase):
+    """A model change without a migration is invisible until somebody
+    deploys. There is no manage.py here (test_runner.py calls
+    settings.configure()), so the command is driven through call_command."""
+
+    def test_makemigrations_has_nothing_to_do(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        try:
+            call_command("makemigrations", "django_mfa", check=True,
+                         dry_run=True, stdout=out, verbosity=1)
+        except SystemExit:
+            self.fail(f"django_mfa has model changes with no migration:\n"
+                      f"{out.getvalue()}")

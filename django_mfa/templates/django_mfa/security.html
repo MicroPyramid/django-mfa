@@ -1,9 +1,16 @@
 {% extends base_template %}
 {% load i18n %}
+{% load otp_tags %}
 {% block main_modifier %} mfa-main--wide{% endblock %}
 {% block content %}
 <h1>{% trans "Two-factor authentication" %}</h1>
 <p class="mfa-lede">{% trans "Add a second step to your sign-in so a stolen password isn't enough on its own." %}</p>
+{% if mfa_enrollment_required %}
+<div class="mfa-notice mfa-notice--warning" role="alert">
+  <strong>{% trans "Two-factor authentication is required for your account." %}</strong>
+  <p>{% trans "Add a method below to continue. Until you do, the rest of the site is unavailable." %}</p>
+</div>
+{% endif %}
 
 <section class="mfa-card">
   <div class="mfa-card__title">
@@ -17,7 +24,7 @@
       <div class="mfa-item">
         <div class="mfa-item__text">
           <span class="mfa-item__name">
-            {{ authenticator.get_type_display }}{% if authenticator.name %} &mdash; {{ authenticator.name }}{% endif %}
+            {{ authenticator.get_type_display }}{% if authenticator.name %} &mdash; {{ authenticator.name }}{% endif %}{% if authenticator.type == "email" and authenticator.data.address %} &mdash; {{ authenticator.data.address|mask_email }}{% endif %}
           </span>
           <span class="mfa-item__meta">
             {% blocktrans with created=authenticator.created_at|date:"j M Y" %}Added {{ created }}{% endblocktrans %}

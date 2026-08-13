@@ -30,6 +30,7 @@ mfa_flow
 :caption: Guides
 
 customizing
+enforcement
 recipes
 custom_factors
 ```

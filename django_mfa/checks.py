@@ -115,3 +115,33 @@ def check_webauthn_backend_configured(app_configs, **kwargs):
              f"request. Add {backend_path!r} to AUTHENTICATION_BACKENDS.",
         id="django_mfa.E003",
     )]
+
+
+def check_mfa_required_predicate(app_configs, **kwargs):
+    """``MFA_REQUIRED`` must be something policy.resolve() can use.
+
+    Deliberately NOT gated on ``_webauthn_active()``. That gate exists so a
+    TOTP-only project isn't asked for WebAuthn settings; MFA_REQUIRED is not
+    WebAuthn-specific and applies to every install.
+
+    Without this check the failure surfaces as an ImportError or TypeError
+    raised from inside MfaMiddleware, on a user's first request after
+    deploy, on every request -- i.e. a total outage discovered in production
+    rather than a refused `manage.py check`.
+    """
+    from django.core.exceptions import ImproperlyConfigured
+
+    from django_mfa import policy
+
+    try:
+        policy.resolve()
+    except (ImportError, ImproperlyConfigured, TypeError) as exc:
+        return [Error(
+            f"MFA_REQUIRED is not usable: {exc}",
+            hint="Set it to False (nobody), True (everyone), a callable "
+                 "taking a user and returning a bool, or a dotted path to "
+                 "one. django_mfa.policy.is_staff and "
+                 "django_mfa.policy.in_groups(...) are supplied.",
+            id="django_mfa.E004",
+        )]
+    return []

@@ -14,7 +14,7 @@ U2F (the `U2FKey` model, `python-u2flib-server` dependency, and every `u2f`-pref
 
 The three old models are gone from `django_mfa/models.py`. In their place:
 
-- `Authenticator` -- one polymorphic model for every factor type (`type` is `"totp"`, `"webauthn"`, or `"recovery_codes"`), factor-specific data in a `data` `JSONField`, and a `user` FK. A user can hold multiple `Authenticator` rows (e.g. several WebAuthn keys), but at most one `totp` and one `recovery_codes` row each (a database constraint enforces this).
+- `Authenticator` -- one polymorphic model for every factor type (`type` is `"totp"`, `"webauthn"`, `"recovery_codes"`, or the opt-in `"email"`), factor-specific data in a `data` `JSONField`, and a `user` FK. A user can hold multiple `Authenticator` rows (e.g. several WebAuthn keys), but at most one `totp`, one `recovery_codes`, and one `email` row each (a database constraint enforces this; migration `0008_email_factor` extended it from `totp`/`recovery_codes` to also cover `email` when that factor was added).
 - `MfaUserHandle` (`django_mfa/handles.py`) -- a new model, one row per user, holding the stable opaque WebAuthn "user handle" passkey ceremonies use to resolve a user before any password is typed. Created lazily, the first time a user's handle is needed.
 
 Migration `0005_migrate_to_authenticator` copies every existing `UserOTP` row to an `Authenticator` row of type `totp`, and every user's `UserRecoveryCodes` rows to a single `Authenticator` row of type `recovery_codes` holding all of that user's codes together (see item 10 below for what state those codes are in afterwards). Migration `0007` then drops the old tables -- see item 8.
