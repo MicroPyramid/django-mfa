@@ -31,7 +31,7 @@ WebAuthn** — see {doc}`installation_setup`.
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `MFA_REMEMBER_MY_BROWSER` | `False` | When `True`, a signed cookie trusts a browser for `MFA_REMEMBER_DAYS` after it completes one second-factor challenge, skipping the challenge on later logins. |
+| `MFA_REMEMBER_MY_BROWSER` | `False` | When `True`, a signed cookie trusts a browser for `MFA_REMEMBER_DAYS` after it completes one second-factor challenge, skipping the challenge on later logins. Works with any factor type. The cookie is bound to the user's enrolled factors, so enrolling or removing one invalidates every previously trusted browser. |
 | `MFA_REMEMBER_DAYS` | `90` | How long a trusted-browser cookie stays valid. Ignored unless the above is on. |
 | `MFA_QUICKLOGIN` | `False` | Sets a non-authenticating hint cookie naming the last account to log in on this browser, so your login page can offer a passkey before asking for a username. See {doc}`recipes`. |
 
@@ -40,7 +40,7 @@ WebAuthn** — see {doc}`installation_setup`.
 | Setting | Default | Purpose |
 |---|---|---|
 | `MFA_VERIFY_RATE_LIMIT` | `"5/5m"` | Failed second-factor attempts allowed per user per factor type, as `"<count>/<window><unit>"` where unit is `s`, `m`, or `h`. See {doc}`security`. |
-| `MFA_SECRET_ENCRYPTION_KEYS` | `None` | List of keys used to encrypt TOTP secrets at rest. The first key encrypts; every key is tried when decrypting. See [Encrypting stored secrets](#encrypting-stored-secrets). |
+| `MFA_SECRET_ENCRYPTION_KEYS` | `None` | **Deprecated, and does not encrypt.** List of keys used to *sign* TOTP secrets at rest. The first key signs; every key is tried when reading. See [Signing stored secrets](#signing-stored-secrets-deprecated). |
 | `MFA_OWNED_BY_ENTERPRISE` | `False` | When `True`, users cannot remove their own WebAuthn authenticators from the security settings page — e.g. an organization-issued security key an administrator manages instead. |
 
 ## WebAuthn (security keys and passkeys)
@@ -151,16 +151,28 @@ the standard Django escape hatch applies:
 Prefer fixing the configuration (or narrowing `MFA_FACTORS`) over silencing one of
 these. Silencing does not make the failure mode go away, only the warning about it.
 
-## Encrypting stored secrets
+## Signing stored secrets (deprecated)
 
-By default, TOTP secrets are stored in the database in plaintext. Setting
-`MFA_SECRET_ENCRYPTION_KEYS` to a list of one or more keys encrypts every secret
-written from that point on, using the first key in the list, while still reading
-anything encrypted with an older key still present:
+:::{warning}
+`MFA_SECRET_ENCRYPTION_KEYS` does not encrypt, despite the name. It **signs** the
+stored value with `django.core.signing` under an `mfa1:` prefix. That is integrity,
+not confidentiality: the payload is plain base64 and anyone with the database can
+recover the TOTP secret without any key at all.
+
+The setting is deprecated and kept only so values written by older versions keep
+reading. Do not enable it expecting encryption at rest. If you need that, use your
+database's own encryption, or a column-encryption library, and treat the TOTP secret
+column as sensitive regardless.
+:::
+
+TOTP secrets are stored in the database in plaintext. Setting
+`MFA_SECRET_ENCRYPTION_KEYS` to a list of one or more keys signs every secret written
+from that point on, using the first key in the list, while still verifying anything
+signed with an older key still present:
 
     MFA_SECRET_ENCRYPTION_KEYS = [
-        "current-key",     # everything new is encrypted with this one
-        "previous-key",    # still readable; drop once nothing uses it
+        "current-key",     # everything new is signed with this one
+        "previous-key",    # still verifiable; drop once nothing uses it
     ]
 
 That list *is* the rotation mechanism: add the new key at the front, redeploy, and
@@ -169,13 +181,11 @@ command to run.
 
 Two limits worth knowing:
 
-- **Existing plaintext secrets are not retroactively encrypted.** They are read
-  unchanged and only encrypted the next time they're written — in practice, when the
-  user re-enrolls. Turning this on protects new and re-enrolled secrets, not your
-  existing table.
-- **Losing every key in the list makes those secrets unreadable**, which locks
-  affected users out of TOTP until they re-enroll. Keep the keys wherever you keep
-  `SECRET_KEY`, and with the same care.
+- **Existing values are not retroactively rewritten.** They are read unchanged and
+  only signed the next time they're written — in practice, when the user re-enrolls.
+- **Losing every key in the list makes those values unreadable *by django-mfa***,
+  which locks affected users out of TOTP until they re-enroll. It does not make them
+  unreadable by anyone else. Keep the keys wherever you keep `SECRET_KEY`.
 
 WebAuthn credentials store no secret — only a public key — so this setting does not
 apply to them. Recovery codes are hashed rather than encrypted, which is not

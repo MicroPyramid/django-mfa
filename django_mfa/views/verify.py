@@ -13,7 +13,6 @@ from django_mfa import ratelimit, session
 from django_mfa.adapters.webauthn import AUTH_STATE_KEY, WebAuthnAdapter, get_server
 from django_mfa.backends import WebAuthnBackend, user_from_handle
 from django_mfa.conf import settings as mfa_settings
-from django_mfa.crypto import decrypt
 from django_mfa.models import Authenticator
 from django_mfa.registry import registry
 
@@ -281,27 +280,48 @@ def passkey_complete(request):
 
 # --- Remember-my-browser cookie helpers -------------------------------------
 #
-# Carried over from the legacy views.py unchanged apart from reading
-# Authenticator (type=totp, data["secret"]) instead of UserOTP.secret_key.
-# The secret may be encrypted at rest (see django_mfa.crypto), so it is run
-# through decrypt() before being used to derive the cookie salt.
+# Carried over from the legacy views.py, which derived the cookie salt from
+# the user's TOTP secret. The intent was sound -- changing the factor should
+# invalidate a browser trusted on the strength of it -- but tying it to TOTP
+# specifically meant MFA_REMEMBER_MY_BROWSER silently did nothing for a user
+# whose only factor was a security key or passkey: a cookie was written and
+# then never honoured, because the salt used to verify it was the empty
+# string. docs/settings.md documents the setting unconditionally.
+#
+# The salt is now derived from the user's whole set of enrolled factors, which
+# keeps the original property (re-enrolling TOTP still kills the cookie,
+# because the row is replaced) and extends it to every factor type.
 
 MFA_COOKIE_PREFIX = "RMB_"
 
 
 def _generate_cookie_salt(user):
-    auth = Authenticator.objects.filter(
-        user=user, type=Authenticator.Type.TOTP).first()
-    if auth is None:
+    """Salt binding a trusted-browser cookie to the factors that earned it.
+
+    Returns "" when the user has no enrolled factors, which both callers
+    treat as "no browser can be trusted" -- there is nothing to bind to.
+
+    Note this salt is not, and need not be, secret: Django's signed cookies
+    take their unforgeability from SECRET_KEY, and the salt only namespaces
+    the signature. Its job here is purely to *change* whenever the user's
+    factors change, so that removing or re-enrolling one invalidates every
+    browser previously trusted. (The old implementation hashed half the TOTP
+    secret "out of paranoia", which bought nothing on that front and is
+    exactly the coupling that broke non-TOTP users.)
+    """
+    rows = Authenticator.objects.filter(user=user).order_by("pk").values_list(
+        "pk", "type", "created_at")
+    digest = hashlib.sha256()
+    empty = True
+    for pk, factor_type, created_at in rows:
+        empty = False
+        # The pk alone would nearly do -- a re-enrolled factor gets a new row
+        # -- but created_at makes it independent of whether the database ever
+        # reuses a primary key.
+        digest.update(f"{pk}:{factor_type}:{created_at.isoformat()}|".encode())
+    if empty:
         return ''
-    secret = decrypt(auth.data.get("secret", ""))
-    # out of paranoia only use half the secret to generate the salt
-    uselen = int(len(secret) / 2)
-    half_secret = secret[:uselen]
-    m = hashlib.sha256()
-    m.update(half_secret.encode("utf-8"))
-    cookie_salt = m.hexdigest()
-    return cookie_salt
+    return digest.hexdigest()
 
 
 # update Remember-My-Browser cookie
@@ -312,6 +332,11 @@ def update_rmb_cookie(request, response):
         # better not to reveal the username.  Revealing the number seems harmless
         cookie_name = MFA_COOKIE_PREFIX + str(request.user.pk)
         cookie_salt = _generate_cookie_salt(request.user)
+        if not cookie_salt:
+            # No enrolled factors, so nothing to bind the cookie to and
+            # verify_rmb_cookie() would refuse it on sight. Don't write a
+            # cookie that can never be honoured.
+            return response
         response.set_signed_cookie(cookie_name, True, salt=cookie_salt,
                                    max_age=remember_days * 24 * 3600,
                                    secure=(not settings.DEBUG), httponly=True)

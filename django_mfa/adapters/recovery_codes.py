@@ -4,6 +4,7 @@ import string
 
 from django.contrib.auth.hashers import check_password, make_password
 
+from django_mfa.atomic import update_data
 from django_mfa.models import Authenticator
 from django_mfa.registry import Adapter
 from django_mfa.utils import strings_equal
@@ -52,17 +53,29 @@ class RecoveryCodesAdapter(Adapter):
         if auth is None:
             return False
         submitted = data.get("code", "")
-        used = set(auth.data.get("used", []))
-        plaintext = auth.data.get("migrated_plaintext", False)
 
-        for index, stored in enumerate(auth.data.get("codes", [])):
-            if index in used:
-                continue
-            matched = (strings_equal(stored, submitted) if plaintext
-                       else check_password(submitted, stored))
-            if matched:
-                auth.data["used"] = sorted(used | {index})
-                auth.save(update_fields=["data"])
-                auth.record_usage()
-                return True
-        return False
+        def spend(current):
+            """Match and mark one code, against the blob as committed.
+
+            Deliberately does the matching *inside* the compare-and-set
+            rather than before it: the `used` set this consults has to be the
+            one the write is conditioned on, or a code another request spent
+            microseconds ago still reads as unspent here. Returning None
+            declines the write, which update_data() reports as a failed
+            verification.
+            """
+            used = set(current.get("used", []))
+            plaintext = current.get("migrated_plaintext", False)
+            for index, stored in enumerate(current.get("codes", [])):
+                if index in used:
+                    continue
+                matched = (strings_equal(stored, submitted) if plaintext
+                           else check_password(submitted, stored))
+                if matched:
+                    return {**current, "used": sorted(used | {index})}
+            return None
+
+        if not update_data(auth, spend):
+            return False
+        auth.record_usage()
+        return True
