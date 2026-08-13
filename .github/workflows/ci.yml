@@ -24,10 +24,10 @@ jobs:
         django: ["4.2", "5.2"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10.0.0
         with:
           enable-cache: true
 
@@ -54,8 +54,8 @@ jobs:
     name: Coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.0
         with:
           enable-cache: true
       - run: uv run coverage run --source=django_mfa test_runner.py
@@ -65,8 +65,8 @@ jobs:
     name: Docs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.0
         with:
           enable-cache: true
 
@@ -149,8 +149,8 @@ jobs:
     name: Build and install-smoke
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.0
         with:
           enable-cache: true
 
@@ -180,7 +180,7 @@ jobs:
         working-directory: /tmp
         run: /tmp/smoke/bin/python "$GITHUB_WORKSPACE/.github/scripts/smoke_installed_wheel.py"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: distributions
           path: dist/

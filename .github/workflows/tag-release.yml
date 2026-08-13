@@ -41,7 +41,7 @@ jobs:
     name: Tag and release if the version changed
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Existing tags are how this decides whether the version was already
           # released, and a shallow clone fetches none of them -- it would
@@ -49,7 +49,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10.0.0
         with:
           enable-cache: true
 
