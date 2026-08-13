@@ -19,6 +19,7 @@ from fido2.webauthn import (
     PublicKeyCredentialUserEntity,
 )
 
+from django_mfa.atomic import update_data
 from django_mfa.conf import settings as mfa_settings
 from django_mfa.handles import user_handle_for
 from django_mfa.models import Authenticator
@@ -251,7 +252,6 @@ class WebAuthnAdapter(Adapter):
             # still propagate unchanged, since that is a distinct,
             # deliberate "reject this" signal, not a missing-row race.
             return False
-        stored = auth.data.get("sign_count", 0)
         # The return value of authenticate_complete() carries no counter at
         # all in fido2 2.2.1, so the new counter has to be recovered
         # independently by re-parsing the same response the client sent.
@@ -259,22 +259,41 @@ class WebAuthnAdapter(Adapter):
         # authenticator's own idea of its counter.
         new_count = AuthenticationResponse.from_dict(
             credential).response.authenticator_data.counter
-        # Clone detection: a signature counter that fails to advance
-        # suggests the authenticator (or its key material) has been cloned
-        # and a second device is replaying/racing assertions. But counters
-        # are OPTIONAL in the WebAuthn spec -- many authenticators
-        # (notably Apple/iCloud passkeys) never implement one and always
-        # report 0. Treat "both stored and new are 0" as the legitimate
-        # counter-less case and accept it unconditionally; for every other
-        # case, the new counter must be strictly greater than the stored
-        # one or this assertion is rejected as a possible clone. Do NOT
-        # simplify this to a plain "new > stored" check -- that would lock
-        # out every user of a counter-less authenticator, which today is a
-        # very large share of them.
-        if not (new_count == 0 and stored == 0) and new_count <= stored:
-            raise ValueError("Authenticator sign count did not increase.")
 
-        auth.data["sign_count"] = new_count
-        auth.save(update_fields=["data"])
+        def advance(current):
+            """Clone-check against the committed counter, then advance it.
+
+            Runs inside the compare-and-set rather than before it, and for
+            the same reason clone detection exists at all: two racing
+            assertions from a cloned credential would otherwise both read the
+            pre-advance counter, both clear the check below, and the loser's
+            write would drag the stored counter *backwards* -- leaving the
+            clone undetected and every subsequent replay looking fresh.
+            """
+            stored = current.get("sign_count", 0)
+            # Clone detection: a signature counter that fails to advance
+            # suggests the authenticator (or its key material) has been
+            # cloned and a second device is replaying/racing assertions. But
+            # counters are OPTIONAL in the WebAuthn spec -- many
+            # authenticators (notably Apple/iCloud passkeys) never implement
+            # one and always report 0. Treat "both stored and new are 0" as
+            # the legitimate counter-less case and accept it
+            # unconditionally; for every other case, the new counter must be
+            # strictly greater than the stored one or this assertion is
+            # rejected as a possible clone. Do NOT simplify this to a plain
+            # "new > stored" check -- that would lock out every user of a
+            # counter-less authenticator, which today is a very large share
+            # of them.
+            #
+            # Raising (rather than returning None to decline) is deliberate:
+            # it propagates straight out of update_data() without retrying,
+            # keeping "this is a clone" a distinct, loud signal from "this
+            # assertion simply could not be honoured".
+            if not (new_count == 0 and stored == 0) and new_count <= stored:
+                raise ValueError("Authenticator sign count did not increase.")
+            return {**current, "sign_count": new_count}
+
+        if not update_data(auth, advance):
+            return False
         auth.record_usage()
         return True

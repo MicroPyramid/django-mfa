@@ -6,6 +6,7 @@ from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase, override_settings
 from fido2.server import Fido2Server
 
+import django_mfa.adapters.webauthn as webauthn_mod
 from django_mfa.adapters.webauthn import WebAuthnAdapter
 from django_mfa.handles import user_from_handle
 from django_mfa.models import Authenticator
@@ -365,3 +366,58 @@ class WebAuthnVerifyTests(TestCase):
 
         self.assertFalse(verified)
         self.assertFalse(Authenticator.objects.filter(pk=self.auth.pk).exists())
+
+
+@override_settings(MFA_FIDO2_RP_ID="testserver", ALLOWED_HOSTS=["testserver"])
+class WebAuthnSignCountConcurrencyTests(TestCase):
+    """Clone detection is only as good as the counter it compares against.
+
+    The stored sign count was read, checked, and written back as a plain
+    read-modify-write. Two racing assertions from a cloned credential both
+    read the pre-advance counter, both clear the "must increase" check, and
+    the loser's write drags the stored counter backwards -- so the clone the
+    check exists to catch goes undetected.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user("a@example.com", password="pw")
+        self.adapter = WebAuthnAdapter()
+        self.device = SoftwareAuthenticator(origin="https://testserver",
+                                            rp_id="testserver")
+        self.request = RequestFactory().get("/", secure=True)
+        self.request.user = self.user
+        self.request.session = {}
+        ctx = self.adapter.begin_enroll(self.request)
+        credential = self.device.create(json.loads(ctx["options"]))
+        self.auth = self.adapter.complete_enroll(
+            self.request, {"credential": json.dumps(credential), "name": "k"})
+
+    def _assert(self):
+        ctx = self.adapter.begin_verify(self.request, self.user)
+        return json.dumps(self.device.get(json.loads(ctx["options"])))
+
+    def test_a_counter_advanced_mid_verification_is_not_regressed(self):
+        assertion = self._assert()  # carries sign count 1
+        fired = []
+        real = webauthn_mod.AuthenticationResponse
+
+        class Interfering:
+            @staticmethod
+            def from_dict(payload, _auth=self.auth):
+                # Fire once, after complete_verify() has read the stored
+                # counter but before it writes: a concurrent assertion lands
+                # and advances the counter well past this one.
+                if not fired:
+                    fired.append(True)
+                    Authenticator.objects.filter(pk=_auth.pk).update(
+                        data={**_auth.data, "sign_count": 5})
+                return real.from_dict(payload)
+
+        with patch.object(webauthn_mod, "AuthenticationResponse", Interfering):
+            with self.assertRaises(ValueError):
+                self.adapter.complete_verify(
+                    self.request, self.user, {"credential": assertion})
+
+        self.assertTrue(fired, "the interleaving never happened")
+        self.auth.refresh_from_db()
+        self.assertEqual(self.auth.data["sign_count"], 5)

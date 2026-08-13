@@ -36,7 +36,11 @@ A locked-out attempt returns exactly what a wrong code returns. The lockout is
 therefore not observable, and cannot be used to probe whether an account exists or
 has MFA enabled.
 
-Two properties worth understanding before you rely on it:
+The window is fixed from the first failed attempt, not slid forward by each
+subsequent one: five failures at 12:00:00 and 12:04:59 both fall in the same window,
+which reopens at 12:05:00.
+
+Three properties worth understanding before you rely on it:
 
 - **The counter lives in Django's cache, with no database fallback.** If the cache is
   empty, flushed, or restarted, attempts are allowed again. This is a deliberate
@@ -45,10 +49,33 @@ Two properties worth understanding before you rely on it:
 - **It is only as shared as your cache is.** With `LocMemCache` and four worker
   processes, each process keeps its own counter, so the effective limit is four times
   what you configured. See the checklist below.
+- **It needs a cache backend with atomic `incr()`.** The counter is incremented with
+  `cache.add()` followed by `cache.incr()`, which redis and memcached evaluate
+  server-side and atomically. `FileBasedCache` implements neither atomically, so
+  parallel attempts can overwrite each other's increments and the limit stops binding
+  at the attacker's chosen concurrency — do not use it for this. (Django does not
+  recommend it for production generally.)
 
 Invalid values are rejected loudly at parse time rather than silently misbehaving: a
 count of `0` would lock out every user permanently, and a window of `0` would expire
 the counter instantly and disable the throttle. Both raise `ValueError`.
+
+### Authenticator app (TOTP)
+
+Secrets are 160-bit values from `secrets.token_bytes` (i.e. `os.urandom`), the length
+RFC 4226 recommends. They are never drawn from the `random` module, whose Mersenne
+Twister state is recoverable from observed output.
+
+**A code can be redeemed exactly once.** django-mfa records the time step each
+accepted code belonged to and refuses any code at or below it, as RFC 6238 §5.2
+requires. This matters because the ±1 window below means a code is otherwise valid
+for about 90 seconds: without single-use enforcement, a code read over someone's
+shoulder or captured in transit stays usable for the rest of that window.
+
+Verification accepts the previous and next 30-second code as well as the current one
+(`TOTP_VALID_WINDOW = 1`), matching Google Authenticator, django-otp and allauth. The
+tolerance costs three guesses out of a million rather than one, which the rate limit
+above covers.
 
 ### Cloned-authenticator detection
 
@@ -79,14 +106,38 @@ them at the picker but is never challenged on their strength alone.
 
 ### Secrets at rest
 
-TOTP secrets are stored in plaintext by default and encrypted when
-`MFA_SECRET_ENCRYPTION_KEYS` is set — see {doc}`settings` for rotation. WebAuthn
-stores only a public key, so there is no secret to protect. Recovery codes are
-hashed, not encrypted, because they never need to be read back.
+TOTP secrets are stored in plaintext. WebAuthn stores only a public key, so there is
+no secret to protect. Recovery codes are hashed, not encrypted, because they never
+need to be read back.
+
+:::{warning}
+`MFA_SECRET_ENCRYPTION_KEYS` does **not** encrypt anything, despite the name. It
+signs the stored value with `django.core.signing`, which gives integrity, not
+confidentiality — the payload is plain base64 and anyone holding the database can
+recover the secret without any key. It is deprecated and kept only so existing values
+keep reading. Treat the TOTP secret column as plaintext when deciding who may read
+your database.
+:::
 
 Any comparison between a submitted value and a stored one goes through
 `django_mfa.utils.strings_equal`, which normalizes and then uses
 `hmac.compare_digest`. There is no `==` on a secret anywhere in the package.
+
+### Django admin
+
+`AuthenticatorAdmin` never exposes `Authenticator.data` — not as a form field, not in
+the changelist, not as a search field. That blob holds the TOTP secret, the
+recovery-code hashes and the WebAuthn credential, so under a default `ModelAdmin` any
+staff account with `view_authenticator` could read another user's TOTP secret
+(including a superuser's) and generate valid codes for them, and one with
+`change_authenticator` could replace it with a secret of its own choosing.
+
+Adding and editing are disabled outright. **Deleting is deliberately still allowed**
+— revoking a lost authenticator for a locked-out user is the one legitimate support
+operation here, and removing it would push operators into editing the database by
+hand.
+
+If you register your own `ModelAdmin` for `Authenticator`, keep `data` out of it.
 
 ### WebAuthn user handles
 

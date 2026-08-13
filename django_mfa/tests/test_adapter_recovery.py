@@ -1,8 +1,11 @@
 # django_mfa/tests/test_adapter_recovery.py
+from unittest import mock
+
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase
 
+import django_mfa.adapters.recovery_codes as rc
 from django_mfa.adapters.recovery_codes import RecoveryCodesAdapter
 from django_mfa.models import Authenticator
 from django_mfa.registry import registry
@@ -130,3 +133,61 @@ class RecoveryCodesAdapterTests(TestCase):
         primary = [a.type for a in registry.primary_enabled_for(self.user)]
         self.assertIn("recovery_codes", enabled)
         self.assertNotIn("recovery_codes", primary)
+
+
+class RecoveryCodeConcurrencyTests(TestCase):
+    """Consuming a code must survive a concurrent write to the same row.
+
+    docs/security.md promises each code is "usable once" and that "a replay
+    is detected rather than silently accepted". A plain read-modify-write on
+    the `used` list breaks that: two simultaneous POSTs both read the
+    pre-consumption blob and the second save() discards the first's, handing
+    a spent code back to the user as unspent.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user("a@example.com", password="pw")
+        self.adapter = RecoveryCodesAdapter()
+
+    def test_a_code_spent_mid_verification_is_not_resurrected(self):
+        codes = self.adapter.generate(self.user)
+        fired = []
+        real_check_password = rc.check_password
+
+        def interfering(submitted, stored):
+            # Fire exactly once, at the moment this verification has read the
+            # row but not yet written it back -- the window a second
+            # simultaneous request lands in.
+            if not fired:
+                fired.append(True)
+                self.assertTrue(self.adapter.complete_verify(
+                    None, self.user, {"code": codes[9]}))
+            return real_check_password(submitted, stored)
+
+        with mock.patch.object(rc, "check_password", interfering):
+            self.assertTrue(self.adapter.complete_verify(
+                None, self.user, {"code": codes[0]}))
+
+        self.assertTrue(fired, "the interleaving never happened")
+        row = Authenticator.objects.get(user=self.user, type="recovery_codes")
+        self.assertEqual(sorted(row.data["used"]), [0, 9])
+        self.assertEqual(self.adapter.remaining(self.user), 8)
+
+    def test_neither_raced_code_can_be_redeemed_again(self):
+        codes = self.adapter.generate(self.user)
+        fired = []
+        real_check_password = rc.check_password
+
+        def interfering(submitted, stored):
+            if not fired:
+                fired.append(True)
+                self.adapter.complete_verify(None, self.user, {"code": codes[9]})
+            return real_check_password(submitted, stored)
+
+        with mock.patch.object(rc, "check_password", interfering):
+            self.adapter.complete_verify(None, self.user, {"code": codes[0]})
+
+        self.assertFalse(self.adapter.complete_verify(
+            None, self.user, {"code": codes[0]}))
+        self.assertFalse(self.adapter.complete_verify(
+            None, self.user, {"code": codes[9]}))

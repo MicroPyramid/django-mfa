@@ -595,8 +595,9 @@ class ManageFactorsTests(TestCase):
 @override_settings(MFA_REMEMBER_MY_BROWSER=True, MFA_REMEMBER_DAYS=1)
 class RememberMyBrowserTests(TestCase):
     """verify_rmb_cookie / update_rmb_cookie / delete_rmb_cookie carried over
-    from the legacy views.py, now reading Authenticator (type=totp,
-    data["secret"], possibly encrypted) instead of UserOTP.secret_key."""
+    from the legacy views.py, now reading Authenticator instead of UserOTP.
+    The salt binds the cookie to the user's enrolled factors -- see
+    RememberMyBrowserFactorBindingTests below for that behaviour."""
 
     def setUp(self):
         self.user = User.objects.create_user("a@example.com", password="pw")
@@ -639,14 +640,14 @@ class RememberMyBrowserTests(TestCase):
         self.assertEqual(response.cookies[cookie_name]["max-age"], 0)
         self.assertEqual(response.cookies[cookie_name].value, "")
 
-    def test_generate_cookie_salt_uses_the_decrypted_secret(self):
+    def test_generate_cookie_salt_is_non_empty_for_an_enrolled_user(self):
         self.assertTrue(_generate_cookie_salt(self.user))
 
-    def test_generate_cookie_salt_empty_without_a_totp_authenticator(self):
+    def test_generate_cookie_salt_empty_without_any_authenticator(self):
         other = User.objects.create_user("b@example.com", password="pw")
         self.assertEqual(_generate_cookie_salt(other), "")
 
-    def test_verify_false_without_a_totp_authenticator(self):
+    def test_verify_false_without_any_authenticator(self):
         other = User.objects.create_user("c@example.com", password="pw")
         request = self.factory.get("/")
         request.user = other
@@ -1094,3 +1095,90 @@ class HiddenAttributeStylesheetTests(TestCase):
             too_early, [],
             f"these class rules set `display` before the [hidden] rule: "
             f"{too_early}")
+
+
+@override_settings(MFA_REMEMBER_MY_BROWSER=True, MFA_REMEMBER_DAYS=30)
+class RememberMyBrowserFactorBindingTests(TestCase):
+    """The trusted-browser cookie must work for every factor, and must stop
+    working when the factors it was earned with change.
+
+    The salt used to be derived from the TOTP secret alone, so a user whose
+    only factor was a security key or passkey got a cookie written but never
+    honoured -- MFA_REMEMBER_MY_BROWSER silently did nothing for them, while
+    docs/settings.md documents it unconditionally. Binding the salt to the
+    user's enrolled factors instead keeps the original invalidate-on-change
+    property (re-enrolling TOTP still kills the cookie) and extends it to
+    every other factor type.
+    """
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _request(self, user, cookies=None):
+        request = self.factory.get("/")
+        request.user = user
+        request.COOKIES = dict(cookies or {})
+        return request
+
+    def _round_trip(self, user):
+        response = update_rmb_cookie(self._request(user), HttpResponse())
+        name = "RMB_" + str(user.pk)
+        if name not in response.cookies:
+            return False
+        return bool(verify_rmb_cookie(
+            self._request(user, {name: response.cookies[name].value})))
+
+    def _webauthn_user(self, email):
+        user = User.objects.create_user(email, password="pw")
+        Authenticator.objects.create(
+            user=user, type="webauthn", name="key",
+            data={"credential_id": "aa", "credential_data": "bb",
+                  "sign_count": 0})
+        return user
+
+    def test_a_webauthn_only_browser_can_be_trusted(self):
+        self.assertTrue(self._round_trip(self._webauthn_user("w@example.com")))
+
+    def test_a_totp_browser_can_still_be_trusted(self):
+        user = User.objects.create_user("t@example.com", password="pw")
+        Authenticator.objects.create(
+            user=user, type="totp", data={"secret": encrypt("JBSWY3DPEHPK3PXP")})
+        self.assertTrue(self._round_trip(user))
+
+    def test_no_cookie_is_written_for_a_user_with_no_factors(self):
+        user = User.objects.create_user("n@example.com", password="pw")
+        response = update_rmb_cookie(self._request(user), HttpResponse())
+        self.assertNotIn("RMB_" + str(user.pk), response.cookies)
+
+    def test_removing_the_factor_invalidates_an_existing_cookie(self):
+        user = self._webauthn_user("r@example.com")
+        response = update_rmb_cookie(self._request(user), HttpResponse())
+        name = "RMB_" + str(user.pk)
+        value = response.cookies[name].value
+
+        Authenticator.objects.filter(user=user).delete()
+
+        self.assertFalse(verify_rmb_cookie(self._request(user, {name: value})))
+
+    def test_re_enrolling_totp_invalidates_an_existing_cookie(self):
+        user = User.objects.create_user("e@example.com", password="pw")
+        Authenticator.objects.create(
+            user=user, type="totp", data={"secret": encrypt("JBSWY3DPEHPK3PXP")})
+        response = update_rmb_cookie(self._request(user), HttpResponse())
+        name = "RMB_" + str(user.pk)
+        value = response.cookies[name].value
+
+        Authenticator.objects.filter(user=user, type="totp").delete()
+        Authenticator.objects.create(
+            user=user, type="totp", data={"secret": encrypt("KRSXG5CTMVRXEZLU")})
+
+        self.assertFalse(verify_rmb_cookie(self._request(user, {name: value})))
+
+    def test_one_users_cookie_is_not_honoured_for_another(self):
+        first = self._webauthn_user("x@example.com")
+        second = self._webauthn_user("y@example.com")
+        response = update_rmb_cookie(self._request(first), HttpResponse())
+        value = response.cookies["RMB_" + str(first.pk)].value
+
+        request = self._request(second, {"RMB_" + str(second.pk): value})
+        self.assertFalse(verify_rmb_cookie(request))
