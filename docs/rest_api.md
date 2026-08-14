@@ -141,13 +141,18 @@ draw the challenge screen from.
                       "supports_multiple": false}],
       "has_primary_factor": true,
       "recovery_codes_remaining": 10,
-      "stepup_max_age": 300
+      "stepup_max_age": 300,
+      "grace": null
     }
 
 `can_verify_with` and `can_enroll` answer different questions and you need both:
 the first includes recovery codes (a valid way to prove identity), the second is
 what may still be added. `has_primary_factor` is the "is this account actually
 protected" answer, which recovery codes alone do not satisfy.
+
+| Field | Meaning |
+| --- | --- |
+| `grace` | `null`, or `{"required_at": "2026-09-01T00:00:00Z", "days_remaining": N}` when this user would be required to enrol but is not yet. `required_at` is encoded the same way as `created_at` above (`DjangoJSONEncoder`, not `.isoformat()`), so it always carries the trailing `Z` form. Display only — nothing is enforced against `days_remaining`. |
 
 `Authenticator.data` — the TOTP secret, the recovery-code hashes, the WebAuthn
 credential — is never in any response, from any endpoint.

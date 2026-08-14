@@ -76,6 +76,7 @@ what the `{% extends base_template %}` line at the top resolves.
 | `recovery_codes_remaining` | Integer count of unused codes. |
 | `owned_by_enterprise` | The `MFA_OWNED_BY_ENTERPRISE` setting, so the template can hide the remove button for WebAuthn. |
 | `mfa_enrollment_required` | `True` only when this user is both required to hold a factor (`MFA_REQUIRED`, see {doc}`enforcement`) and holds none yet — i.e. exactly when `MfaMiddleware` walled them onto this page. If you shadow this template, render something here: without it, a required user lands on a security page that gives no reason for the wall they just hit. |
+| `grace` | A `policy.GraceState` (`required_at`, `days_remaining`) when this user would be required to enrol but is not yet, else `None`. |
 
 ### `picker.html`
 

@@ -1,3 +1,4 @@
+import datetime
 import time
 
 from django.conf import settings as django_settings
@@ -7,6 +8,7 @@ from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import include, path, reverse
 from django.views.generic import View
 
+from django_mfa import session as mfa_session
 from django_mfa.decorators import (
     PENDING,
     UNENROLLED,
@@ -221,3 +223,83 @@ class UnchallengedSessionTests(TestCase):
         Authenticator.objects.create(
             user=self.user, type=Authenticator.Type.RECOVERY_CODES, data={})
         self.assertEqual(enforcement_state(self._request()), UNENROLLED)
+
+
+@override_settings(ROOT_URLCONF="django_mfa.tests.test_decorators",
+                   LOGIN_URL="/login/", MFA_REQUIRED=True,
+                   MFA_REQUIRED_FROM=datetime.date(2099, 1, 1))
+class GraceDoesNotOpenDecoratedViewsTests(TestCase):
+    """The load-bearing test for this feature.
+
+    Grace suppresses MFA_REQUIRED only -- exactly as an MfaExemption does.
+    MFA_REQUIRED picks users, the decorator picks views, and an in-grace user
+    reaching a decorated billing page is still redirected. If grace is ever
+    moved into decorators.enforcement_state(), THIS is what fails, instead of
+    a billing page quietly opening.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user("g@example.com", password="pw")
+        self.client = Client()
+        self.decorated_url = reverse("protected")
+
+    def test_mfa_required_still_blocks_an_in_grace_user(self):
+        self.client.login(username="g@example.com", password="pw")
+        response = self.client.get(self.decorated_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("mfa:security_settings"), response["Location"])
+
+
+@override_settings(ROOT_URLCONF="django_mfa.tests.test_decorators",
+                   LOGIN_URL="/login/")
+class EnforcementRedirectTests(TestCase):
+    """decorators.enforcement_redirect(), the public form _enforce() wraps.
+
+    No verified_request/pending_request helpers exist elsewhere in this
+    module, so these are built the same way UnchallengedSessionTests._request
+    builds its requests: RequestFactory plus session.start_pending/
+    mark_verified directly, rather than a new fixture style.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user("r@example.com", password="pw")
+        self.factory = RequestFactory()
+        Authenticator.objects.create(
+            user=self.user, type=Authenticator.Type.TOTP, data={})
+
+    def _request(self):
+        request = self.factory.get("/somewhere/")
+        request.user = self.user
+        request.session = {}
+        return request
+
+    def verified_request(self):
+        request = self._request()
+        mfa_session.mark_verified(request, "totp")
+        return request
+
+    def pending_request(self):
+        request = self._request()
+        mfa_session.start_pending(request)
+        return request
+
+    def test_returns_none_for_a_verified_request(self):
+        from django_mfa import decorators
+
+        request = self.verified_request()   # reuse this module's existing helper
+        self.assertIsNone(decorators.enforcement_redirect(request))
+
+    def test_next_url_overrides_the_current_path(self):
+        """Task 8 needs this: the admin bounces off /admin/login/, and
+        replaying that path after verification is a pointless round trip."""
+        from django_mfa import decorators
+
+        request = self.pending_request()    # reuse this module's existing helper
+        response = decorators.enforcement_redirect(request, next_url="/admin/")
+        # redirect_to_login() builds the querystring with urlencode(safe="/"),
+        # so the path separators in `next` survive unescaped -- "next=/admin/",
+        # not "next=%2Fadmin%2F". (The brief this test was transcribed from
+        # asserted the percent-encoded form; that does not match Django's
+        # actual QueryDict.urlencode(safe="/") behaviour in redirect_to_login,
+        # confirmed by running this test against the implementation above.)
+        self.assertIn("next=/admin/", response["Location"])

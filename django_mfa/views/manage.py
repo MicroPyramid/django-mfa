@@ -42,6 +42,10 @@ def security_settings(request):
             policy.resolve()
             and not registry.has_primary_factor(request.user)
             and policy.mfa_required_for(request.user)),
+        # None unless this user would be walled but is not yet. The template
+        # can say "you have N days"; nothing here enforces against it --
+        # see policy.GraceState.
+        "grace": policy.grace_state(request.user),
     }
     return render(request, "django_mfa/security.html", context)
 

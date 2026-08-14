@@ -12,6 +12,68 @@ Versions follow [PEP 440](https://peps.python.org/pep-0440/). The version in
 `pyproject.toml` is the only place it is written; the git tag and the GitHub
 Release are derived from it (see [docs/contributing.md](docs/contributing.md)).
 
+## 4.6.0
+
+### Added
+
+- **A rollout ramp for `MFA_REQUIRED`**, for a project turning it on against
+  users who already exist rather than a fresh install. `MFA_REQUIRED_FROM`
+  (a `date`/`datetime` before which nobody is walled by `MFA_REQUIRED`,
+  however it answers) and `MFA_GRACE_PERIOD` (an `int` number of days, or a
+  `timedelta`, each user gets from their own anchor) combine so that a user
+  is required from whichever of `MFA_REQUIRED_FROM` and
+  `anchor + MFA_GRACE_PERIOD` is *later* — an existing account is governed
+  by the announced cutover, while someone who signs up after it still gets
+  their full window. `MFA_GRACE_ANCHOR` supplies a per-user anchor other
+  than `user.date_joined` (a dotted path or callable, `(user) -> datetime |
+  None`) for a clock `date_joined` can't express, such as a migration
+  cohort. `policy.required_at(user)` and `policy.grace_state(user)` (a
+  `GraceState(required_at, days_remaining)`, display-only) are the public
+  entry points. Grace suppresses `MFA_REQUIRED` only — it does not open
+  `@mfa_required`/`MfaRequiredMixin` views, exactly like an `MfaExemption`,
+  and it does **not** open the `MFA_PROTECT_ADMIN` gate either: that gate is
+  enforced through `decorators.enforcement_state()`, which never consults
+  `django_mfa.policy` at all. See [docs/enforcement.md](docs/enforcement.md).
+- **Grace surfaced everywhere the enrollment wall already is**: a `grace`
+  key in `security_settings`'s context, the opt-in
+  `django_mfa.context_processors.mfa` template context processor
+  (`mfa_grace`), the JSON API's `state` endpoint (`grace` field), and
+  `mfa_status`'s new "In grace until" line. `mfa_report` now also lists
+  users currently in grace — see the Changed entry below for its CSV
+  output.
+- **`MFA_PROTECT_ADMIN`** (default `False`). When `True`, no page on the
+  default admin site (`django.contrib.admin.site`) is reachable without a
+  verified session — enforced by `django_mfa.admin_site.protect_admin_site()`
+  wrapping that site's own `has_permission()`/`login()` in place, so it
+  holds even on a project that never installed `MfaMiddleware`. A project
+  mounting its own `AdminSite` instance gets no protection from the setting
+  alone; `django_mfa.admin_site.MfaAdminMixin` covers that case. It also
+  unions `is_staff` into `policy.resolve()`'s predicate, so staff become
+  subject to `MFA_REQUIRED` without a second setting — without rewriting
+  `MFA_REQUIRED` itself. **`MFA_ADMIN_STEPUP`** (default `False`) additionally
+  requires a challenge within `MFA_STEPUP_MAX_AGE`, not merely a verified
+  session, once `MFA_PROTECT_ADMIN` is on. See
+  [docs/enforcement.md](docs/enforcement.md).
+- **System checks `django_mfa.E010`** (grace is configured but cannot
+  apply — `MFA_REQUIRED_FROM` isn't a date, `MFA_GRACE_PERIOD` is negative
+  or not a number, or it's set with no usable anchor) and
+  **`django_mfa.E011`** (`MFA_ADMIN_STEPUP` set without `MFA_PROTECT_ADMIN`,
+  so nothing reads it and the admin stays unprotected).
+- **`decorators.enforcement_redirect(request, require_primary_factor=True,
+  next_url=None)`** is now public — it renders an `enforcement_state()` rung
+  as a redirect, and `django_mfa.admin_site` calls it directly to reuse the
+  same two destinations `MfaMiddleware` and `@mfa_required` already redirect
+  to. The previous private name, `_enforce`, remains as a back-compat alias.
+
+### Changed
+
+- `mfa_report --format csv` gains a `grace_until` column, appended after the
+  existing ones (so indexing by position still works for those). Users
+  inside a grace window are now listed by `mfa_report`; previously — before
+  grace existed — there was no such state.
+
+No new migration — this release adds no models.
+
 ## 4.5.0
 
 ### Added

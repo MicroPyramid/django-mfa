@@ -47,6 +47,12 @@ class Command(BaseCommand):
         required = policy.mfa_required_for(user)
         self.stdout.write(f"Required: {'yes' if required else 'no'}")
 
+        grace = policy.grace_state(user)
+        if grace is not None:
+            self.stdout.write(
+                f"In grace until {grace.required_at:%Y-%m-%d} "
+                f"({grace.days_remaining} days)")
+
         exemption = MfaExemption.objects.active_for(user)
 
         if exemption is not None:

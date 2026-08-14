@@ -47,6 +47,7 @@ Django's own `user_logged_in` signal.
 | ➕ **Several keys at once** | A user can register a work laptop's Touch ID *and* a backup YubiKey, each with its own name. |
 | 🌍 **Six languages** | German, Spanish, French, Brazilian Portuguese, Japanese and Simplified Chinese ship translated. Switch on `USE_I18N` and they work. |
 | 🔌 **A JSON API** | Opt-in. Every flow above as JSON, for an SPA or mobile client that renders its own screens. No DRF dependency, and a revocable session token for clients that hold no cookie. |
+| 🛡️ **Admin protection** | `MFA_PROTECT_ADMIN = True`. No page on `django.contrib.admin`'s default site without a verified second factor — enforced by the admin itself, so it holds even without the middleware. A project mounting its own `AdminSite` needs the `MfaAdminMixin` instead. Optionally require a *recent* challenge, not just a verified session. |
 
 ## Install
 

@@ -1,13 +1,22 @@
+import datetime
+from unittest.mock import patch
+
 from django.test import TestCase, override_settings
 
 from django_mfa.checks import (
+    check_admin_stepup,
     check_client_ip_resolver,
     check_fido2_rp_id,
+    check_grace_configuration,
     check_rate_limit_backend,
     check_rate_limit_specs,
     check_webauthn_backend_configured,
 )
 from django_mfa.conf import settings as mfa_settings
+
+#: A dotted path to this resolves to something that isn't callable, for
+#: test_non_callable_anchor_is_an_error below.
+NOT_CALLABLE = object()
 
 
 class ConfTests(TestCase):
@@ -65,6 +74,99 @@ class ChecksTests(TestCase):
         """
         self._unregister_webauthn()
         self.assertEqual(check_fido2_rp_id(app_configs=None), [])
+
+    def test_no_grace_settings_is_fine(self):
+        self.assertEqual(check_grace_configuration(app_configs=None), [])
+
+    @override_settings(MFA_GRACE_PERIOD=14)
+    def test_grace_period_with_date_joined_is_fine(self):
+        self.assertEqual(check_grace_configuration(app_configs=None), [])
+
+    @override_settings(MFA_GRACE_PERIOD=-1)
+    def test_negative_period_is_an_error(self):
+        errors = check_grace_configuration(app_configs=None)
+        self.assertEqual([e.id for e in errors], ["django_mfa.E010"])
+
+    @override_settings(MFA_REQUIRED_FROM="2026-09-01")
+    def test_a_string_cutover_is_an_error(self):
+        """A silent no-grace failure is the worst outcome this feature has."""
+        errors = check_grace_configuration(app_configs=None)
+        self.assertEqual([e.id for e in errors], ["django_mfa.E010"])
+
+    @override_settings(MFA_REQUIRED_FROM=datetime.date(2026, 9, 1))
+    def test_a_date_cutover_is_fine(self):
+        self.assertEqual(check_grace_configuration(app_configs=None), [])
+
+    @override_settings(MFA_GRACE_PERIOD=14)
+    def test_grace_period_with_no_anchor_and_no_date_joined_is_an_error(self):
+        """Drives the anchor-check elif branch to its failing form. checks.py
+        calls get_user_model() *inside* the function (imported there, not at
+        module scope), so the patch target is
+        django.contrib.auth.get_user_model -- patching
+        django_mfa.checks.get_user_model raises AttributeError, since no such
+        module attribute exists.
+        """
+        class NoDateJoined:
+            pass
+
+        with patch("django.contrib.auth.get_user_model", return_value=NoDateJoined):
+            errors = check_grace_configuration(app_configs=None)
+            self.assertEqual([e.id for e in errors], ["django_mfa.E010"])
+
+            with override_settings(MFA_GRACE_ANCHOR=lambda user: None):
+                self.assertEqual(check_grace_configuration(app_configs=None), [])
+
+    @override_settings(MFA_GRACE_PERIOD="14")
+    def test_non_numeric_period_is_an_error(self):
+        """A fat-fingered string ("14" instead of 14) must be reported like
+        every other bad setting in this module, not raise a bare TypeError
+        out of `period < 0`.
+        """
+        errors = check_grace_configuration(app_configs=None)
+        self.assertEqual([e.id for e in errors], ["django_mfa.E010"])
+
+    @override_settings(
+        MFA_GRACE_PERIOD=14,
+        MFA_GRACE_ANCHOR="django_mfa.tests.test_conf.this_module_does_not_exist_at_all")
+    def test_unimportable_anchor_is_an_error(self):
+        """MFA_GRACE_PERIOD is set here so this isolates the import failure
+        from test_anchor_without_period_is_an_error's condition below --
+        without it both errors would fire at once.
+        """
+        errors = check_grace_configuration(app_configs=None)
+        self.assertEqual([e.id for e in errors], ["django_mfa.E010"])
+
+    @override_settings(
+        MFA_GRACE_PERIOD=14,
+        MFA_GRACE_ANCHOR="django_mfa.tests.test_conf.NOT_CALLABLE")
+    def test_non_callable_anchor_is_an_error(self):
+        errors = check_grace_configuration(app_configs=None)
+        self.assertEqual([e.id for e in errors], ["django_mfa.E010"])
+
+    @override_settings(MFA_GRACE_PERIOD=14, MFA_GRACE_ANCHOR=lambda user: None)
+    def test_callable_anchor_with_period_is_fine(self):
+        self.assertEqual(check_grace_configuration(app_configs=None), [])
+
+    @override_settings(MFA_GRACE_PERIOD=None, MFA_GRACE_ANCHOR=lambda user: None)
+    def test_anchor_without_period_is_an_error(self):
+        """Same failure class as MFA_ADMIN_STEPUP without MFA_PROTECT_ADMIN
+        (E011): required_at() never calls _anchor() when _period() is None,
+        so the anchor is silently never consulted.
+        """
+        errors = check_grace_configuration(app_configs=None)
+        self.assertEqual([e.id for e in errors], ["django_mfa.E010"])
+
+    def test_neither_admin_setting_is_fine(self):
+        self.assertEqual(check_admin_stepup(app_configs=None), [])
+
+    @override_settings(MFA_PROTECT_ADMIN=True, MFA_ADMIN_STEPUP=True)
+    def test_both_together_is_fine(self):
+        self.assertEqual(check_admin_stepup(app_configs=None), [])
+
+    @override_settings(MFA_ADMIN_STEPUP=True)
+    def test_stepup_without_protect_admin_is_an_error(self):
+        errors = check_admin_stepup(app_configs=None)
+        self.assertEqual([e.id for e in errors], ["django_mfa.E011"])
 
 
 class MfaFactorsAdapterRegistrationTests(TestCase):
