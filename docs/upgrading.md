@@ -120,3 +120,55 @@ behaviour exactly.
 The verification picker now also honours `?next=`, so a single-factor user is
 returned to the page they requested after logging in rather than to
 `LOGIN_REDIRECT_URL`.
+
+## 4.5.0: rate-limit counters move to the database, and two behaviour changes
+
+**Run `manage.py migrate`.** Migration `0010` adds `RateLimitCounter`, and
+`MFA_RATE_LIMIT_BACKEND` defaults to `"database"`, so the table is in use from
+the first request after the upgrade. If you deploy code before migrations, set
+`MFA_RATE_LIMIT_BACKEND = "cache"` for that window — the rate limiter fails open
+on a store it cannot reach, so a missing table means unthrottled verification
+rather than an outage, which is the wrong direction to be in unnoticed.
+
+Then schedule the new `manage.py mfa_prune` alongside `django-admin
+clearsessions`. Nothing breaks without it; the table grows forever, and the
+per-IP budget puts client addresses in it.
+
+Two changes are visible without any configuration:
+
+**A per-IP verification budget is now enforced**, `MFA_VERIFY_IP_RATE_LIMIT`,
+default `"50/5m"`. Fifty *failed* second-factor attempts from one address in
+five minutes is far outside normal use, so most installs will never notice. Two
+that will:
+
+- **You run behind a proxy or load balancer.** `REMOTE_ADDR` is then the proxy,
+  every client shares one counter, and the budget binds far too early. Set
+  `MFA_CLIENT_IP_RESOLVER` — see {doc}`settings`. `X-Forwarded-For` is not read
+  for you, deliberately; a client-set header would let an attacker both evade
+  the budget and exhaust somebody else's.
+- **Your users share one NAT.** An office of 20 shares the budget. Raise it, or
+  set it to `None` to switch the per-IP budget off entirely.
+
+**A session that was never challenged no longer passes as verified.**
+`decorators.enforcement_state()` now returns `PENDING` for a user who holds a
+primary factor and whose session carries no MFA stamp at all — previously such a
+request fell through as though it had passed a challenge, because
+`session.is_pending()` means *stamped, but not yet passed* and is False for a
+session with no stamp.
+
+The ordinary login path is unaffected: `user_logged_in` stamps every session it
+creates, so a real login is either pending or verified and always was. What
+changes is the sessions that never went through it:
+
+- **Your own tests using `force_login()` on a user who holds a factor.** They
+  now hit the verify redirect (or `verification_required` on the API) where they
+  previously sailed through. Either enroll the factor after logging in, or mark
+  the session verified — {doc}`recipes` covers both, and recommends a user with
+  no factors for tests where MFA is incidental.
+- **Sessions predating django-mfa's installation.** They are challenged once and
+  then behave normally.
+- **Cookie-less JSON API clients.** This is the *normal* state of every one of
+  their requests, and it is why the change is not optional: without it a new
+  endpoint declared `require_verified=True` and no `stepup=True` would serve an
+  unchallenged token client. See {doc}`rest_api` for the session tokens that fix
+  the underlying problem.

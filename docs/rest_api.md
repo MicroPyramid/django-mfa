@@ -37,22 +37,64 @@ or `None`:
 callable (`django_mfa.E006`), so a typo fails the deploy rather than the first
 request.
 
+**`MFA_API_AUTHENTICATION` answers *who you are* and nothing else.** Whether this
+caller has passed a challenge, and how recently, is read from and written to
+`request.session` exactly as it is for a browser. A client must therefore carry
+*something* that names a session across requests — a cookie, or the token below.
+
+## Clients that can't hold a cookie
+
+A mobile app or a `fetch()` client that discards cookies gets a brand-new empty
+session on every request, so a verification completed in one is gone by the next.
+Since 4.5.0 such a client mints a session token instead and presents it in the
+`X-MFA-Session` header:
+
+    POST /api/mfa/session/
+      Authorization: Bearer <your own credential>
+
+    -> {"token": "k9f2...", "expires_in": 1209600, "header": "X-MFA-Session"}
+
+    POST /api/mfa/verify/totp/complete/
+      Authorization: Bearer <your own credential>
+      X-MFA-Session: k9f2...
+      {"code": "123456"}
+
+    -> {"verified": true, "method": "totp"}
+
+Send both headers on every subsequent request: yours says who the caller is, this
+one says what they have proved. `DELETE /api/mfa/session/` revokes the token
+presented on that request — and only that one, so a cookie-based caller with no
+token gets `{"revoked": false}` rather than being logged out of Django.
+
+The token **is** a Django session key. That is what makes it revocable and gives
+it `SESSION_COOKIE_AGE` expiry and `clearsessions` cleanup for free, rather than
+being a signed blob asserting "MFA passed" that nothing can withdraw. Three
+consequences worth knowing:
+
+- It is bound to the account it was issued to. Presenting a token alongside a
+  different identity is refused with `invalid_mfa_session` (401), never silently
+  ignored.
+- No `Set-Cookie` is sent for a token request. CSRF is not enforced on a request
+  that carries **no cookie at all** — there is no ambient credential for a
+  cross-site page to forge, since a browser attaches cookies by itself but
+  cannot set a custom header cross-origin without a preflight. This is the same
+  split DRF draws between session and token authentication. Send any cookie and
+  full CSRF enforcement applies, so a browser client is never exempted.
+- Treat it exactly like a session cookie: HTTPS only, stored in the platform
+  keychain, never logged.
+
 :::{warning}
-**MFA state lives in the session, and that is not negotiable by this setting.**
-`MFA_API_AUTHENTICATION` answers *who you are*; whether this session has passed
-a challenge, and how recently, is read from and written to `request.session`
-exactly as it is for a browser.
-
-So a client must persist the session cookie across requests. One that discards
-cookies can call every endpoint here and will still never get anywhere: each
-request arrives as a brand-new session, so a verification completed in one
-request is gone by the next, and step-up-gated endpoints reject it forever.
-
-If your clients genuinely cannot hold a cookie, this API is not yet the right
-shape for them — say so in an issue rather than working around it, because the
-workarounds all end in a bearer token that means "MFA passed" with none of the
-session's revocation.
+`SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"` cannot issue
+one — there is no server-side key to hand out, because the "key" is the signed
+payload and it changes whenever the data does. `POST session/` answers
+`token_sessions_unsupported` (501) on such an install rather than returning a
+token that would stop working the moment it mattered.
 :::
+
+The passkey endpoints stay cookie-based. Passwordless login *establishes*
+identity, and a token cannot be bound to an identity that doesn't exist yet;
+minting an unbound one and rotating it afterwards would be session fixation for
+the window in between.
 
 ## Endpoints
 
@@ -62,6 +104,8 @@ object.
 | Method | Path | Does |
 |---|---|---|
 | `GET` | `state/` | Everything needed to render the right screen |
+| `POST` | `session/` | Mint an MFA session token (cookie-less clients) |
+| `DELETE` | `session/` | Revoke the token presented on this request |
 | `POST` | `enroll/<type>/begin/` | Start enrolling a factor |
 | `POST` | `enroll/<type>/complete/` | Finish enrolling it |
 | `POST` | `verify/<type>/begin/` | Issue a challenge |
@@ -149,13 +193,15 @@ reworded in any release.
 | Code | Status | Means |
 |---|---|---|
 | `unauthenticated` | 401 | No user, or `MFA_API_AUTHENTICATION` returned `None` |
-| `verification_required` | 403 | The session is pending — challenge first |
+| `invalid_mfa_session` | 401 | `X-MFA-Session` was expired, revoked, or issued to another account |
+| `verification_required` | 403 | The session is pending, or has never been challenged |
 | `enrollment_required` | 403 | No primary factor enrolled |
 | `stepup_required` | 403 | Needs a challenge within `MFA_STEPUP_MAX_AGE` |
 | `managed_by_enterprise` | 403 | `MFA_OWNED_BY_ENTERPRISE` protects this key |
 | `invalid` | 400 | The submission was rejected |
 | `malformed_body` | 400 | The body wasn't a JSON object |
 | `method_not_allowed` | 405 | Wrong HTTP method |
+| `token_sessions_unsupported` | 501 | `SESSION_ENGINE` cannot issue a token |
 
 :::{warning}
 **`invalid` is deliberately uninformative, and stays that way.** A wrong code, a

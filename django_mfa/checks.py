@@ -1,5 +1,6 @@
 from django.conf import settings as django_settings
 from django.core.checks import Error
+from django.utils.module_loading import import_string
 
 from django_mfa.conf import settings as mfa_settings
 
@@ -203,5 +204,107 @@ def check_mfa_api_authentication(app_configs, **kwargs):
                  "authentication), a callable taking a request and returning "
                  "a user or None, or a dotted path to one.",
             id="django_mfa.E006",
+        )]
+    return []
+
+
+def check_rate_limit_specs(app_configs, **kwargs):
+    """Every ``<count>/<window><unit>`` setting must parse.
+
+    Deliberately NOT gated on ``_webauthn_active()`` -- like E004-E006, this
+    applies to every install.
+
+    Without this the failure is late and badly placed: ratelimit.parse()
+    raises from inside the *first verification attempt*, which is a 500 on the
+    challenge page for whichever user happens to log in first after the
+    deploy. A refused ``manage.py check`` is the same information, hours
+    earlier, aimed at whoever wrote the typo.
+
+    MFA_VERIFY_IP_RATE_LIMIT alone accepts None, which switches the per-IP
+    budget off -- the escape hatch for a deployment that genuinely cannot
+    identify its clients (see ratelimit.client_ip).
+    """
+    from django_mfa import ratelimit
+
+    errors = []
+    specs = [
+        ("MFA_VERIFY_RATE_LIMIT", False),
+        ("MFA_VERIFY_IP_RATE_LIMIT", True),
+        ("MFA_EMAIL_SEND_RATE_LIMIT", False),
+    ]
+    for name, nullable in specs:
+        value = getattr(mfa_settings, name)
+        if value is None and nullable:
+            continue
+        try:
+            ratelimit.parse(value, name)
+        except (ValueError, TypeError) as exc:
+            errors.append(Error(
+                f"{name} is not usable: {exc}",
+                hint='The format is "<count>/<window><unit>", where unit is '
+                     's, m or h -- "5/5m" means five attempts per five '
+                     'minutes.' + (
+                         " Set it to None to switch this budget off entirely."
+                         if nullable else ""),
+                id="django_mfa.E007",
+            ))
+    return errors
+
+
+def check_rate_limit_backend(app_configs, **kwargs):
+    """``MFA_RATE_LIMIT_BACKEND`` must name a backend that exists.
+
+    A typo here is the worst-shaped failure in this module: ratelimit._backend()
+    raises ValueError, which flows.attempt_verify does NOT catch (it catches
+    only the adapter's own ValueError/TypeError/KeyError, and this is raised
+    before the adapter runs), so every verification attempt 500s. Caught at
+    startup instead.
+    """
+    from django_mfa import ratelimit
+
+    value = mfa_settings.MFA_RATE_LIMIT_BACKEND
+    if value in ratelimit.BACKENDS:
+        return []
+    return [Error(
+        f"MFA_RATE_LIMIT_BACKEND must be one of "
+        f"{', '.join(repr(b) for b in ratelimit.BACKENDS)}, got {value!r}.",
+        hint='"database" (the default) keeps counters in a table, so a cache '
+             'restart cannot silently hand an attacker a fresh budget. '
+             '"cache" is the older behaviour and needs no migration.',
+        id="django_mfa.E008",
+    )]
+
+
+def check_client_ip_resolver(app_configs, **kwargs):
+    """``MFA_CLIENT_IP_RESOLVER`` must be importable and callable.
+
+    Gated on the setting being set at all, which is not the default: a project
+    that never sets it uses REMOTE_ADDR and never sees this.
+
+    Resolved eagerly here rather than on first use because the alternative is
+    an ImportError raised from inside a verification attempt -- and unlike a
+    bad rate-limit spec, that one fails *during* somebody's login rather than
+    during the deploy that caused it.
+    """
+    value = mfa_settings.MFA_CLIENT_IP_RESOLVER
+    if value is None:
+        return []
+    try:
+        resolver = import_string(value) if isinstance(value, str) else value
+    except ImportError as exc:
+        return [Error(
+            f"MFA_CLIENT_IP_RESOLVER is not importable: {exc}",
+            hint="Set it to a dotted path to a callable taking a request and "
+                 "returning the client's address as a string, or None to use "
+                 "REMOTE_ADDR.",
+            id="django_mfa.E009",
+        )]
+    if not callable(resolver):
+        return [Error(
+            f"MFA_CLIENT_IP_RESOLVER must be a callable, or a dotted path to "
+            f"one -- got {value!r}.",
+            hint="It takes a request and returns the client's address as a "
+                 "string, or None to skip the per-IP budget for that request.",
+            id="django_mfa.E009",
         )]
     return []

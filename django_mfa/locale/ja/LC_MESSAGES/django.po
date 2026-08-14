@@ -220,6 +220,10 @@ msgstr "追加できるものはありません。"
 msgid "This account has no email code to verify. Use another method, or contact support if you believe this is a mistake."
 msgstr "このアカウントには確認できるメールコードがありません。別の方法を使用するか、誤りだと思われる場合はサポートにお問い合わせください。"
 
+#: django_mfa/api/views.py:152
+msgid "This MFA session token is not valid."
+msgstr "この MFA セッショントークンは無効です。"
+
 #: django_mfa/api/views.py:70
 msgid "This account must enroll a second factor first."
 msgstr "このアカウントでは先に二要素目の設定が必要です。"
@@ -237,10 +241,14 @@ msgstr "このブラウザはセキュリティキーやパスキーに対応し
 msgid "This endpoint does not accept %(method)s."
 msgstr "このエンドポイントは %(method)s を受け付けません。"
 
-#: django_mfa/api/views.py:330
+#: django_mfa/api/views.py:409
 #: django_mfa/views/manage.py:103
 msgid "This security key is managed by your organization and cannot be removed here."
 msgstr "このセキュリティキーは組織によって管理されているため、ここでは削除できません。"
+
+#: django_mfa/api/views.py:295
+msgid "This server stores sessions in a way that cannot issue a token. Use cookie-based session authentication instead."
+msgstr "このサーバーはトークンを発行できない方法でセッションを保存しています。代わりに Cookie ベースのセッション認証を使用してください。"
 
 #: django_mfa/api/views.py:67
 msgid "This session must complete a second-factor challenge first."

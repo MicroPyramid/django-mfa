@@ -16,6 +16,7 @@ from django_mfa.api import views
 
 api_patterns = ([
     path("state/", views.state, name="state"),
+    path("session/", views.mfa_session, name="session"),
 
     path("enroll/<str:factor_type>/begin/",
          views.enroll_begin, name="enroll_begin"),

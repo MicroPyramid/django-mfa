@@ -51,12 +51,20 @@ class LegacyModelRemovalTests(TestCase):
         # {"Authenticator"} alone; the task-20 instructions explicitly say
         # Authenticator and MfaUserHandle are the only models the app
         # registers, so that is what this test checks. MfaExemption
-        # (django_mfa/models.py, added for the MFA_REQUIRED exemption
-        # feature) is the third and, as of that feature, final entry.
+        # (django_mfa/models.py, added for the MFA_REQUIRED exemption feature)
+        # is the third. RateLimitCounter (4.5.0, the durable rate-limit
+        # backend) is the fourth, and is the one entry here that holds no
+        # per-user security state at all -- expired rows are garbage, not
+        # records, and `manage.py mfa_prune` deletes them.
+        #
+        # The list is pinned rather than merely counted so that a model added
+        # to this app has to be a deliberate act: every one of them is a table
+        # a host project inherits on `migrate`.
         from django.apps import apps
 
         names = {m.__name__ for m in apps.get_app_config("django_mfa").get_models()}
-        self.assertEqual(names, {"Authenticator", "MfaUserHandle", "MfaExemption"})
+        self.assertEqual(names, {"Authenticator", "MfaUserHandle",
+                                 "MfaExemption", "RateLimitCounter"})
 
 
 class EmailIsASingletonFactorTests(TestCase):

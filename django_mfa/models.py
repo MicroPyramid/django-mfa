@@ -67,6 +67,45 @@ class Authenticator(models.Model):
         self.save(update_fields=["last_used_at"])
 
 
+class RateLimitCounter(models.Model):
+    """One rate-limit budget's counter, durable across a cache outage.
+
+    The storage half of ``django_mfa.ratelimit`` when
+    ``MFA_RATE_LIMIT_BACKEND`` is ``"database"`` (the default). The cache
+    backend keeps the identical shape in the cache instead, and the two are
+    never both live -- there is one counter for a scope, not a fast copy and
+    a slow copy to reconcile.
+
+    Why a table at all: a cache-only counter is erased by a Redis restart, an
+    eviction under memory pressure, or ``cache.clear()`` in an unrelated
+    deploy step, and every erasure silently hands an attacker mid-run a fresh
+    budget. That failure leaves no trace -- the limit simply stops binding --
+    which is what makes it worth a write per failed attempt.
+
+    Rows are garbage, not records, once ``expires_at`` passes: nothing reads
+    them and ``manage.py mfa_prune`` deletes them. They are not an audit log
+    (django_mfa.events is), and ``scope`` holds a client IP for the per-IP
+    budget, so treat the table as personal data with a short retention and
+    prune it on a schedule -- see docs/operations.md.
+    """
+
+    #: "django_mfa:rl:<user pk>:<factor>" for a per-user budget,
+    #: "django_mfa:rl:ip:<address>:<factor>" for a per-IP one -- built by
+    #: ratelimit._key()/_ip_key(), which own the format, and byte-identical to
+    #: the key the cache backend uses so the two can never drift. An IPv6
+    #: address contains colons of its own, so this is not parseable back into
+    #: fields by splitting; it is an opaque key that happens to stay legible to
+    #: an operator reading the table, which is the only reason it is not
+    #: hashed.
+    scope = models.CharField(max_length=255, unique=True)
+    count = models.PositiveIntegerField(default=0)
+    #: Indexed because mfa_prune's only query filters on it.
+    expires_at = models.DateTimeField(db_index=True)
+
+    def __str__(self):
+        return f"{self.scope} ({self.count})"
+
+
 class MfaExemptionManager(models.Manager):
     def active_for(self, user):
         """This user's exemption if it is currently in force, else None."""

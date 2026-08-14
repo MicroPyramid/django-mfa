@@ -221,6 +221,10 @@ msgstr "No queda nada por añadir."
 msgid "This account has no email code to verify. Use another method, or contact support if you believe this is a mistake."
 msgstr "Esta cuenta no tiene ningún código por correo electrónico que verificar. Usa otro método o contacta con soporte si crees que es un error."
 
+#: django_mfa/api/views.py:152
+msgid "This MFA session token is not valid."
+msgstr "Este token de sesión de MFA no es válido."
+
 #: django_mfa/api/views.py:70
 msgid "This account must enroll a second factor first."
 msgstr "Esta cuenta debe configurar antes un segundo factor."
@@ -238,10 +242,14 @@ msgstr "Este navegador no admite llaves de seguridad ni passkeys. Prueba con otr
 msgid "This endpoint does not accept %(method)s."
 msgstr "Este endpoint no acepta %(method)s."
 
-#: django_mfa/api/views.py:330
+#: django_mfa/api/views.py:409
 #: django_mfa/views/manage.py:103
 msgid "This security key is managed by your organization and cannot be removed here."
 msgstr "Esta llave de seguridad está gestionada por tu organización y no se puede eliminar aquí."
+
+#: django_mfa/api/views.py:295
+msgid "This server stores sessions in a way that cannot issue a token. Use cookie-based session authentication instead."
+msgstr "Este servidor almacena las sesiones de una forma que no permite emitir un token. Utilice la autenticación de sesión basada en cookies en su lugar."
 
 #: django_mfa/api/views.py:67
 msgid "This session must complete a second-factor challenge first."

@@ -180,9 +180,18 @@ need to reset it.
 
 | Function | Purpose |
 |---|---|
-| `check(user, factor_type)` | `True` if another attempt is allowed. |
-| `record_failure(user, factor_type)` | Count a failure. |
-| `clear(user, factor_type)` | Reset the counter, as a success does. |
+| `check(user, factor_type)` | `True` if another attempt is allowed on the per-user budget. |
+| `record_failure(user, factor_type)` | Count a failure against it. |
+| `clear(user, factor_type)` | Reset it, as a success does. |
+| `check_client(request, factor_type)` | The same question for the per-IP budget (`MFA_VERIFY_IP_RATE_LIMIT`). |
+| `record_client(request, factor_type)` | Count a failure against the client's address. |
+| `client_ip(request)` | The address that budget bills to, or `None`. |
+| `prune()` | Delete expired counters; what `manage.py mfa_prune` calls. |
+
+There is deliberately no `clear_client()`. A successful verification clears the
+user's counter but must never clear the shared per-IP one — an attacker needs only
+one account they can log into for that to be a reset button. If a test needs the IP
+counter gone, delete the rows (or clear the cache) directly.
 
 ## Signals
 
