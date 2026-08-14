@@ -16,6 +16,9 @@ DEFAULTS = {
     "MFA_OWNED_BY_ENTERPRISE": False,
     "MFA_FACTORS": ["totp", "recovery_codes", "webauthn"],
     "MFA_REQUIRED": False,
+    "MFA_REQUIRED_FROM": None,
+    "MFA_GRACE_PERIOD": None,
+    "MFA_GRACE_ANCHOR": None,
     "MFA_FIDO2_RP_ID": None,
     "MFA_FIDO2_RP_NAME": "django-mfa",
     "MFA_FIDO2_RESIDENT_KEY": "preferred",
@@ -30,6 +33,8 @@ DEFAULTS = {
     "MFA_FROM_EMAIL": None,
     "MFA_NOTIFY_ON_CHANGE": False,
     "MFA_API_AUTHENTICATION": None,
+    "MFA_PROTECT_ADMIN": False,
+    "MFA_ADMIN_STEPUP": False,
 }
 
 

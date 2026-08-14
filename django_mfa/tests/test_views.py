@@ -1,4 +1,5 @@
 import base64
+import datetime
 import json
 import os
 import re
@@ -6,7 +7,7 @@ import time
 import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser, User
 from django.core.cache import cache
 from django.http import HttpResponse
 from django.test import Client, RequestFactory, TestCase, override_settings
@@ -1309,3 +1310,89 @@ class IpBudgetThroughTheViewTests(TestCase):
                 scope__startswith="django_mfa:rl:ip:").get().count, 1)
         self.assertFalse(RateLimitCounter.objects.filter(
             scope=f"django_mfa:rl:{user.pk}:totp").exists())
+
+
+@override_settings(MFA_REQUIRED=True)
+class SecurityPageGraceContextTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("g", "g@example.com", "pw")
+        self.client.force_login(self.user)
+
+    def test_no_grace_configured_means_none(self):
+        response = self.client.get(reverse("mfa:security_settings"))
+        self.assertIsNone(response.context["grace"])
+
+    @override_settings(MFA_REQUIRED_FROM=datetime.date(2099, 1, 1))
+    def test_in_grace_exposes_the_deadline(self):
+        response = self.client.get(reverse("mfa:security_settings"))
+        self.assertIsNotNone(response.context["grace"])
+        self.assertGreater(response.context["grace"].days_remaining, 0)
+
+
+class ContextProcessorTests(TestCase):
+    """Note: assert truthiness, NOT identity.
+
+    `mfa_grace` is a SimpleLazyObject, and a SimpleLazyObject wrapping None
+    is not None -- verified: `SimpleLazyObject(lambda: None) is None` is
+    False, `== None` is True, `bool(...)` is False. assertIsNone would fail
+    against a correct implementation. Truthiness is also what a template
+    actually does with it (`{% if mfa_grace %}`), so it is the honest
+    assertion here.
+    """
+
+    def test_anonymous_request_resolves_to_nothing(self):
+        from django_mfa.context_processors import mfa
+
+        request = RequestFactory().get("/")
+        request.user = AnonymousUser()
+        self.assertFalse(mfa(request)["mfa_grace"])
+
+    @override_settings(MFA_REQUIRED=True,
+                       MFA_REQUIRED_FROM=datetime.date(2099, 1, 1))
+    def test_in_grace_user_gets_a_state(self):
+        from django_mfa.context_processors import mfa
+
+        request = RequestFactory().get("/")
+        request.user = User.objects.create_user("g", "g@example.com", "pw")
+        grace = mfa(request)["mfa_grace"]
+        self.assertTrue(grace)
+        self.assertGreater(grace.days_remaining, 0)
+
+    def test_anonymous_request_never_touches_policy(self):
+        """The short-circuit for an unauthenticated user happens in resolve()
+        itself, before policy.grace_state() is ever reached -- not merely a
+        return value that happens to also be None if grace_state() ran
+        (AnonymousUser would make _predicate_matches() return False too, so
+        that outcome alone can't distinguish the two). Mock the call and
+        prove it never fires, even once the lazy value is forced.
+        """
+        from django_mfa.context_processors import mfa
+
+        request = RequestFactory().get("/")
+        request.user = AnonymousUser()
+        with patch("django_mfa.policy.grace_state") as mock_grace_state:
+            result = mfa(request)["mfa_grace"]
+            self.assertFalse(result)
+            mock_grace_state.assert_not_called()
+
+    @override_settings(MFA_REQUIRED=True,
+                       MFA_REQUIRED_FROM=datetime.date(2099, 1, 1))
+    def test_mfa_grace_is_lazy(self):
+        """Pin the structure, not just the outcome: policy.grace_state() must
+        not run until mfa_grace is actually forced. This is the property
+        that makes it safe to run this context processor on every template
+        render -- a host using policy.in_groups(...) pays a database query
+        inside grace_state(), and a template that never mentions mfa_grace
+        must not pay for it. If someone "simplified" context_processors.mfa()
+        by inlining the closure into a direct policy.grace_state(user) call,
+        every other test here would still pass; only this one would catch it.
+        """
+        from django_mfa.context_processors import mfa
+
+        request = RequestFactory().get("/")
+        request.user = User.objects.create_user("g", "g@example.com", "pw")
+        with patch("django_mfa.policy.grace_state") as mock_grace_state:
+            result = mfa(request)["mfa_grace"]
+            mock_grace_state.assert_not_called()
+            bool(result)
+            mock_grace_state.assert_called_once_with(request.user)

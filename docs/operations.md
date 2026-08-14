@@ -65,6 +65,13 @@ user counts as "protected" (`registry.has_primary_factor()`), whether
 WebAuthn credential, or the recovery-code hashes — for the same reason
 `AuthenticatorAdmin` doesn't (see {doc}`security`).
 
+When `MFA_GRACE_PERIOD` and/or `MFA_REQUIRED_FROM` put this user inside their
+personal grace window (`policy.grace_state()` — see {doc}`settings`), an
+extra `In grace until <date> (<N> days)` line follows `Required: no` — a user
+in grace still reads as not-yet-required, but this makes the window itself
+visible instead of looking indistinguishable from a user the policy never
+covers at all.
+
 ## Unlocking a user: removing every factor
 
     manage.py mfa_reset alice
@@ -108,12 +115,21 @@ their own factor.
     manage.py mfa_report --required-only --format csv > outstanding.csv
 
 With no arguments, prints enrolled-factor counts by type, then "Required but
-unenrolled" — every user `policy.mfa_required_for()` applies to who does not
-hold a primary factor (recovery codes alone don't count; see
-{doc}`enforcement`) and does not hold an active `MfaExemption`. `--required-only`
-skips the per-type counts. `--format csv` switches the outstanding list to
-`pk,<USERNAME_FIELD>` CSV on stdout with nothing else printed ahead of the
-header — pipe it straight into a file. It never prints `Authenticator.data`.
+unenrolled" — every user who does not hold a primary factor (recovery codes
+alone don't count; see {doc}`enforcement`) and does not hold an active
+`MfaExemption`, and either `policy.mfa_required_for()` applies to right now
+**or** is still inside their `policy.grace_state()` window (see
+{doc}`settings`). The second half is deliberate: `mfa_required_for()` returns
+`False` for a user still in grace, so filtering on it alone would silently
+hide exactly the users a rollout report exists to surface. Each such line
+gets an ` -- in grace until <date>` suffix; a user already past due has none.
+`--required-only` skips the per-type counts. `--format csv` switches the
+outstanding list to `pk,<USERNAME_FIELD>,grace_until` CSV on stdout with
+nothing else printed ahead of the header — pipe it straight into a file. The
+`grace_until` column is appended after the existing two, never inserted
+between them, so a consumer indexing by column position is unaffected; it is
+empty for a user who is already due rather than still in grace. It never
+prints `Authenticator.data`.
 
 ## Pruning expired rate-limit counters
 

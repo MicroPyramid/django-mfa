@@ -1,3 +1,5 @@
+import datetime
+
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.models import User
 from django.contrib.sessions.backends.db import SessionStore
@@ -385,6 +387,34 @@ class WallIsOffByDefaultTests(TestCase):
         client.login(username="b@example.com", password="pw")
         response = client.get("/some/other/page/")
         self.assertEqual(response.status_code, 404)
+
+
+@override_settings(MFA_REQUIRED=True)
+class GraceSuppressesTheEnrollmentWallTests(TestCase):
+    """policy.mfa_required_for() must return False for a user still inside
+    their MFA_GRACE_PERIOD/MFA_REQUIRED_FROM window -- the wall behaves as
+    though MFA_REQUIRED were off for them, exactly as it does for a user
+    covered by an MfaExemption (see EnrollmentWallTests/WallIsOffByDefaultTests
+    above, which this pairs with)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("g@example.com", password="pw")
+        self.client = Client()
+        self.client.login(username="g@example.com", password="pw")
+
+    @override_settings(MFA_REQUIRED_FROM=datetime.date(2099, 1, 1))
+    def test_in_grace_user_is_not_walled(self):
+        response = self.client.get("/some/other/page/")
+        # No wall means the request falls through to plain URL resolution --
+        # 404, exactly as WallIsOffByDefaultTests asserts for MFA_REQUIRED
+        # being off entirely.
+        self.assertEqual(response.status_code, 404)
+
+    @override_settings(MFA_REQUIRED_FROM=datetime.date(2020, 1, 1))
+    def test_past_the_deadline_the_wall_returns(self):
+        response = self.client.get("/some/other/page/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("mfa:security_settings"), response["Location"])
 
 
 class MfaRequiredQueryCostTests(TestCase):

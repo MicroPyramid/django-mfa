@@ -7,6 +7,7 @@ keep working when broken, and neither is visible from the outside, so most
 of what is here is about refusals rather than happy paths.
 """
 
+import datetime
 import json
 import time
 
@@ -722,3 +723,25 @@ class TokenSessionTests(TestCase):
         self.assertEqual(response.status_code, 501)
         self.assertEqual(json.loads(response.content)["error"]["code"],
                          "token_sessions_unsupported")
+
+
+# ROOT_URLCONF=API_URLS is required here (unlike a bare TestCase) because the
+# suite's default ROOT_URLCONF (django_mfa.urls) never mounts the API at all
+# -- see ApiNotMountedTests above -- so reverse("mfa_api:state") would raise
+# NoReverseMatch before the assertion under test ever ran.
+@override_settings(ROOT_URLCONF=API_URLS)
+class StateGraceTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("g", "g@example.com", "pw")
+        self.client.force_login(self.user)
+
+    def test_grace_is_null_by_default(self):
+        response = self.client.get(reverse("mfa_api:state"))
+        self.assertIsNone(response.json()["grace"])
+
+    @override_settings(MFA_REQUIRED=True,
+                       MFA_REQUIRED_FROM=datetime.date(2099, 1, 1))
+    def test_grace_reports_the_deadline(self):
+        payload = self.client.get(reverse("mfa_api:state")).json()["grace"]
+        self.assertTrue(payload["required_at"].startswith("2099-01-01"))
+        self.assertGreater(payload["days_remaining"], 0)

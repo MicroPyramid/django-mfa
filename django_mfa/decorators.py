@@ -103,16 +103,32 @@ def enforcement_state(request, require_primary_factor=True):
     return None
 
 
-def _enforce(request, require_primary_factor=True):
-    """Render enforcement_state() as a redirect, or None to let it through."""
+def enforcement_redirect(request, require_primary_factor=True, next_url=None):
+    """Render enforcement_state() as a redirect, or None to let it through.
+
+    Public because django_mfa.admin_site needs exactly this mapping.
+    Copying it there would be a second copy of the thing flows.py and
+    api/views.py's GATES table exist to prevent -- rung names in one place,
+    renderings in as many places as there are response formats.
+
+    next_url overrides where the user is sent back to after verifying. The
+    admin needs it: a failed admin gate arrives here on /admin/login/, and
+    replaying THAT path afterwards is a pointless round trip through a login
+    view the user is already past.
+    """
     state = enforcement_state(request, require_primary_factor)
     if state is None:
         return None
+    target = next_url or request.get_full_path()
     if state == UNAUTHENTICATED:
-        return redirect_to_login(request.get_full_path())
-    target = ("mfa:verify" if state == PENDING else "mfa:security_settings")
-    return redirect_to_login(request.get_full_path(),
-                             resolve_url(reverse(target)), "next")
+        return redirect_to_login(target)
+    destination = "mfa:verify" if state == PENDING else "mfa:security_settings"
+    return redirect_to_login(target, resolve_url(reverse(destination)), "next")
+
+
+def _enforce(request, require_primary_factor=True):
+    """Back-compat alias. Every existing call site goes through this."""
+    return enforcement_redirect(request, require_primary_factor)
 
 
 def mfa_required(view_func):

@@ -1,4 +1,6 @@
-from datetime import datetime, timedelta
+import csv
+import datetime
+from datetime import timedelta
 from datetime import timezone as dt_timezone
 from io import StringIO
 
@@ -116,7 +118,7 @@ class MfaStatusTests(TestCase):
         # not the command actually converts to local time first, so it
         # couldn't discriminate a regression back to a bare strftime on the
         # stored (UTC) value -- this timestamp can.
-        created_at = datetime(2024, 1, 1, 23, 0, tzinfo=dt_timezone.utc)
+        created_at = datetime.datetime(2024, 1, 1, 23, 0, tzinfo=dt_timezone.utc)
         Authenticator.objects.create(
             user=self.user, type=Authenticator.Type.TOTP,
             data={"secret": encrypt(KNOWN_SECRET)}, created_at=created_at)
@@ -285,7 +287,7 @@ class MfaReportTests(TestCase):
         # still printed above the header.
         output = self._run("--format", "csv")
         first_line = output.splitlines()[0]
-        self.assertEqual(first_line, "pk,username")
+        self.assertEqual(first_line, "pk,username,grace_until")
 
     def test_never_prints_factor_data(self):
         self.assertNotIn(KNOWN_SECRET, self._run())
@@ -348,3 +350,28 @@ class MfaPruneTests(TestCase):
         out = StringIO()
         call_command("mfa_prune", stdout=out)
         self.assertIn("expire themselves", out.getvalue())
+
+
+@override_settings(MFA_REQUIRED=True, MFA_REQUIRED_FROM=datetime.date(2099, 1, 1))
+class GraceReportingTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("g", "g@example.com", "pw")
+
+    def test_mfa_status_shows_the_grace_line(self):
+        out = StringIO()
+        call_command("mfa_status", "g", stdout=out)
+        self.assertIn("In grace until 2099-01-01", out.getvalue())
+
+    def test_in_grace_users_still_appear_in_the_report(self):
+        """A rollout report that hides the people still in their window is
+        useless -- those are exactly who it exists to show."""
+        out = StringIO()
+        call_command("mfa_report", stdout=out)
+        self.assertIn("g", out.getvalue())
+
+    def test_csv_carries_a_grace_until_column(self):
+        out = StringIO()
+        call_command("mfa_report", "--format", "csv", stdout=out)
+        rows = list(csv.reader(StringIO(out.getvalue())))
+        self.assertEqual(rows[0][-1], "grace_until")
+        self.assertTrue(rows[1][-1].startswith("2099-01-01"))

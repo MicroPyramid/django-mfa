@@ -42,7 +42,7 @@ from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.csrf import csrf_protect
 
-from django_mfa import decorators, events, flows, session
+from django_mfa import decorators, events, flows, policy, session
 from django_mfa.adapters.recovery_codes import RecoveryCodesAdapter
 from django_mfa.api import auth, tokens
 from django_mfa.conf import settings as mfa_settings
@@ -251,6 +251,29 @@ def serialize_adapter(adapter):
             "supports_multiple": adapter.supports_multiple}
 
 
+def serialize_grace(user):
+    """policy.GraceState as JSON, or None.
+
+    Reachable while pending (state always is), so a client can draw the
+    "you have N days" banner before the user has verified anything.
+
+    ``required_at`` is passed through as a datetime rather than
+    ``.isoformat()``'d here, so JsonResponse's DjangoJSONEncoder renders it
+    the same way it renders every other datetime in this response (e.g.
+    ``created_at`` in serialize_authenticator) -- "2026-08-14T09:12:03.114Z",
+    not isoformat()'s "2026-08-14T09:12:03.114000+00:00". A second encoding
+    of the same kind of value in the same response is a bug waiting for a
+    client that only handles one of them.
+    """
+    grace = policy.grace_state(user)
+    if grace is None:
+        return None
+    return {
+        "required_at": grace.required_at,
+        "days_remaining": grace.days_remaining,
+    }
+
+
 @endpoint("GET", require_verified=False)
 def state(request):
     """Everything a client needs to render the right screen.
@@ -277,6 +300,7 @@ def state(request):
         "recovery_codes_remaining":
             RecoveryCodesAdapter().remaining(request.user),
         "stepup_max_age": mfa_settings.MFA_STEPUP_MAX_AGE,
+        "grace": serialize_grace(request.user),
     })
 
 

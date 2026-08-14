@@ -308,3 +308,140 @@ def check_client_ip_resolver(app_configs, **kwargs):
             id="django_mfa.E009",
         )]
     return []
+
+
+def check_grace_configuration(app_configs, **kwargs):
+    """Grace that is configured but cannot possibly work.
+
+    Every case here fails by silently granting NO grace, which is the worst
+    failure mode this feature has: the operator believes they shipped a ramp
+    and in fact shipped a wall, and they find out from their users. Gated so
+    an install with neither setting evaluates nothing.
+
+    MFA_GRACE_ANCHOR is validated the same way MFA_REQUIRED/E004,
+    MFA_API_AUTHENTICATION/E006 and MFA_CLIENT_IP_RESOLVER/E009 already are:
+    imported here (if it's a string) and asserted callable, rather than left
+    to fail at request time. Without this, a typo'd dotted path is not
+    caught until policy._anchor() imports and calls it inside
+    required_at() -> mfa_required_for() -> MfaMiddleware, i.e. a 500 raised
+    from middleware on the first request from any user MFA_REQUIRED matches.
+
+    MFA_GRACE_ANCHOR set without MFA_GRACE_PERIOD is the same failure class
+    as MFA_ADMIN_STEPUP without MFA_PROTECT_ADMIN (E011): required_at() only
+    ever calls _anchor() when _period() is not None, so the anchor is
+    silently never consulted.
+    """
+    import datetime
+
+    from django.contrib.auth import get_user_model
+
+    errors = []
+
+    cutover = mfa_settings.MFA_REQUIRED_FROM
+    if cutover is not None and not isinstance(cutover, datetime.date):
+        # datetime is a subclass of date, so this accepts both.
+        errors.append(Error(
+            f"MFA_REQUIRED_FROM must be a date or datetime, got "
+            f"{type(cutover).__name__}.",
+            hint="A string is not parsed. Use datetime.date(2026, 9, 1).",
+            id="django_mfa.E010",
+        ))
+
+    anchor_setting = mfa_settings.MFA_GRACE_ANCHOR
+    if anchor_setting is not None:
+        anchor = anchor_setting
+        if isinstance(anchor, str):
+            try:
+                anchor = import_string(anchor)
+            except ImportError as exc:
+                errors.append(Error(
+                    f"MFA_GRACE_ANCHOR is not importable: {exc}",
+                    hint="Set it to a dotted path to a callable taking a "
+                         "user and returning a datetime or None, or leave "
+                         "it unset to use user.date_joined.",
+                    id="django_mfa.E010",
+                ))
+                anchor = None
+        if anchor is not None and not callable(anchor):
+            errors.append(Error(
+                f"MFA_GRACE_ANCHOR must be a callable, or a dotted path to "
+                f"one -- got {anchor_setting!r}.",
+                hint="It takes a user and returns the datetime their "
+                     "personal grace window starts from, or None to fall "
+                     "back to MFA_REQUIRED_FROM alone.",
+                id="django_mfa.E010",
+            ))
+        if mfa_settings.MFA_GRACE_PERIOD is None:
+            errors.append(Error(
+                "MFA_GRACE_ANCHOR is set but MFA_GRACE_PERIOD is not.",
+                hint="Nothing reads MFA_GRACE_ANCHOR unless MFA_GRACE_PERIOD "
+                     "is also set -- required_at() only consults the anchor "
+                     "for a per-user window, and there is none without a "
+                     "period. Set MFA_GRACE_PERIOD.",
+                id="django_mfa.E010",
+            ))
+
+    period = mfa_settings.MFA_GRACE_PERIOD
+    if period is not None:
+        if isinstance(period, datetime.timedelta):
+            negative = period < datetime.timedelta(0)
+        else:
+            try:
+                negative = period < 0
+            except TypeError:
+                # A non-numeric, non-timedelta value (e.g. "14" instead of
+                # 14) would otherwise raise a bare TypeError out of this
+                # check instead of being reported like every other bad
+                # setting here. Nothing left to check against an unusable
+                # value, so skip the negative/anchor checks below.
+                errors.append(Error(
+                    f"MFA_GRACE_PERIOD must be a number of days, a "
+                    f"datetime.timedelta, or None, got {period!r}.",
+                    hint="Use an int or float number of days, a "
+                         "datetime.timedelta, or None to switch the "
+                         "per-user window off.",
+                    id="django_mfa.E010",
+                ))
+                negative = False
+                period = None
+        if negative:
+            errors.append(Error(
+                "MFA_GRACE_PERIOD is negative.",
+                hint="A negative window is already expired for every user, "
+                     "which grants no grace at all. Use a positive number of "
+                     "days, or None to switch the per-user window off.",
+                id="django_mfa.E010",
+            ))
+        elif period is not None and (
+                mfa_settings.MFA_GRACE_ANCHOR is None
+                and not hasattr(get_user_model(), "date_joined")):
+            errors.append(Error(
+                "MFA_GRACE_PERIOD is set but AUTH_USER_MODEL has no "
+                "date_joined field and MFA_GRACE_ANCHOR is unset.",
+                hint="The per-user window has no clock to start from, so no "
+                     "user will receive one. Set MFA_GRACE_ANCHOR to a "
+                     "callable (or dotted path) returning the datetime each "
+                     "user's window starts from.",
+                id="django_mfa.E010",
+            ))
+
+    return errors
+
+
+def check_admin_stepup(app_configs, **kwargs):
+    """MFA_ADMIN_STEPUP without MFA_PROTECT_ADMIN does nothing at all.
+
+    Nothing reads MFA_ADMIN_STEPUP unless the admin site has been wrapped,
+    and only MFA_PROTECT_ADMIN wraps it. An operator setting the stronger
+    of the two alone believes the admin is step-up protected and it is not
+    protected at all.
+    """
+    if mfa_settings.MFA_ADMIN_STEPUP and not mfa_settings.MFA_PROTECT_ADMIN:
+        return [Error(
+            "MFA_ADMIN_STEPUP is set but MFA_PROTECT_ADMIN is not.",
+            hint="Nothing reads MFA_ADMIN_STEPUP unless MFA_PROTECT_ADMIN "
+                 "has wrapped the admin site, so the admin is currently "
+                 "unprotected. Set MFA_PROTECT_ADMIN = True.",
+            id="django_mfa.E011",
+        )]
+    return []

@@ -19,6 +19,9 @@ WebAuthn** — see {doc}`installation_setup`.
 |---|---|---|
 | `MFA_FACTORS` | `["totp", "recovery_codes", "webauthn"]` | Which built-in factor adapters get registered at startup. See [Choosing which factors to offer](#choosing-which-factors-to-offer) below. |
 | `MFA_REQUIRED` | `False` | Who must hold a second factor. `False` (nobody), `True` (every authenticated user), a callable taking a user and returning a bool, or a dotted path to one. A required user with no factor is walled to the security page until they enroll — see {doc}`enforcement`. |
+| `MFA_REQUIRED_FROM` | `None` | A `date` or `datetime` before which nobody is walled by `MFA_REQUIRED`, however it answers. The rollout ramp: set it to your announced cutover and existing users keep working until then. **Does not cover the admin gate** (`MFA_PROTECT_ADMIN`) or `@mfa_required`/`MfaRequiredMixin` views — neither consults grace at all; see {doc}`enforcement`. |
+| `MFA_GRACE_PERIOD` | `None` | `int` days (or a `timedelta`) each user gets from their own anchor before being walled. Covers people who join after the cutover — a user is required from whichever of `MFA_REQUIRED_FROM` and `anchor + MFA_GRACE_PERIOD` is *later*. |
+| `MFA_GRACE_ANCHOR` | `None` | Dotted path or callable, `(user) -> datetime \| None`, giving the per-user start of `MFA_GRACE_PERIOD`. `None` means `user.date_joined`. Return `None` for a user you have no anchor for; they fall back to `MFA_REQUIRED_FROM` alone. Note this runs wherever grace is displayed, so a resolver that queries the database costs a query per render. |
 | `MFA_ISSUER_NAME` | `None` | Issuer label shown next to the username in the user's authenticator app when enrolling TOTP. Set it to your product name; without it the app shows the username alone, which is confusing for anyone with more than one account. |
 | `MFA_EXEMPT_PATHS` | `[]` | URL paths reachable through either of `MfaMiddleware`'s walls: a session pending a second factor, and — when `MFA_REQUIRED` applies — a required user who hasn't enrolled one yet. **Must include your logout URL** — see the warning below. |
 
@@ -257,6 +260,20 @@ explicitly; it does nothing on an install that never did. It answers *identity*
 only — see {doc}`rest_api` for why MFA state still lives in the session, and what
 that means for a client that discards cookies.
 
+## Admin
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `MFA_PROTECT_ADMIN` | `False` | When `True`, no page on `django.contrib.admin`'s default site (`django.contrib.admin.site`) is reachable without a verified session, and `MFA_REQUIRED` additionally applies to `is_staff` users. Enforced by the admin site itself, so it holds even if `MfaMiddleware` is not installed. |
+| `MFA_ADMIN_STEPUP` | `False` | When `True` (and `MFA_PROTECT_ADMIN` is on), admin pages require a challenge within `MFA_STEPUP_MAX_AGE`, not merely a verified session. Set without `MFA_PROTECT_ADMIN` it does nothing, and `django_mfa.E011` says so. |
+
+`MFA_PROTECT_ADMIN` only patches `django.contrib.admin.site` — a project that
+constructs and mounts its **own** `AdminSite` instance instead of the default one
+gets no protection from the setting at all. `django_mfa.admin_site.MfaAdminMixin`
+covers that case: mix it in ahead of `AdminSite` (or your own subclass of it) to get
+the same `has_permission`/`login` behaviour `protect_admin_site()` applies to the
+default site.
+
 ## System checks
 
 django-mfa registers system checks that run on `manage.py check` — and therefore on
@@ -267,7 +284,7 @@ E001–E003 are WebAuthn-only: they return no errors at all unless WebAuthn is
 actually switched on for this install, meaning `MFA_QUICKLOGIN` is on or a WebAuthn
 adapter is registered (true by default). A project with
 `MFA_FACTORS = ["totp", "recovery_codes"]` never trips any of them.
-`E004`–`E009` are not gated the same way — none of them is a WebAuthn setting, so
+`E004`–`E011` are not gated the same way — none of them is a WebAuthn setting, so
 there is nothing to gate on, and they apply to every install regardless of which
 factors are registered.
 
@@ -282,6 +299,8 @@ factors are registered.
 | `django_mfa.E007` | Error | `MFA_VERIFY_RATE_LIMIT`, `MFA_VERIFY_IP_RATE_LIMIT` or `MFA_EMAIL_SEND_RATE_LIMIT` is not a valid `"<count>/<window><unit>"` spec. |
 | `django_mfa.E008` | Error | `MFA_RATE_LIMIT_BACKEND` is not `"database"` or `"cache"`. |
 | `django_mfa.E009` | Error | `MFA_CLIENT_IP_RESOLVER` is a dotted path that fails to import, or resolves to a value that isn't callable. |
+| `django_mfa.E010` | Error | Grace is configured but cannot apply: `MFA_REQUIRED_FROM` is not a date, `MFA_GRACE_PERIOD` is negative or not a number, or `MFA_GRACE_PERIOD` is set with no usable anchor (`MFA_GRACE_ANCHOR` unset and the user model has no `date_joined`). |
+| `django_mfa.E011` | Error | `MFA_ADMIN_STEPUP` is set without `MFA_PROTECT_ADMIN`, so nothing reads it and the admin is unprotected. |
 
 `E003` exists because the failure it prevents is otherwise completely silent.
 Passwordless login logs a user in by calling `django.contrib.auth.login()` with an
@@ -292,7 +311,7 @@ resolves `request.user` to `AnonymousUser` — no exception, no log line, just a
 who was "logged in" a moment ago and is now anonymous again. Catching this at startup
 is far cheaper than a support ticket.
 
-All nine are `Error` rather than `Warning` deliberately, though what each guards
+All eleven are `Error` rather than `Warning` deliberately, though what each guards
 against differs slightly. E001–E003 guard a failure mode that is otherwise silent
 in production (see E003's own explanation below). A misconfigured `MFA_REQUIRED`
 is not silent even without E004 — `policy.resolve()` raises `ImproperlyConfigured`
