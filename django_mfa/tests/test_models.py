@@ -50,11 +50,13 @@ class LegacyModelRemovalTests(TestCase):
         # app label. The original brief predates that addition and asserted
         # {"Authenticator"} alone; the task-20 instructions explicitly say
         # Authenticator and MfaUserHandle are the only models the app
-        # registers, so that is what this test checks.
+        # registers, so that is what this test checks. MfaExemption
+        # (django_mfa/models.py, added for the MFA_REQUIRED exemption
+        # feature) is the third and, as of that feature, final entry.
         from django.apps import apps
 
         names = {m.__name__ for m in apps.get_app_config("django_mfa").get_models()}
-        self.assertEqual(names, {"Authenticator", "MfaUserHandle"})
+        self.assertEqual(names, {"Authenticator", "MfaUserHandle", "MfaExemption"})
 
 
 class EmailIsASingletonFactorTests(TestCase):

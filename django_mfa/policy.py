@@ -78,9 +78,26 @@ def resolve():
     return value
 
 
+def has_active_exemption(user):
+    """Is this user currently exempted from MFA_REQUIRED by an operator?"""
+    from django_mfa.models import MfaExemption
+
+    return MfaExemption.objects.active_for(user) is not None
+
+
 def mfa_required_for(user):
     """Is this user required to hold a primary second factor?"""
     if not getattr(user, "is_authenticated", False):
         return False
     predicate = resolve()
-    return bool(predicate and predicate(user))
+    if not (predicate and predicate(user)):
+        return False
+    # Checked last, on purpose: an install with the default
+    # MFA_REQUIRED = False never reaches the database for this, and one with
+    # a predicate pays one query -- MfaExemption.objects.active_for()'s
+    # SELECT ... LIMIT 1, not a plain .exists() -- only for the users it
+    # matches. It fetches the row rather than a bare bool because a later
+    # consumer (the mfa_status command) needs the reason/expiry to display,
+    # not just yes/no, and there is no reason for the two to run separate
+    # queries for the same answer.
+    return not has_active_exemption(user)

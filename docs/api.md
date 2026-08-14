@@ -16,6 +16,8 @@ once already.
 | `is_pending(request)` | `True` if the session is awaiting a second factor. |
 | `start_pending(request)` | Mark the session as awaiting verification. |
 | `mark_verified(request, method)` | Mark it satisfied by `method` (a factor type string). |
+| `verified_at(request)` | Unix timestamp of this session's last successful challenge, or `None`. |
+| `is_fresh(request, max_age)` | `True` if the session verified a factor within the last `max_age` seconds. A verified session with no `verified_at()` (e.g. one from before 4.2.0) counts as stale, not fresh — see {doc}`enforcement`'s step-up section. This is the primitive `mfa_recent_required`/`MfaRecentRequiredMixin` are built on; use it directly if you're writing your own step-up policy instead of the decorator/mixin. |
 | `reset(request)` | Remove MFA state entirely. |
 
 Example:
@@ -75,6 +77,30 @@ A database constraint (`mfa_one_singleton_authenticator_per_user`) allows at mos
 To remove a user's MFA — the administrative recovery path:
 
     Authenticator.objects.filter(user=user).delete()
+
+## `django_mfa.models.MfaExemption`
+
+A user `MFA_REQUIRED` does not apply to, despite the predicate — see
+{doc}`enforcement`'s "Exempting a user" section. Written only by the
+`mfa_disable` management command (or by deleting the row, to revoke — see
+{doc}`operations`), never through a web view: exempting somebody from a
+security requirement is an operator action, not something a user can do to
+themselves.
+
+| Field | Notes |
+|---|---|
+| `user` | `OneToOneField` to `AUTH_USER_MODEL`, related name `mfa_exemption`. |
+| `reason` | Required, free text. `mfa_disable` refuses to grant an exemption without one. |
+| `created_at` | Timestamp. |
+| `expires_at` | `None` means permanent. Otherwise the exemption stops applying once this passes. |
+
+| Method | Returns |
+|---|---|
+| `MfaExemption.objects.active_for(user)` | This user's exemption if it is currently in force (`expires_at` is `None` or in the future), else `None`. What `policy.mfa_required_for()` consults. |
+| `is_active()` | The same freshness check as an instance method, on an object you already have in hand. |
+
+Suppresses `MFA_REQUIRED` only. It does not open `@mfa_required` views — see
+{doc}`enforcement` for why the two are deliberately independent.
 
 ## `django_mfa.conf.settings`
 
@@ -164,7 +190,7 @@ django-mfa also **receives** `user_logged_in` (to stamp the session pending) and
 `user_logged_out` (to clear the quicklogin hint) — you don't connect anything for
 those, they're internal.
 
-It **sends** five signals of its own, defined in `django_mfa.events` and re-exported
+It **sends** six signals of its own, defined in `django_mfa.events` and re-exported
 from `django_mfa.signals` (either import path works):
 
 | Signal | kwargs | Fires when |
@@ -174,6 +200,12 @@ from `django_mfa.signals` (either import path works):
 | `mfa_verified` | `user`, `method`, `request` | A second-factor challenge succeeds — from `verify_factor`'s success branch, and from `passkey_complete` when the passkey assertion carries User Verification (a UP-only passkey login logs the user in but has not satisfied a second factor, so it does not fire this). |
 | `mfa_verification_failed` | `user`, `method`, `request` | A challenge fails: a wrong code, a caught adapter exception (`ValueError`/`TypeError`/`KeyError`), **or an attempt refused outright by the rate limiter** — no adapter call happens in that last case, so a receiver watching for brute force needs to see refused attempts too, not only evaluated ones. |
 | `recovery_code_used` | `user`, `remaining`, `request` | A recovery code is spent. Sent from the adapter itself, not the view — only the adapter knows how many codes are left. |
+| `mfa_exemption_changed` | `user`, `reason`, `expires_at`, `revoked`, `request` | The `mfa_disable` management command grants or revokes an `MfaExemption`. `reason` and `expires_at` are `None` on a revoke. `sender` is the `MfaExemption` model class, not an `Adapter` subclass — there is no adapter behind this one. |
+
+`request` is `None` when the event did not originate in a request — the
+`mfa_reset` and `mfa_disable` management commands emit these signals too, so
+that operator actions are auditable. Receivers must handle both, as the
+example below does.
 
 Read the user off the `user` kwarg, never off `request.user`. On the passkey path
 `mfa_verified` fires between `session.mark_verified()` and `auth.login()` — the
@@ -185,7 +217,9 @@ kwarg is correct on every path.
 a receiver can narrow with `sender=TOTPAdapter` — except on `factor_removed`, whose
 `sender` is `None` when the removed row's type is no longer registered (`MFA_FACTORS`
 was narrowed since it was enrolled, or a third-party adapter was unregistered): match
-on the `factor_type` kwarg instead of `sender` if you need to handle that case.
+on the `factor_type` kwarg instead of `sender` if you need to handle that case. On
+`mfa_exemption_changed`, `sender` is always the `MfaExemption` model class — there is
+no adapter behind an exemption at all.
 
 A receiver:
 
@@ -198,10 +232,14 @@ A receiver:
 
     @receiver(factor_removed)
     def audit_factor_removal(sender, user, factor_type, name, request, **kwargs):
-        logger.info("factor removed: user=%s type=%s name=%r",
-                    user.pk, factor_type, name)
+        # request is None when mfa_reset/mfa_disable removed the row instead
+        # of a request to django_mfa:manage -- log a source that makes sense
+        # either way rather than assuming request is never None.
+        source = request.META.get("REMOTE_ADDR") if request else "console"
+        logger.info("factor removed: user=%s type=%s name=%r from=%s",
+                    user.pk, factor_type, name, source)
 
-All five are sent with `send_robust()`, not `send()`: a raising receiver cannot break
+All six are sent with `send_robust()`, not `send()`: a raising receiver cannot break
 the security action it's observing — enrolling, verifying, or removing a factor
 succeeds or fails independently of what your receiver does with the event. The other
 side of that trade is that `send_robust()` catches and discards the exception rather

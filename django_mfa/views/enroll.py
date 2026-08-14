@@ -5,11 +5,13 @@ from django.urls import reverse
 
 from django_mfa import events, session
 from django_mfa.conf import settings as mfa_settings
+from django_mfa.decorators import mfa_recent_required
 from django_mfa.models import Authenticator
 from django_mfa.views.verify import GENERIC_ERROR, _adapter_or_404
 
 
 @login_required
+@mfa_recent_required(allow_unenrolled=True)
 def enroll_factor(request, factor_type):
     adapter = _adapter_or_404(factor_type)
     if not adapter.supports_enroll:

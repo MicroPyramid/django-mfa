@@ -10,6 +10,7 @@ from django_mfa.conf import settings as mfa_settings
 from django_mfa.events import (  # noqa: F401
     factor_added,
     factor_removed,
+    mfa_exemption_changed,
     mfa_verification_failed,
     mfa_verified,
     recovery_code_used,

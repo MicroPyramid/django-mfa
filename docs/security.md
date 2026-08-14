@@ -210,9 +210,12 @@ Stated plainly, so you can decide what else you need:
   mitigation** — credentials are bound to the origin, so a passkey cannot be used on
   an attacker's domain. If phishing is in your threat model, prefer passkeys and
   consider not offering TOTP.
-- **Compromised sessions.** Once verified, the session is verified. django-mfa does
-  not re-challenge for sensitive actions; if you want step-up authentication for,
-  say, changing a password, build it on `session.is_verified()` plus your own policy.
+- **Compromised sessions, for actions django-mfa doesn't know about.** Adding,
+  removing or regenerating a factor already requires a *recent* challenge, not
+  merely a verified session — see [Step-up re-authentication](enforcement.md#step-up-re-authentication).
+  For any other sensitive action of your own, say, changing a password, apply the
+  same decorator (`mfa_recent_required`/`MfaRecentRequiredMixin`) yourself; a plain
+  verified session is otherwise good for the life of that session.
 - **A compromised server.** TOTP secrets are decryptable by your application by
   definition. Encryption at rest protects against a leaked database dump, not
   against code execution on your host.

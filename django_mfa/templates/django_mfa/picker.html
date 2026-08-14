@@ -8,7 +8,7 @@
   <ul class="mfa-picker">
     {% for adapter in adapters %}
     <li>
-      <a href="{% url 'mfa:verify_factor' adapter.type %}">{{ adapter.verbose_name }}</a>
+      <a href="{% url 'mfa:verify_factor' adapter.type %}{% if next %}?next={{ next|urlencode }}{% endif %}">{{ adapter.verbose_name }}</a>
     </li>
     {% endfor %}
   </ul>

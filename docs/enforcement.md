@@ -50,6 +50,20 @@ import, or resolves to something that isn't callable — catching a misconfigure
 predicate at startup is a lot cheaper than discovering it from an exception raised
 inside the middleware on some user's live request.
 
+### Exempting a user
+
+    manage.py mfa_disable alice --reason "service account" --until 2099-12-31
+
+An exemption suppresses **`MFA_REQUIRED` only**. It does not open
+`@mfa_required` views: `MFA_REQUIRED` picks users, the decorator picks views,
+and an exempt user reaching a decorated billing page is still redirected.
+Revoke with `manage.py mfa_disable alice --revoke`, or by deleting the row in
+the admin — both work, but they are not equivalent: only the command path
+fires `mfa_exemption_changed`. Deleting the row in the admin is not audited
+at all — Django's admin emits no signal of its own for it that django-mfa
+listens for. If the deletion needs to appear in whatever is consuming that
+signal, use `mfa_disable --revoke`, not the admin.
+
 ## What a required user sees
 
 A user `MFA_REQUIRED` applies to, who holds no *primary* factor yet
@@ -126,6 +140,51 @@ regardless of `MFA_REQUIRED`: the decorator is itself the policy for that view, 
 a mirror of the site-wide one. A view behind `@mfa_required` requires a primary
 factor even on a `MFA_REQUIRED = False` project.
 
+## Step-up re-authentication
+
+Adding, removing or regenerating a factor requires a *recent* challenge, not
+merely a verified session. A session that verified longer ago than
+`MFA_STEPUP_MAX_AGE` (default 300 seconds) is sent back through
+`mfa:verify` first. For a safe request (`GET`) it is then returned to the
+exact page it asked for. For an unsafe request (`POST`) it is returned to
+`mfa:security_settings` instead, or wherever the decorator's own `next_url`
+points — the POST body cannot survive the redirect through `mfa:verify`, so
+there is nothing to replay; the user re-submits from a page they can act
+from.
+
+Without this, a stolen or borrowed session could strip every factor from an
+account and enrol its own without presenting anything — and the victim's
+password reset would not evict the attacker, because the attacker now holds
+a second factor of their own.
+
+Apply it to your own sensitive views:
+
+    from django_mfa.decorators import mfa_recent_required, MfaRecentRequiredMixin
+
+    @mfa_recent_required(max_age=60)
+    def transfer_funds(request):
+        ...
+
+    class TransferView(MfaRecentRequiredMixin, FormView):
+        mfa_stepup_max_age = 60
+
+`mfa_required`/`MfaRequiredMixin` take no configuration at all — `mfa_required`
+is a plain decorator with no arguments, and `MfaRequiredMixin` defines no
+attributes. `mfa_recent_required`/`MfaRecentRequiredMixin` enforce everything
+those two do (pending session, then no-primary-factor) and add a freshness
+rung on top, configured with three options neither of the plain forms takes
+any of: `max_age` (falls back to `MFA_STEPUP_MAX_AGE` / `mfa_stepup_max_age`
+when omitted), `next_url` / `mfa_stepup_next_url`, and `allow_unenrolled` /
+`mfa_allow_unenrolled`, **`False` by default**. With the default, a user who
+holds no primary factor is redirected to `mfa:security_settings` exactly as
+`mfa_required` does — so `@mfa_recent_required(max_age=60)` is never
+silently weaker than `@mfa_required`. Pass `allow_unenrolled=True` only for
+a view that is itself part of a user's first-enrolment path (as
+`enroll_factor` and `recovery_codes` do internally) — such a user has
+nothing to re-verify yet, and gating that view would lock them out of the
+only pages that could give them a factor. Most host-project views should
+leave this at its default.
+
 ## What is not enforced
 
 - **Unauthenticated requests.** Every wall above only applies once
@@ -133,8 +192,9 @@ factor even on a `MFA_REQUIRED = False` project.
   password-reset flows are still yours to protect — `MFA_REQUIRED` cannot make MFA a
   precondition of authenticating in the first place, only of what an
   already-authenticated session can go on to reach.
-- **Step-up re-authentication.** Once a session is verified, it stays verified for
-  the life of that session; django-mfa does not re-challenge before a sensitive
-  action. If you want that — say, requiring a fresh code before changing a password
-  — build it yourself on `session.is_verified()` plus your own policy. See
-  {doc}`security`.
+- **Step-up re-authentication for your own views.** django-mfa applies
+  `mfa_recent_required` to its own three factor-mutating views (see above) but does
+  not — cannot — apply it to a view it doesn't know about. If you want a fresh
+  challenge before some other sensitive action of your own — say, changing a
+  password — apply `mfa_recent_required`/`MfaRecentRequiredMixin` yourself, as shown
+  above. See {doc}`security`.

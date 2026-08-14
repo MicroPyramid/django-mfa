@@ -1,3 +1,5 @@
+import time
+
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.test import Client, TestCase
@@ -55,7 +57,10 @@ class EventTestCase(TestCase):
     def verified_login(self):
         self.client.login(username="a@example.com", password="pw")
         session = self.client.session
-        session["mfa"] = {"verified": True, "method": "totp", "at": 0}
+        # A recent "at", not 0 -- these tests drive enroll_factor/manage,
+        # which now require a fresh challenge (mfa_recent_required), not
+        # merely a verified session. See test_stepup.py.
+        session["mfa"] = {"verified": True, "method": "totp", "at": int(time.time())}
         session.save()
 
 

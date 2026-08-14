@@ -12,6 +12,88 @@ Versions follow [PEP 440](https://peps.python.org/pep-0440/). The version in
 `pyproject.toml` is the only place it is written; the git tag and the GitHub
 Release are derived from it (see [docs/contributing.md](docs/contributing.md)).
 
+## 4.2.0
+
+### Added
+
+- **Step-up re-authentication.** `mfa_recent_required`/`MfaRecentRequiredMixin`
+  (`django_mfa.decorators`) and `MFA_STEPUP_MAX_AGE` (default `300` seconds)
+  require a *recent* challenge, not merely a verified session, before a
+  factor can be added, removed or regenerated. Set `MFA_STEPUP_MAX_AGE =
+  None` to switch it off for django-mfa's own three built-in views (they
+  never pass their own `max_age`, so they fall back to the setting) and
+  restore 4.1.0 behaviour there. It does **not** override a host view's own
+  explicit `@mfa_recent_required(max_age=60)` — an explicit per-view
+  `max_age` always wins over the global setting, by design. See
+  [docs/enforcement.md](docs/enforcement.md).
+- **Four management commands** for day-to-day operation:
+  `mfa_status` (read-only — one user's enrolled factors and MFA status),
+  `mfa_reset` (remove every factor from a locked-out user so they can
+  re-enroll), `mfa_report` (rollout coverage, and who `MFA_REQUIRED` applies
+  to but who hasn't enrolled — text or CSV), and `mfa_disable` (grant or
+  `--revoke` an `MfaExemption` from `MFA_REQUIRED` for one user; does not
+  touch that user's enrolled factors). See
+  [docs/operations.md](docs/operations.md).
+- **Two importers** for migrating factors in from another package:
+  `mfa_import_django_otp` (also covers **django-two-factor-auth**, which
+  stores its TOTP and static tokens as django-otp rows) and
+  `mfa_import_django_mfa2`. Both support `--dry-run`, `--users`, and
+  `--overwrite`, are idempotent, and never destroy a working factor unless
+  `--overwrite` is passed. See
+  [docs/operations.md](docs/operations.md#migrating-from-another-package) for
+  what each does and does not migrate — several factor shapes (a
+  clock-drifted django-otp TOTP device, django-mfa2's wider acceptance
+  window, `RECOVERY` rows, and any factor type absent from `MFA_FACTORS`) are
+  reported rather than imported, and are worth reading before a cutover.
+- **`MfaExemption`** model and manager (`MfaExemption.objects.active_for()`),
+  and the **`mfa_exemption_changed`** signal (`user`, `reason`, `expires_at`,
+  `revoked`, `request`) it fires. Written only by `mfa_disable` — there is no
+  web UI for granting yourself an exemption from a security requirement.
+- **System check `django_mfa.E005`**, rejecting an `MFA_STEPUP_MAX_AGE` that
+  isn't a positive integer or `None`, the same way `E004` already does for
+  `MFA_REQUIRED`.
+
+### Changed
+
+- **Behaviour change.** Adding, removing or regenerating a factor now
+  requires a session that completed a challenge within the last
+  `MFA_STEPUP_MAX_AGE` seconds (default 300), not merely a verified one.
+  Set `MFA_STEPUP_MAX_AGE = None` to restore 4.1.0 behaviour for
+  django-mfa's own views (see the Added entry above for the one case this
+  doesn't cover). This is the one place this release does not upgrade to
+  byte-identical behaviour by default — see
+  [docs/upgrading.md](docs/upgrading.md).
+- **`MFA_REMEMBER_MY_BROWSER` now interacts with step-up.** A trusted
+  browser still skips the challenge at *login* exactly as before — the RMB
+  cookie check marks the session verified immediately — but that session is
+  only fresh the moment it's created. `MFA_STEPUP_MAX_AGE` is enforced on
+  every factor change regardless of how the session became verified, so a
+  trusted browser that adds, removes or regenerates a factor more than
+  `MFA_STEPUP_MAX_AGE` seconds after logging in is now challenged for that
+  action — the RMB cookie is consulted only at login, not re-checked by the
+  step-up gate. This is a visible change for installs that enabled RMB
+  specifically to avoid challenges. See
+  [docs/settings.md](docs/settings.md).
+- **Signals may now carry `request=None`.** `mfa_reset` and `mfa_disable`
+  emit `factor_removed`/`mfa_exemption_changed` from outside any request, so
+  that an operator action is exactly as auditable as the equivalent
+  user-initiated one. A receiver that reaches for `request.META`
+  unconditionally must be updated to tolerate `None` first — see
+  [docs/api.md](docs/api.md)'s Signals section.
+- The verification picker now honours `?next=`, so a single-factor user is
+  returned to the page they requested after logging in rather than to
+  `LOGIN_REDIRECT_URL`.
+
+### Upgrading
+
+Run `manage.py migrate django_mfa`. Migration `0009_mfa_exemption` adds the
+`MfaExemption` table; it is reversible.
+
+Nothing else is required to keep 4.1.0 behaviour, with one exception: factor
+changes are gated on `MFA_STEPUP_MAX_AGE` by default (see above). Set it to
+`None` if you need the previous, unconditional behaviour immediately after
+upgrading.
+
 ## 4.1.0
 
 Three additions, all opt-in. **An install that sets none of the new settings
