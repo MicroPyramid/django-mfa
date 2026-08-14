@@ -3,7 +3,7 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
-from django_mfa import events, session
+from django_mfa import flows
 from django_mfa.conf import settings as mfa_settings
 from django_mfa.decorators import mfa_recent_required
 from django_mfa.models import Authenticator
@@ -26,31 +26,17 @@ def enroll_factor(request, factor_type):
 
     if request.method == "POST":
         try:
-            authenticator = adapter.complete_enroll(request, request.POST)
-        except (ValueError, TypeError, KeyError):
-            # ValueError: the adapter's own "this ceremony/code is invalid"
-            #   signal (e.g. TOTP's wrong code, or a stale/replayed WebAuthn
-            #   registration challenge).
-            # TypeError: a tampered WebAuthn credential payload -- valid
-            #   JSON, but not the mapping shape fido2 expects (e.g. a JSON
-            #   array), which fido2's own parsing rejects with TypeError
-            #   rather than ValueError.
-            # KeyError / MultiValueDictKeyError (a KeyError subclass): a
-            #   required POST field is simply missing -- `secret_key` for
-            #   TOTP, `credential` for WebAuthn.
-            # All three must render the exact same generic 400 a wrong code
+            # The adapter call, the normalisation of its three rejection
+            # types into one, the session stamp and the factor_added signal
+            # are all in flows.attempt_enroll, shared with the JSON API.
+            flows.attempt_enroll(request, factor_type, request.POST)
+        except flows.FactorRejected:
+            # Every rejection renders the exact same generic 400 a wrong code
             # does: a different message (or an unhandled 500) per failure
             # mode would itself be a weak oracle about which check failed.
             context["error_message"] = GENERIC_ERROR
             context.update(adapter.begin_enroll(request))
             return render(request, adapter.enroll_template, context, status=400)
-
-        # Enrolling a factor satisfies this session's requirement — the user
-        # just proved possession.
-        session.mark_verified(request, factor_type)
-        events.factor_added.send_robust(
-            sender=type(adapter), user=request.user,
-            authenticator=authenticator, request=request)
 
         has_codes = Authenticator.objects.filter(
             user=request.user, type=Authenticator.Type.RECOVERY_CODES).exists()

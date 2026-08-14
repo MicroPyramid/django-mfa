@@ -43,6 +43,7 @@ operations
 
 settings
 api
+rest_api
 security
 ```
 

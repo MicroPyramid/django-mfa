@@ -45,6 +45,8 @@ Django's own `user_logged_in` signal.
 | ✉️ **Emailed codes** | Opt-in (`"email"` in `MFA_FACTORS`): a one-time code sent to the address on file, for a user who's lost everything else. Not in the default factor list — an existing install has to opt in. |
 | 🖥️ **Remember this browser** | Optional, off by default. Trust a browser for N days after one successful challenge. |
 | ➕ **Several keys at once** | A user can register a work laptop's Touch ID *and* a backup YubiKey, each with its own name. |
+| 🌍 **Six languages** | German, Spanish, French, Brazilian Portuguese, Japanese and Simplified Chinese ship translated. Switch on `USE_I18N` and they work. |
+| 🔌 **A JSON API** | Opt-in. Every flow above as JSON, for an SPA or mobile client that renders its own screens. No DRF dependency. |
 
 ## Install
 
@@ -222,6 +224,8 @@ against it from outside the source tree.
 
 - [Getting started](http://django-mfa.readthedocs.io/en/latest/installation_setup.html) — install and wire it up in five minutes
 - [Settings reference](http://django-mfa.readthedocs.io/en/latest/settings.html) — every setting, its default, and what it does
+- [JSON API](http://django-mfa.readthedocs.io/en/latest/rest_api.html) — endpoints, error codes, and what it needs from your client
+- [Translations](http://django-mfa.readthedocs.io/en/latest/translations.html) — the six shipped languages, and how to fix or add one
 - [Customizing the UI](http://django-mfa.readthedocs.io/en/latest/customizing.html) — templates, context, and the WebAuthn JS contract
 - [Enforcing MFA](http://django-mfa.readthedocs.io/en/latest/enforcement.html) — requiring it for some or all users, and per-view enforcement
 - [Integration recipes](http://django-mfa.readthedocs.io/en/latest/recipes.html) — allauth, passkey buttons, APIs, testing, troubleshooting

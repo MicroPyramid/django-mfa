@@ -12,6 +12,69 @@ Versions follow [PEP 440](https://peps.python.org/pep-0440/). The version in
 `pyproject.toml` is the only place it is written; the git tag and the GitHub
 Release are derived from it (see [docs/contributing.md](docs/contributing.md)).
 
+## 4.4.0
+
+### Added
+
+- **A JSON API**, opt-in via a separate URL include:
+
+      path("api/mfa/", include("django_mfa.api.urls"))
+
+  Every flow the HTML views offer — state, enroll, verify, recovery codes,
+  factor removal, passwordless sign-in — as JSON, for an SPA or mobile
+  client that renders its own screens. No new dependency: plain Django
+  views, so it works inside a DRF, django-ninja or plain-Django project
+  alike. Session authentication by default; `MFA_API_AUTHENTICATION`
+  (new setting, default `None`) supplies a hook for token or JWT clients.
+  Note that **MFA state remains session-backed**, so a client must persist
+  the session cookie — see [docs/rest_api.md](docs/rest_api.md), which is
+  explicit about what that rules out.
+- **System check `django_mfa.E006`**, rejecting an unimportable or
+  non-callable `MFA_API_AUTHENTICATION`, the way `E004` already does for
+  `MFA_REQUIRED`.
+- **Passkey autofill (WebAuthn conditional mediation)**, opt-in per form
+  with `data-conditional="true"` plus `autocomplete="username webauthn"` on
+  your username input. Offers a returning user their passkey from the
+  browser's own dropdown instead of behind a button. Off by default because
+  it moves `mfa:passkey_begin` to once per login-page view for every
+  anonymous visitor, and that endpoint writes a session — see
+  [docs/recipes.md](docs/recipes.md).
+- **`tools/compile_catalogs.py`**, which refreshes catalog source
+  references and compiles every `.mo`. It is `makemessages` + `msgfmt` in
+  pure Python, because gettext's binaries are not a dependency this project
+  imposes — including on its own CI.
+- The sandbox login page now demonstrates passkey sign-in, including
+  autofill. It previously demonstrated neither.
+
+### Changed
+
+- **The six translations are now live.** `de`, `es`, `fr`, `pt_BR`, `ja`
+  and `zh_Hans` shipped in 4.3.0 with every entry marked `fuzzy`, which
+  meant users still saw English. Every entry is now translated and
+  unfuzzed, and compiled `.mo` files ship — Django reads only those, so
+  without them the catalogs did nothing. They remain machine-drafted and
+  maintainer-reviewed rather than reviewed by a native speaker; corrections
+  are welcome. See [docs/translations.md](docs/translations.md).
+- The order of operations for an enrollment or verification attempt moved
+  to `django_mfa.flows`, and the enforcement rungs to
+  `decorators.enforcement_state`/`recent_enforcement_state`. Both are
+  shared verbatim by the HTML views and the API, so the two cannot come to
+  apply different rules. No behaviour change — this is why the HTML views
+  are shorter in this release.
+
+### Fixed
+
+- **`"Remove"` was rendering in `django.contrib.admin`'s words, not ours,
+  in every language admin translates.** gettext keys on the string itself
+  and Django merges all installed apps' catalogs, with the app listed
+  *first* in `INSTALLED_APPS` winning a shared key — and admin is listed
+  first in nearly every project. The button now carries a
+  `context "second-factor method"`, which makes the key ours alone, and a
+  test fails on any bare msgid a bundled Django app also translates.
+- The "managed by your organization" message shown when
+  `MFA_OWNED_BY_ENTERPRISE` blocks a removal was the one user-facing string
+  never wrapped for translation.
+
 ## 4.3.0
 
 ### Added

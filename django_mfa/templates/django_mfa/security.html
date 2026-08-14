@@ -39,7 +39,15 @@
           <input type="hidden" name="pk" value="{{ authenticator.pk }}">
           <button type="submit" class="btn btn-danger btn-sm"
                   onclick="return confirm('{% trans "Remove this method?" %}')">
-            {% trans "Remove" %}
+            {% comment %}
+              Context, not a bare msgid: "Remove" is generic enough that
+              django.contrib.admin ships its own translation of it, and
+              whichever app INSTALLED_APPS lists FIRST wins the shared key.
+              Admin is listed first in nearly every project, so without this
+              the button renders with admin's wording in every language
+              admin translates. See test_i18n.py's collision test.
+            {% endcomment %}
+            {% trans "Remove" context "second-factor method" %}
           </button>
         </form>
         {% else %}

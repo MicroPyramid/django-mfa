@@ -29,6 +29,7 @@ it.
 
 import ast
 import re
+import struct
 from pathlib import Path
 
 from django.utils.translation.template import templatize
@@ -222,16 +223,20 @@ def parse_po(path):
     one) and ``flags``.
 
     Deliberately not a general-purpose PO parser: it understands exactly the
-    subset this project's catalogs use, which is also the subset the writer
-    in tools/ emits. It judges nothing -- the tests do that.
+    subset this project's catalogs use, which is also the subset
+    tools/compile_catalogs.py consumes. It judges nothing -- the tests do
+    that.
     """
     entries, current, field = [], _blank_entry(), None
-    # Flags precede the entry they describe ("#, fuzzy" sits above its
-    # msgid), so they are buffered and attached to the NEXT entry. Adding
-    # them to `current` as they are read would file every flag against the
-    # preceding entry instead -- which, for a catalog whose central claim is
-    # "every entry is fuzzy", would be a guard that reads the wrong rows.
+    # Flags and msgctxt both PRECEDE the entry they belong to ("#, fuzzy"
+    # and `msgctxt "..."` sit above the msgid), so both are buffered and
+    # attached to the NEXT entry. Writing either into `current` as it is
+    # read files it against the preceding entry instead -- which for a
+    # context is doubly wrong, because it also leaves the entry that really
+    # has one looking uncontexted, and the two errors cancel out into a
+    # catalog that merely looks shifted by one rather than obviously broken.
     pending_flags = set()
+    pending_ctxt = None
 
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -253,7 +258,11 @@ def parse_po(path):
                     entries.append(current)
                 current = _blank_entry()
                 current["flags"], pending_flags = pending_flags, set()
-            if keyword.startswith("msgstr"):
+                current["msgctxt"], pending_ctxt = pending_ctxt, None
+            if keyword == "msgctxt":
+                pending_ctxt = value
+                field = (keyword, None)
+            elif keyword.startswith("msgstr"):
                 current["msgstrs"].append(value)
                 field = ("msgstrs", len(current["msgstrs"]) - 1)
             else:
@@ -262,7 +271,10 @@ def parse_po(path):
         elif line.startswith('"') and field:
             name, index = field
             chunk = po_unescape(line[1:-1])
-            if index is None:
+            if name == "msgctxt":
+                # Still buffered -- its entry has not started yet.
+                pending_ctxt = (pending_ctxt or "") + chunk
+            elif index is None:
                 current[name] = (current[name] or "") + chunk
             else:
                 current[name][index] += chunk
@@ -285,3 +297,159 @@ def locale_files():
         po.parent.parent.name: po
         for po in sorted(LOCALE_DIR.glob("*/LC_MESSAGES/django.po"))
     }
+
+
+def format_entry(entry, refs=()):
+    """One PO entry as text, with ``refs`` as its ``#:`` source references.
+
+    Deliberately does not wrap long lines. gettext's own tools wrap at 77
+    columns, but wrapping is cosmetic and unwrapped is both valid and far
+    easier to diff -- a reworded sentence shows up as one changed line
+    rather than a reflowed paragraph.
+    """
+    lines = [f"#: {ref}" for ref in refs]
+    if entry["flags"]:
+        lines.append(f"#, {', '.join(sorted(entry['flags']))}")
+    if entry["msgctxt"] is not None:
+        lines.append(f'msgctxt "{po_escape(entry["msgctxt"])}"')
+    lines.append(f'msgid "{po_escape(entry["msgid"])}"')
+    if entry["msgid_plural"] is None:
+        lines.append(f'msgstr "{po_escape(entry["msgstrs"][0])}"')
+    else:
+        lines.append(f'msgid_plural "{po_escape(entry["msgid_plural"])}"')
+        for index, msgstr in enumerate(entry["msgstrs"]):
+            lines.append(f'msgstr[{index}] "{po_escape(msgstr)}"')
+    return "\n".join(lines)
+
+
+def write_po(path, comment, header, entries, references):
+    """Rewrite a .po/.pot from parsed entries, refreshing source references.
+
+    Translations are carried over verbatim from ``entries`` (normally
+    parse_po() of the same file), so this is a *reference* refresh, not a
+    regeneration: it is the one part of a catalog derived from the code
+    rather than from a translator, and the only part that goes stale on its
+    own every time a template gains a line.
+
+    ``references`` is extract()'s mapping, so an entry no longer present in
+    the source simply loses its references rather than silently keeping
+    wrong ones.
+    """
+    blocks = [comment.rstrip("\n"), 'msgid ""\nmsgstr ""\n' + "\n".join(
+        f'"{po_escape(line)}\\n"' for line in header.rstrip("\n").split("\n"))]
+    for entry in entries:
+        blocks.append(format_entry(entry, references.get(
+            po_key(entry), [])))
+    path.write_text("\n\n".join(blocks) + "\n", encoding="utf-8")
+
+
+def po_comment(path):
+    """The leading comment block, above the header entry."""
+    lines = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if not raw.startswith("#"):
+            break
+        lines.append(raw)
+    return "\n".join(lines)
+
+
+def po_header(path):
+    """The catalog header -- the msgstr belonging to the empty msgid.
+
+    parse_po() drops it, since it is metadata rather than an entry, but a
+    compiled catalog cannot do without it: ``gettext`` reads the charset to
+    decode with and the Plural-Forms expression to select a plural form from
+    exactly here. A .mo with no header entry decodes as ASCII and counts
+    plurals the Germanic way regardless of language.
+    """
+    collecting, chunks = False, []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not collecting:
+            # The header is the first entry in the file, so the first
+            # `msgstr ""` encountered is necessarily its own.
+            collecting = line == 'msgstr ""'
+            continue
+        if not line.startswith('"'):
+            break
+        chunks.append(po_unescape(line[1:-1]))
+    return "".join(chunks)
+
+
+# --- MO files ---------------------------------------------------------------
+#
+# `msgfmt` is a gettext binary, and this project cannot assume gettext is
+# installed -- the same constraint that produced the extractor above. But
+# unlike the .po files, a .mo is not optional decoration: Django's
+# translation machinery reads *only* compiled catalogs, so an uncompiled
+# language is an untranslated one no matter how complete its .po is.
+#
+# The format is small and fully specified (GNU gettext manual, "The Format of
+# GNU MO Files"), so it is written out here directly. Tests do not trust this
+# implementation to check itself: they read the shipped .mo back with the
+# standard library's own gettext.GNUTranslations, which is an independent
+# reader, and then assert Django actually serves the translations.
+
+MO_MAGIC = 0x950412DE
+
+#: gettext's separators, which are part of the lookup key rather than
+#: decoration: a context is joined to its msgid with EOT, and the two halves
+#: of a plural pair (and the plural forms of its translation) with NUL.
+CONTEXT_GLUE = "\x04"
+PLURAL_GLUE = "\x00"
+
+
+def mo_key(entry):
+    """The exact byte string gettext will look this entry up by."""
+    msgid = entry["msgid"]
+    if entry["msgctxt"] is not None:
+        msgid = entry["msgctxt"] + CONTEXT_GLUE + msgid
+    if entry["msgid_plural"] is not None:
+        msgid = msgid + PLURAL_GLUE + entry["msgid_plural"]
+    return msgid.encode("utf-8")
+
+
+def mo_value(entry):
+    """The translation blob: NUL-joined, one part per plural form."""
+    return PLURAL_GLUE.join(entry["msgstrs"]).encode("utf-8")
+
+
+def compile_mo(path):
+    """Compile one .po file into GNU MO bytes.
+
+    Untranslated and fuzzy entries are omitted rather than written empty,
+    which is what `msgfmt` does and is load-bearing: an entry present with an
+    empty translation makes gettext return the empty string, so the UI would
+    render blank instead of falling back to the English source.
+    """
+    items = [(b"", po_header(path).encode("utf-8"))]
+    for entry in parse_po(path):
+        if "fuzzy" in entry["flags"] or not any(entry["msgstrs"]):
+            continue
+        items.append((mo_key(entry), mo_value(entry)))
+    # Sorted by key because readers are entitled to binary-search the tables
+    # (the C library does; Python's reads them linearly into a dict). Also
+    # makes the output byte-for-byte reproducible from the same input.
+    items.sort(key=lambda item: item[0])
+
+    count = len(items)
+    keys_start = 7 * 4 + 16 * count
+    keys, values, key_index, value_index = b"", b"", [], []
+    for key, _value in items:
+        key_index.append((len(key), keys_start + len(keys)))
+        keys += key + b"\x00"          # NUL-terminated for C readers; the
+    values_start = keys_start + len(keys)   # length prefix is what Python uses
+    for _key, value in items:
+        value_index.append((len(value), values_start + len(values)))
+        values += value + b"\x00"
+
+    out = struct.pack(
+        "<7I", MO_MAGIC, 0, count, 7 * 4, 7 * 4 + count * 8, 0, 0)
+    for length, offset in key_index + value_index:
+        out += struct.pack("<2I", length, offset)
+    return out + keys + values
+
+
+def mo_path(po):
+    """Where a given .po's compiled form belongs."""
+    return po.with_name("django.mo")

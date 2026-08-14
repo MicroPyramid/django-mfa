@@ -1,31 +1,34 @@
 # Translations
 
-Every string django-mfa shows a user is translatable. What ships today is the
-machinery plus six machine-drafted catalogs; **no translation is live yet**,
-by design. This page covers what you get out of the box, what your project
-has to do to use it, and how to review a language so it starts appearing.
+Every string django-mfa shows a user is translatable, and **six languages are
+live**: a user whose browser asks for one of them gets django-mfa's screens in
+it, with no configuration beyond switching Django's own i18n on.
 
 ## What ships
 
-    django_mfa/locale/django.pot            the template, 75 entries
-    django_mfa/locale/<lang>/LC_MESSAGES/django.po
+    django_mfa/locale/django.pot                     the template, 75 entries
+    django_mfa/locale/<lang>/LC_MESSAGES/django.po   the source catalog
+    django_mfa/locale/<lang>/LC_MESSAGES/django.mo   the compiled catalog
 
-Six languages have draft catalogs: `de`, `es`, `fr`, `pt_BR`, `ja`, `zh_Hans`.
+`de`, `es`, `fr`, `pt_BR`, `ja`, `zh_Hans` — complete, with no entry left
+untranslated or `fuzzy`.
 
-Every entry in every one of them is marked `#, fuzzy`. That is not an
-oversight — it is the whole safety model. gettext skips a fuzzy entry and
-falls back to the English source, so a machine draft nobody has read cannot
-put words in your product's mouth on a sign-in screen. `django_mfa/tests/`
-`test_i18n.py` fails the build if a fuzzy flag disappears without the
-deliberate steps below.
+:::{note}
+These catalogs were **machine-drafted and maintainer-reviewed, not reviewed by
+a native speaker.** They are live because a good translation that reaches
+users beats a perfect one that never ships — but if something reads wrong to
+you, that is a bug worth reporting, and a one-line pull request against a
+`.po` file is a genuinely welcome contribution.
+:::
 
-For the same reason **no compiled `.mo` files ship**: a fully fuzzy catalog
-compiles to an empty one, so shipping it would add bytes and change nothing.
+The `.mo` files are the half that matters at runtime: **Django reads only
+compiled catalogs.** A `.po` is the source a translator edits; nothing serves
+it directly.
 
 ## Using them in your project
 
-Django's i18n has to be switched on in the host project — django-mfa can't
-do it for you:
+Django's i18n has to be switched on in the host project — django-mfa can't do
+it for you:
 
     USE_I18N = True
 
@@ -46,47 +49,74 @@ the shipped file *and* its `{% trans %}` tags — the strings in your copy are
 yours to translate, in your project's own catalog. See {doc}`customizing`.
 :::
 
-## Reviewing a language so it goes live
+## Working on the catalogs
 
-A draft becomes a real translation when a human who reads the language has
-checked it. The steps, in order:
+One command does everything mechanical:
 
-1. Read `django_mfa/locale/<lang>/LC_MESSAGES/django.po` end to end. Fix
-   what's wrong. Pay particular attention to `%(name)s` placeholders: they
-   must appear in the translation exactly as in the source, or interpolation
-   raises `KeyError` in the middle of somebody's sign-in. A test enforces
-   this, but understanding why matters more than the test.
-2. Remove the `#, fuzzy` line above each entry you have reviewed. An entry
-   keeps falling back to English until you do.
-3. Compile it: `django-admin compilemessages -l <lang>`. This needs the
-   `gettext` tools installed (`apt install gettext`, `brew install gettext`).
-4. Commit the `.mo` alongside the `.po`. It is deliberately un-ignored in
-   `.gitignore` — the `.mo` is the file gettext reads at runtime, and
-   hatchling won't put an ignored file in the wheel.
-5. Update `test_i18n.py`'s `DraftsStayInertTests`, which asserts nothing is
-   live. Make it assert what's now true — that this language is reviewed and
-   the others are not. Changing that test should feel deliberate.
+    uv run python tools/compile_catalogs.py
 
-## Adding a language
+It refreshes the `#:` source references in every catalog and recompiles every
+`.mo`. It never invents, reorders or drops a translation — editing those is
+the human part. `test_i18n.py` fails if a `.mo` is out of date with its `.po`,
+so a forgotten run is caught in CI rather than shipped as a translation
+nobody receives.
 
-    django-admin makemessages -l <lang>       # run from django_mfa/
+This is `makemessages` + `msgfmt` reimplemented in Python
+(`django_mfa/tests/support/i18n.py`) because gettext's binaries are a system
+package this project declines to require — including of its own CI.
 
-Then follow the review steps above. There is no draft to start from, which
-is fine: an empty `msgstr` falls back to English exactly as a fuzzy one does.
+### Fixing a translation
 
-## Adding or changing a string
+Edit the `msgstr` in `django_mfa/locale/<lang>/LC_MESSAGES/django.po`, run the
+command above, and commit the `.po` and `.mo` together.
 
-Wrap it — `{% trans %}` / `{% blocktrans %}` in a template,
-`gettext_lazy as _` in Python — then regenerate:
+Placeholders like `%(name)s` must appear in the translation exactly as in the
+source. Get one wrong and interpolation raises `KeyError` in the middle of
+somebody's sign-in — this is the one translation mistake that is an outage
+rather than an embarrassment. A test enforces it; understanding why matters
+more than the test does.
 
-    django-admin makemessages -a --keep-pot   # from django_mfa/
+### Adding a language
 
-`test_i18n.py` fails if the catalog and the code disagree, so a forgotten
-regeneration is caught in CI rather than discovered by a translator months
-later. That check runs a pure-Python extractor (`tests/support/i18n.py`)
-rather than shelling out to `xgettext`, so it works on machines and CI
-images that have no gettext installed.
+Copy `django.pot` to `django_mfa/locale/<lang>/LC_MESSAGES/django.po`, set
+`Language:` and `Plural-Forms:` in its header, translate every `msgstr`, and
+run the command above.
 
-Two things are deliberately **not** translated: management-command output
-and system-check messages. Both are read by operators and developers, not
-end users, and both are matched against by scripts.
+Getting `Plural-Forms` right matters more than it looks: it is what selects
+between `msgstr[0]` and `msgstr[1]`, so a wrong rule produces fluent text
+attached to the wrong number. The
+[gettext manual's table](https://www.gnu.org/software/gettext/manual/html_node/Plural-forms.html)
+has the correct expression for each language.
+
+A partial catalog is not useful here — a page rendered half in the user's
+language and half in English is worse than one rendered wholly in English —
+and `test_i18n.py` requires every entry to be translated.
+
+### Adding or changing a string
+
+Wrap it: `{% trans %}` / `{% blocktrans %}` in a template, `gettext_lazy as _`
+in Python. Then add the entry by hand to `django.pot` and to each `.po`, and
+run the command above. `test_i18n.py` fails while the catalogs and the code
+disagree, so this cannot be half-done quietly.
+
+:::{warning}
+**Give a generic string a `context`.** gettext keys on the string itself, and
+Django merges every installed app's catalog into one per language — so a bare
+`{% trans "Save" %}` collides with `django.contrib.admin`'s own `"Save"`, and
+whichever app `INSTALLED_APPS` lists *first* wins the key. Admin is listed
+first in nearly every project.
+
+The result is invisible: the page renders, in the right language, in another
+app's words — and only in the languages that app translates, so reading the
+English UI will never reveal it. `"Remove"` was exactly this, silently served
+as admin's wording, until it became:
+
+    {% trans "Remove" context "second-factor method" %}
+
+`test_i18n.py` now fails on any bare msgid that a bundled Django app also
+translates. The fix is always a context, never rewording around admin.
+:::
+
+Two things are deliberately **not** translated: management-command output and
+system-check messages. Both are read by operators and developers, not end
+users, and both are matched against by scripts.

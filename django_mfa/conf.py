@@ -25,6 +25,7 @@ DEFAULTS = {
     "MFA_EMAIL_SUBJECT": None,
     "MFA_FROM_EMAIL": None,
     "MFA_NOTIFY_ON_CHANGE": False,
+    "MFA_API_AUTHENTICATION": None,
 }
 
 

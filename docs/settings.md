@@ -179,6 +179,17 @@ Paths are matched exactly against `request.path`, so include the full path as
 mounted, with its trailing slash.
 :::
 
+## JSON API
+
+| Setting | Default | Description |
+|---|---|---|
+| `MFA_API_AUTHENTICATION` | `None` | How {doc}`the JSON API <rest_api>` identifies the caller. `None` uses `request.user` — Django's own session authentication. Otherwise a callable taking a request and returning a user or `None`, or a dotted path to one, for clients that authenticate with a DRF token, a JWT or an API key. |
+
+This setting is only consulted by `django_mfa.api`, which a project has to mount
+explicitly; it does nothing on an install that never did. It answers *identity*
+only — see {doc}`rest_api` for why MFA state still lives in the session, and what
+that means for a client that discards cookies.
+
 ## System checks
 
 django-mfa registers system checks that run on `manage.py check` — and therefore on
@@ -189,9 +200,10 @@ E001–E003 are WebAuthn-only: they return no errors at all unless WebAuthn is
 actually switched on for this install, meaning `MFA_QUICKLOGIN` is on or a WebAuthn
 adapter is registered (true by default). A project with
 `MFA_FACTORS = ["totp", "recovery_codes"]` never trips any of them. `E004` and
-`E005` are not gated the same way — `MFA_REQUIRED` and `MFA_STEPUP_MAX_AGE` are
-not WebAuthn settings, so there is nothing to gate on, and both apply to every
-install regardless of which factors are registered.
+`E004`–`E006` are not gated the same way — `MFA_REQUIRED`, `MFA_STEPUP_MAX_AGE`
+and `MFA_API_AUTHENTICATION` are not WebAuthn settings, so there is nothing to
+gate on, and all three apply to every install regardless of which factors are
+registered.
 
 | Check ID | Severity | Condition |
 |---|---|---|
@@ -200,6 +212,7 @@ install regardless of which factors are registered.
 | `django_mfa.E003` | Error | WebAuthn is active and `django_mfa.backends.WebAuthnBackend` is missing from `AUTHENTICATION_BACKENDS`. |
 | `django_mfa.E004` | Error | `MFA_REQUIRED` is a dotted path that fails to import, or resolves to a value that isn't callable. |
 | `django_mfa.E005` | Error | `MFA_STEPUP_MAX_AGE` is not a positive integer or `None`. |
+| `django_mfa.E006` | Error | `MFA_API_AUTHENTICATION` is a dotted path that fails to import, or resolves to a value that isn't callable. |
 
 `E003` exists because the failure it prevents is otherwise completely silent.
 Passwordless login logs a user in by calling `django.contrib.auth.login()` with an

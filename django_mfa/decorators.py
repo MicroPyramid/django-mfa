@@ -24,40 +24,62 @@ from django.urls import reverse
 from django_mfa import session
 from django_mfa.conf import settings as mfa_settings
 
+#: The rung a request fails, as a bare name. `enforcement_state()` and
+#: `recent_enforcement_state()` return one of these or None ("let it
+#: through"), and the renderings live separately: these decorators turn a
+#: rung into a redirect, django_mfa.api turns the same rung into a status
+#: code. Keeping the *policy* in one place and the *rendering* in two is
+#: what stops a JSON client from being held to a different standard than a
+#: browser -- which is the sort of divergence nobody notices until it is a
+#: bypass.
+UNAUTHENTICATED = "unauthenticated"
+PENDING = "pending"
+UNENROLLED = "unenrolled"
+STALE = "stale"
 
-def _enforce(request, require_primary_factor=True):
-    """Return a redirect response, or None to let the request through.
 
-    ``require_primary_factor`` gates only the third rung below. It exists
-    for mfa_recent_required/MfaRecentRequiredMixin, which reuse this
-    function for the authenticated/pending rungs. By default those callers
-    pass it True too, so a factorless user is redirected here exactly as
-    mfa_required does. Their own allow_unenrolled=True escape hatch (for the
-    built-in enrollment views only) passes False instead, deferring to
-    _enforce_recent()'s own, more permissive handling of a factorless user
-    (let them through, since there is nothing for them to re-verify) --
-    which would otherwise never be reached, since this rung would redirect
-    first. mfa_required/MfaRequiredMixin never pass this, so their
-    behaviour is unchanged.
+def enforcement_state(request, require_primary_factor=True):
+    """Which rung this request fails, or None to let it through.
+
+    ``require_primary_factor`` gates only the third rung. It exists for
+    mfa_recent_required/MfaRecentRequiredMixin, which reuse this for the
+    authenticated/pending rungs. By default those callers pass it True too,
+    so a factorless user is stopped here exactly as mfa_required stops them.
+    Their own allow_unenrolled=True escape hatch (for the built-in
+    enrollment views only) passes False instead, deferring to
+    recent_enforcement_state()'s own, more permissive handling of a
+    factorless user (let them through, since there is nothing for them to
+    re-verify) -- which would otherwise never be reached, since this rung
+    would stop them first. mfa_required/MfaRequiredMixin never pass this, so
+    their behaviour is unchanged.
     """
     from django_mfa.registry import registry
 
     user = request.user
     if not user.is_authenticated:
-        return redirect_to_login(request.get_full_path())
+        return UNAUTHENTICATED
     if session.is_pending(request):
-        return redirect_to_login(request.get_full_path(),
-                                 resolve_url(reverse("mfa:verify")), "next")
+        return PENDING
     if require_primary_factor and not registry.has_primary_factor(user):
         # has_primary_factor(), not enabled_for(): a user holding only
         # recovery codes is not protected, and recovery codes must never be
         # somebody's sole second factor. has_primary_factor(), not
         # primary_enabled_for(): only the yes/no answer is needed here, and
         # this runs on every request to a decorated view.
-        return redirect_to_login(
-            request.get_full_path(),
-            resolve_url(reverse("mfa:security_settings")), "next")
+        return UNENROLLED
     return None
+
+
+def _enforce(request, require_primary_factor=True):
+    """Render enforcement_state() as a redirect, or None to let it through."""
+    state = enforcement_state(request, require_primary_factor)
+    if state is None:
+        return None
+    if state == UNAUTHENTICATED:
+        return redirect_to_login(request.get_full_path())
+    target = ("mfa:verify" if state == PENDING else "mfa:security_settings")
+    return redirect_to_login(request.get_full_path(),
+                             resolve_url(reverse(target)), "next")
 
 
 def mfa_required(view_func):
@@ -91,12 +113,12 @@ class MfaRequiredMixin:
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 
 
-def _enforce_recent(request, max_age, next_url):
-    """The step-up rung: a recent challenge, not merely a verified session.
+def recent_enforcement_state(request, max_age=None):
+    """STALE if this session needs a fresh challenge, else None.
 
-    Returns a redirect response, or None to let the request through. Runs
-    only AFTER _enforce() has passed, so request.user is authenticated and
-    the session is verified by the time this is reached.
+    The step-up rung: a recent challenge, not merely a verified session.
+    Runs only AFTER enforcement_state() has passed, so request.user is
+    authenticated and the session is verified by the time this is reached.
     """
     from django_mfa.registry import registry
 
@@ -106,7 +128,7 @@ def _enforce_recent(request, max_age, next_url):
         return None
     if not registry.has_primary_factor(request.user):
         # Only reachable at all when the caller passed allow_unenrolled=True
-        # (_enforce() already redirected a factorless user away otherwise).
+        # (enforcement_state() already stopped a factorless user otherwise).
         # Nothing to re-verify, and this is the first-enrollment path.
         # Gating it would wall a factorless user out of the only pages that
         # could give them a factor -- the same lockout
@@ -114,6 +136,13 @@ def _enforce_recent(request, max_age, next_url):
         # stamp such a user pending.
         return None
     if session.is_fresh(request, resolved):
+        return None
+    return STALE
+
+
+def _enforce_recent(request, max_age, next_url):
+    """Render recent_enforcement_state() as a redirect, or None."""
+    if recent_enforcement_state(request, max_age) is None:
         return None
     if request.method in SAFE_METHODS:
         target = request.get_full_path()

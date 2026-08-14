@@ -28,6 +28,12 @@ class LoginForm(forms.Form):
         super(LoginForm, self).__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs = {'class': 'form-control'}
+        # The "webauthn" token is what makes passkey autofill (conditional
+        # mediation) surface anything -- the browser offers the user's
+        # passkeys in this field's own dropdown. Set after the loop above,
+        # which replaces attrs wholesale rather than updating it. See
+        # login.html's data-conditional form and docs/recipes.md.
+        self.fields['email'].widget.attrs['autocomplete'] = 'username webauthn'
 
     def clean(self):
         email = self.cleaned_data.get('email')
