@@ -65,6 +65,39 @@ class MfaMiddleware(MiddlewareMixin):
         about what counts as the same path."""
         return path in paths
 
+    @staticmethod
+    def is_api_request(request):
+        """Does this path route into django_mfa.api?
+
+        Both rungs below let such a request through, rather than redirecting
+        it. A redirect is not an answer an API client can act on: it would
+        arrive as a 302 to an HTML page, or -- worse, having followed it --
+        as a 200 full of markup where JSON was expected.
+
+        This is not a hole. Every endpoint in django_mfa.api applies these
+        same two rungs itself, through the same
+        decorators.enforcement_state() this middleware uses, and renders
+        them as 403s with a machine-readable code. The gate moves down a
+        layer; it does not disappear. test_api.py's PendingSessionTests is
+        what pins that, by asserting the refusals rather than the routing.
+
+        Matched by resolved namespace rather than by a set of reversed URLs.
+        A path set cannot express `factors/<pk>/` for every pk, and would
+        silently miss any endpoint added later without being added to it --
+        the exact failure this whole method exists to prevent.
+
+        Only reached for a request that is *about* to be redirected, which
+        is rare, so the resolve() call is not on the common path.
+        """
+        from django.urls import Resolver404, resolve
+
+        from django_mfa.api.urls import NAMESPACE
+
+        try:
+            return resolve(request.path).namespace == NAMESPACE
+        except Resolver404:
+            return False
+
     def process_request(self, request):
         from django_mfa import policy
         from django_mfa.registry import registry
@@ -73,7 +106,8 @@ class MfaMiddleware(MiddlewareMixin):
             return None
 
         if session.is_pending(request):
-            if self._is_exempt(request.path, self.exempt_paths()):
+            if (self._is_exempt(request.path, self.exempt_paths())
+                    or self.is_api_request(request)):
                 return None
             return redirect_to_login(request.get_full_path(),
                                      resolve_url(reverse("mfa:verify")), "next")
@@ -101,7 +135,8 @@ class MfaMiddleware(MiddlewareMixin):
         if (policy.resolve()
                 and not registry.has_primary_factor(request.user)
                 and policy.mfa_required_for(request.user)):
-            if self._is_exempt(request.path, self.enrollment_exempt_paths()):
+            if (self._is_exempt(request.path, self.enrollment_exempt_paths())
+                    or self.is_api_request(request)):
                 return None
             return redirect_to_login(
                 request.get_full_path(),

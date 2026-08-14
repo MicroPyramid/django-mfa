@@ -174,3 +174,34 @@ def check_stepup_max_age(app_configs, **kwargs):
             id="django_mfa.E005",
         )]
     return []
+
+
+def check_mfa_api_authentication(app_configs, **kwargs):
+    """``MFA_API_AUTHENTICATION`` must be something api.auth.resolve() can use.
+
+    Deliberately NOT gated on ``_webauthn_active()`` -- like E004 and E005,
+    this has nothing to do with WebAuthn.
+
+    It IS gated on the setting being set at all, which is the default: a
+    project that never mounts the JSON API never sets it and never sees
+    this.
+
+    Without the check, a bad dotted path surfaces as an ImportError from
+    inside the first API request, which for an API client means an opaque
+    500 rather than a refused deploy.
+    """
+    from django.core.exceptions import ImproperlyConfigured
+
+    from django_mfa.api import auth
+
+    try:
+        auth.resolve()
+    except (ImportError, ImproperlyConfigured, TypeError) as exc:
+        return [Error(
+            f"MFA_API_AUTHENTICATION is not usable: {exc}",
+            hint="Set it to None (use request.user, i.e. Django's session "
+                 "authentication), a callable taking a request and returning "
+                 "a user or None, or a dotted path to one.",
+            id="django_mfa.E006",
+        )]
+    return []

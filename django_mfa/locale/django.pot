@@ -3,6 +3,7 @@
 # This file is distributed under the same licence as the django-mfa package.
 #
 #, fuzzy
+
 msgid ""
 msgstr ""
 "Project-Id-Version: django-mfa\n"
@@ -17,7 +18,7 @@ msgstr ""
 msgid "%(code_length)s-digit code"
 msgstr ""
 
-#: django_mfa/templates/django_mfa/security.html:78
+#: django_mfa/templates/django_mfa/security.html:87
 msgid "%(remaining)s code remaining."
 msgid_plural "%(remaining)s codes remaining."
 msgstr[0] ""
@@ -43,7 +44,7 @@ msgstr ""
 msgid "A two-factor method was removed from your account"
 msgstr ""
 
-#: django_mfa/templates/django_mfa/security.html:59
+#: django_mfa/templates/django_mfa/security.html:68
 msgid "Add a method"
 msgstr ""
 
@@ -61,6 +62,10 @@ msgstr ""
 
 #: django_mfa/templates/django_mfa/security.html:30
 msgid "Added %(created)s"
+msgstr ""
+
+#: django_mfa/api/views.py:64
+msgid "Authentication is required."
 msgstr ""
 
 #: django_mfa/adapters/totp.py:47
@@ -133,7 +138,7 @@ msgstr ""
 msgid "It expires in %(validity_minutes)s minutes and can be used once."
 msgstr ""
 
-#: django_mfa/templates/django_mfa/security.html:46
+#: django_mfa/templates/django_mfa/security.html:55
 msgid "Managed by your organization"
 msgstr ""
 
@@ -149,7 +154,8 @@ msgstr ""
 msgid "Optional. Helps you tell your keys apart later."
 msgstr ""
 
-#: django_mfa/views/verify.py:54
+#: django_mfa/api/views.py:56
+#: django_mfa/views/verify.py:56
 msgid "Passkey sign-in failed."
 msgstr ""
 
@@ -160,16 +166,12 @@ msgstr ""
 #: django_mfa/adapters/recovery_codes.py:21
 #: django_mfa/models.py:36
 #: django_mfa/templates/django_mfa/recovery_codes.html:5
-#: django_mfa/templates/django_mfa/security.html:75
+#: django_mfa/templates/django_mfa/security.html:84
 msgid "Recovery codes"
 msgstr ""
 
 #: django_mfa/templates/django_mfa/enroll_webauthn.html:41
 msgid "Register"
-msgstr ""
-
-#: django_mfa/templates/django_mfa/security.html:42
-msgid "Remove"
 msgstr ""
 
 #: django_mfa/templates/django_mfa/security.html:41
@@ -206,7 +208,7 @@ msgstr ""
 msgid "Six-digit code"
 msgstr ""
 
-#: django_mfa/templates/django_mfa/security.html:69
+#: django_mfa/templates/django_mfa/security.html:78
 msgid "There is nothing left to add."
 msgstr ""
 
@@ -214,9 +216,30 @@ msgstr ""
 msgid "This account has no email code to verify. Use another method, or contact support if you believe this is a mistake."
 msgstr ""
 
+#: django_mfa/api/views.py:70
+msgid "This account must enroll a second factor first."
+msgstr ""
+
+#: django_mfa/api/views.py:73
+msgid "This action needs a recent second-factor challenge."
+msgstr ""
+
 #: django_mfa/templates/django_mfa/enroll_webauthn.html:12
 #: django_mfa/templates/django_mfa/verify_webauthn.html:12
 msgid "This browser doesn't support security keys or passkeys. Try another browser, or choose a different method."
+msgstr ""
+
+#: django_mfa/api/views.py:125
+msgid "This endpoint does not accept %(method)s."
+msgstr ""
+
+#: django_mfa/api/views.py:330
+#: django_mfa/views/manage.py:103
+msgid "This security key is managed by your organization and cannot be removed here."
+msgstr ""
+
+#: django_mfa/api/views.py:67
+msgid "This session must complete a second-factor challenge first."
 msgstr ""
 
 #: django_mfa/templates/django_mfa/email/factor_removed.txt:1
@@ -256,7 +279,7 @@ msgstr ""
 msgid "Use another method"
 msgstr ""
 
-#: django_mfa/templates/django_mfa/security.html:79
+#: django_mfa/templates/django_mfa/security.html:88
 msgid "Use one to sign in if you lose access to your other methods."
 msgstr ""
 
@@ -275,7 +298,7 @@ msgstr ""
 msgid "Verify it's you"
 msgstr ""
 
-#: django_mfa/templates/django_mfa/security.html:82
+#: django_mfa/templates/django_mfa/security.html:91
 msgid "View recovery codes"
 msgstr ""
 
@@ -297,7 +320,7 @@ msgstr[1] ""
 msgid "You have %(remaining)s recovery codes left."
 msgstr ""
 
-#: django_mfa/templates/django_mfa/security.html:53
+#: django_mfa/templates/django_mfa/security.html:62
 msgid "You haven't set up two-factor authentication yet."
 msgstr ""
 
@@ -335,4 +358,9 @@ msgstr ""
 
 #: django_mfa/templates/django_mfa/security.html:32
 msgid "last used %(used)s"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:51
+msgctxt "second-factor method"
+msgid "Remove"
 msgstr ""

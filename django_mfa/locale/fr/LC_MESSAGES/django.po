@@ -2,12 +2,12 @@
 # Copyright (C) MicroPyramid
 # This file is distributed under the same licence as the django-mfa package.
 #
-# MACHINE-DRAFTED, NOT REVIEWED. Every entry below is marked "fuzzy", which
-# means gettext ignores it and users see the English source instead. Nothing
-# here reaches a user until a human reviews an entry and removes its fuzzy
-# flag. See docs/translations.md.
-#
-#, fuzzy
+# MACHINE-DRAFTED, MAINTAINER-REVIEWED -- not reviewed by a native speaker.
+# Unlike the first release of this catalog, it is LIVE: no entry is marked
+# fuzzy, so these strings are what users of this language actually see.
+# Corrections are welcome and wanted; please open an issue or a pull
+# request. See docs/translations.md.
+
 msgid ""
 msgstr ""
 "Project-Id-Version: django-mfa\n"
@@ -20,292 +20,259 @@ msgstr ""
 
 #: django_mfa/templates/django_mfa/enroll_email.html:14
 #: django_mfa/templates/django_mfa/verify_email.html:15
-#, fuzzy
 msgid "%(code_length)s-digit code"
 msgstr "Code à %(code_length)s chiffres"
 
-#: django_mfa/templates/django_mfa/security.html:78
-#, fuzzy
+#: django_mfa/templates/django_mfa/security.html:87
 msgid "%(remaining)s code remaining."
 msgid_plural "%(remaining)s codes remaining."
 msgstr[0] "Il reste %(remaining)s code."
 msgstr[1] "Il reste %(remaining)s codes."
 
 #: django_mfa/templates/django_mfa/email/factor_added_subject.txt:1
-#, fuzzy
 msgid "A new two-factor method was added to your account"
 msgstr "Une nouvelle méthode à deux facteurs a été ajoutée à votre compte"
 
 #: django_mfa/templates/django_mfa/email/factor_added.txt:1
-#, fuzzy
 msgid "A new two-factor method was added to your account: %(factor)s"
 msgstr "Une nouvelle méthode à deux facteurs a été ajoutée à votre compte : %(factor)s"
 
 #: django_mfa/templates/django_mfa/email/recovery_code_used.txt:1
-#, fuzzy
 msgid "A recovery code was just used to sign in to your account."
 msgstr "Un code de récupération vient d’être utilisé pour se connecter à votre compte."
 
 #: django_mfa/templates/django_mfa/email/recovery_code_used_subject.txt:1
-#, fuzzy
 msgid "A recovery code was used to sign in"
 msgstr "Un code de récupération a été utilisé pour se connecter"
 
 #: django_mfa/templates/django_mfa/email/factor_removed_subject.txt:1
-#, fuzzy
 msgid "A two-factor method was removed from your account"
 msgstr "Une méthode à deux facteurs a été supprimée de votre compte"
 
-#: django_mfa/templates/django_mfa/security.html:59
-#, fuzzy
+#: django_mfa/templates/django_mfa/security.html:68
 msgid "Add a method"
 msgstr "Ajouter une méthode"
 
 #: django_mfa/templates/django_mfa/security.html:11
-#, fuzzy
 msgid "Add a method below to continue. Until you do, the rest of the site is unavailable."
 msgstr "Ajoutez une méthode ci-dessous pour continuer. En attendant, le reste du site est indisponible."
 
 #: django_mfa/templates/django_mfa/security.html:7
-#, fuzzy
 msgid "Add a second step to your sign-in so a stolen password isn't enough on its own."
 msgstr "Ajoutez une deuxième étape à votre connexion pour qu’un mot de passe volé ne suffise pas à lui seul."
 
 #: django_mfa/templates/django_mfa/enroll_webauthn.html:5
-#, fuzzy
 msgid "Add a security key or passkey"
 msgstr "Ajouter une clé de sécurité ou une passkey"
 
 #: django_mfa/templates/django_mfa/security.html:30
-#, fuzzy
 msgid "Added %(created)s"
 msgstr "Ajouté le %(created)s"
 
+#: django_mfa/api/views.py:64
+msgid "Authentication is required."
+msgstr "Une authentification est requise."
+
 #: django_mfa/adapters/totp.py:47
 #: django_mfa/models.py:34
-#, fuzzy
 msgid "Authenticator app"
 msgstr "Application d’authentification"
 
 #: django_mfa/templates/django_mfa/enroll_email.html:31
-#, fuzzy
 msgid "Back"
 msgstr "Retour"
 
 #: django_mfa/templates/django_mfa/enroll_totp.html:11
-#, fuzzy
 msgid "Can't scan it?"
 msgstr "Impossible de le scanner ?"
 
 #: django_mfa/templates/django_mfa/enroll_email.html:25
 #: django_mfa/templates/django_mfa/enroll_totp.html:31
 #: django_mfa/templates/django_mfa/enroll_webauthn.html:42
-#, fuzzy
 msgid "Cancel"
 msgstr "Annuler"
 
 #: django_mfa/templates/django_mfa/picker.html:6
-#, fuzzy
 msgid "Choose how you'd like to confirm your identity."
 msgstr "Choisissez comment confirmer votre identité."
 
 #: django_mfa/templates/django_mfa/recovery_codes.html:23
 #: django_mfa/templates/django_mfa/recovery_codes.html:41
-#, fuzzy
 msgid "Done"
 msgstr "Terminé"
 
 #: django_mfa/templates/django_mfa/recovery_codes.html:22
-#, fuzzy
 msgid "Download"
 msgstr "Télécharger"
 
 #: django_mfa/adapters/email.py:104
 #: django_mfa/models.py:37
-#, fuzzy
 msgid "Emailed code"
 msgstr "Code envoyé par e-mail"
 
 #: django_mfa/templates/django_mfa/verify_recovery_codes.html:5
-#, fuzzy
 msgid "Enter a recovery code"
 msgstr "Saisissez un code de récupération"
 
 #: django_mfa/templates/django_mfa/verify_email.html:5
 #: django_mfa/templates/django_mfa/verify_totp.html:5
-#, fuzzy
 msgid "Enter your code"
 msgstr "Saisissez votre code"
 
 #: django_mfa/templates/django_mfa/email/recovery_code_used.txt:5
-#, fuzzy
 msgid "If this wasn't you, change your password and generate a fresh set of codes."
 msgstr "Si ce n’était pas vous, changez votre mot de passe et générez de nouveaux codes."
 
 #: django_mfa/templates/django_mfa/email/mfa_disabled.txt:3
-#, fuzzy
 msgid "If this wasn't you, change your password and set up two-factor authentication again immediately."
 msgstr "Si ce n’était pas vous, changez immédiatement votre mot de passe et reconfigurez l’authentification à deux facteurs."
 
 #: django_mfa/templates/django_mfa/email/factor_removed.txt:3
-#, fuzzy
 msgid "If this wasn't you, change your password immediately."
 msgstr "Si ce n’était pas vous, changez immédiatement votre mot de passe."
 
 #: django_mfa/templates/django_mfa/email/factor_added.txt:3
-#, fuzzy
 msgid "If this wasn't you, remove it and change your password immediately."
 msgstr "Si ce n’était pas vous, supprimez-la et changez immédiatement votre mot de passe."
 
 #: django_mfa/templates/django_mfa/email/otp_code.txt:5
-#, fuzzy
 msgid "If you didn't try to sign in, someone may know your password. Change it."
 msgstr "Si vous n’avez pas tenté de vous connecter, quelqu’un connaît peut-être votre mot de passe. Changez-le."
 
 #: django_mfa/templates/django_mfa/email/otp_code.txt:3
-#, fuzzy
 msgid "It expires in %(validity_minutes)s minutes and can be used once."
 msgstr "Il expire dans %(validity_minutes)s minutes et ne peut être utilisé qu’une fois."
 
-#: django_mfa/templates/django_mfa/security.html:46
-#, fuzzy
+#: django_mfa/templates/django_mfa/security.html:55
 msgid "Managed by your organization"
 msgstr "Géré par votre organisation"
 
 #: django_mfa/templates/django_mfa/enroll_webauthn.html:29
-#, fuzzy
 msgid "Name this key"
 msgstr "Nommez cette clé"
 
 #: django_mfa/templates/django_mfa/verify_totp.html:6
-#, fuzzy
 msgid "Open your authenticator app and enter the six-digit code it shows."
 msgstr "Ouvrez votre application d’authentification et saisissez le code à six chiffres affiché."
 
 #: django_mfa/templates/django_mfa/enroll_webauthn.html:36
-#, fuzzy
 msgid "Optional. Helps you tell your keys apart later."
 msgstr "Facultatif. Vous aide à distinguer vos clés plus tard."
 
-#: django_mfa/views/verify.py:54
-#, fuzzy
+#: django_mfa/api/views.py:56
+#: django_mfa/views/verify.py:56
 msgid "Passkey sign-in failed."
 msgstr "Échec de la connexion par passkey."
 
 #: django_mfa/templates/django_mfa/verify_recovery_codes.html:14
-#, fuzzy
 msgid "Recovery code"
 msgstr "Code de récupération"
 
 #: django_mfa/adapters/recovery_codes.py:21
 #: django_mfa/models.py:36
 #: django_mfa/templates/django_mfa/recovery_codes.html:5
-#: django_mfa/templates/django_mfa/security.html:75
-#, fuzzy
+#: django_mfa/templates/django_mfa/security.html:84
 msgid "Recovery codes"
 msgstr "Codes de récupération"
 
 #: django_mfa/templates/django_mfa/enroll_webauthn.html:41
-#, fuzzy
 msgid "Register"
 msgstr "Enregistrer"
 
-#: django_mfa/templates/django_mfa/security.html:42
-#, fuzzy
-msgid "Remove"
-msgstr "Supprimer"
-
 #: django_mfa/templates/django_mfa/security.html:41
-#, fuzzy
 msgid "Remove this method?"
 msgstr "Supprimer cette méthode ?"
 
 #: django_mfa/templates/django_mfa/recovery_codes.html:8
-#, fuzzy
 msgid "Save these somewhere safe. Each code works once, and this is the only time they'll be shown."
 msgstr "Conservez-les en lieu sûr. Chaque code ne fonctionne qu’une fois, et c’est la seule fois qu’ils seront affichés."
 
 #: django_mfa/templates/django_mfa/enroll_totp.html:6
-#, fuzzy
 msgid "Scan this code with an authenticator app, then enter the six-digit code it shows."
 msgstr "Scannez ce code avec une application d’authentification, puis saisissez le code à six chiffres affiché."
 
 #: django_mfa/adapters/webauthn.py:72
 #: django_mfa/models.py:35
-#, fuzzy
 msgid "Security key or passkey"
 msgstr "Clé de sécurité ou passkey"
 
 #: django_mfa/templates/django_mfa/verify_webauthn.html:6
-#, fuzzy
 msgid "Select the button below, then follow your browser's prompt to use your security key or passkey."
 msgstr "Sélectionnez le bouton ci-dessous, puis suivez l’invite de votre navigateur pour utiliser votre clé de sécurité ou votre passkey."
 
 #: django_mfa/templates/django_mfa/enroll_totp.html:5
-#, fuzzy
 msgid "Set up an authenticator app"
 msgstr "Configurer une application d’authentification"
 
 #: django_mfa/templates/django_mfa/enroll_email.html:5
-#, fuzzy
 msgid "Set up email codes"
 msgstr "Configurer les codes par e-mail"
 
 #: django_mfa/templates/django_mfa/enroll_totp.html:20
 #: django_mfa/templates/django_mfa/verify_totp.html:12
-#, fuzzy
 msgid "Six-digit code"
 msgstr "Code à six chiffres"
 
-#: django_mfa/templates/django_mfa/security.html:69
-#, fuzzy
+#: django_mfa/templates/django_mfa/security.html:78
 msgid "There is nothing left to add."
 msgstr "Il n’y a plus rien à ajouter."
 
 #: django_mfa/templates/django_mfa/verify_email.html:30
-#, fuzzy
 msgid "This account has no email code to verify. Use another method, or contact support if you believe this is a mistake."
 msgstr "Ce compte n’a aucun code par e-mail à vérifier. Utilisez une autre méthode ou contactez l’assistance si vous pensez qu’il s’agit d’une erreur."
 
+#: django_mfa/api/views.py:70
+msgid "This account must enroll a second factor first."
+msgstr "Ce compte doit d’abord configurer un deuxième facteur."
+
+#: django_mfa/api/views.py:73
+msgid "This action needs a recent second-factor challenge."
+msgstr "Cette action nécessite une vérification à deux facteurs récente."
+
 #: django_mfa/templates/django_mfa/enroll_webauthn.html:12
 #: django_mfa/templates/django_mfa/verify_webauthn.html:12
-#, fuzzy
 msgid "This browser doesn't support security keys or passkeys. Try another browser, or choose a different method."
 msgstr "Ce navigateur ne prend pas en charge les clés de sécurité ni les passkeys. Essayez un autre navigateur ou choisissez une autre méthode."
 
+#: django_mfa/api/views.py:125
+msgid "This endpoint does not accept %(method)s."
+msgstr "Ce point de terminaison n’accepte pas %(method)s."
+
+#: django_mfa/api/views.py:330
+#: django_mfa/views/manage.py:103
+msgid "This security key is managed by your organization and cannot be removed here."
+msgstr "Cette clé de sécurité est gérée par votre organisation et ne peut pas être supprimée ici."
+
+#: django_mfa/api/views.py:67
+msgid "This session must complete a second-factor challenge first."
+msgstr "Cette session doit d’abord passer une vérification à deux facteurs."
+
 #: django_mfa/templates/django_mfa/email/factor_removed.txt:1
-#, fuzzy
 msgid "This two-factor method was removed from your account: %(factor)s"
 msgstr "Cette méthode à deux facteurs a été supprimée de votre compte : %(factor)s"
 
 #: django_mfa/templates/django_mfa/enroll_email.html:24
-#, fuzzy
 msgid "Turn on email codes"
 msgstr "Activer les codes par e-mail"
 
 #: django_mfa/templates/django_mfa/enroll_totp.html:30
-#, fuzzy
 msgid "Turn on two-factor authentication"
 msgstr "Activer l’authentification à deux facteurs"
 
 #: django_mfa/templates/django_mfa/base.html:19
 #: django_mfa/templates/django_mfa/security.html:6
-#, fuzzy
 msgid "Two-factor authentication"
 msgstr "Authentification à deux facteurs"
 
 #: django_mfa/templates/django_mfa/email/mfa_disabled_subject.txt:1
-#, fuzzy
 msgid "Two-factor authentication is off for your account"
 msgstr "L’authentification à deux facteurs est désactivée pour votre compte"
 
 #: django_mfa/templates/django_mfa/security.html:10
-#, fuzzy
 msgid "Two-factor authentication is required for your account."
 msgstr "L’authentification à deux facteurs est requise pour votre compte."
 
 #: django_mfa/templates/django_mfa/enroll_webauthn.html:6
-#, fuzzy
 msgid "Use a hardware security key, or a passkey built into this device such as Touch ID or Windows Hello."
 msgstr "Utilisez une clé de sécurité matérielle ou une passkey intégrée à cet appareil, comme Touch ID ou Windows Hello."
 
@@ -314,17 +281,14 @@ msgstr "Utilisez une clé de sécurité matérielle ou une passkey intégrée à
 #: django_mfa/templates/django_mfa/verify_recovery_codes.html:25
 #: django_mfa/templates/django_mfa/verify_totp.html:23
 #: django_mfa/templates/django_mfa/verify_webauthn.html:29
-#, fuzzy
 msgid "Use another method"
 msgstr "Utiliser une autre méthode"
 
-#: django_mfa/templates/django_mfa/security.html:79
-#, fuzzy
+#: django_mfa/templates/django_mfa/security.html:88
 msgid "Use one to sign in if you lose access to your other methods."
 msgstr "Utilisez-en un pour vous connecter si vous perdez l’accès à vos autres méthodes."
 
 #: django_mfa/templates/django_mfa/verify_webauthn.html:5
-#, fuzzy
 msgid "Use your security key"
 msgstr "Utilisez votre clé de sécurité"
 
@@ -332,88 +296,76 @@ msgstr "Utilisez votre clé de sécurité"
 #: django_mfa/templates/django_mfa/verify_recovery_codes.html:24
 #: django_mfa/templates/django_mfa/verify_totp.html:22
 #: django_mfa/templates/django_mfa/verify_webauthn.html:28
-#, fuzzy
 msgid "Verify"
 msgstr "Vérifier"
 
 #: django_mfa/templates/django_mfa/picker.html:5
-#, fuzzy
 msgid "Verify it's you"
 msgstr "Confirmez votre identité"
 
-#: django_mfa/templates/django_mfa/security.html:82
-#, fuzzy
+#: django_mfa/templates/django_mfa/security.html:91
 msgid "View recovery codes"
 msgstr "Afficher les codes de récupération"
 
 #: django_mfa/templates/django_mfa/enroll_email.html:8
-#, fuzzy
 msgid "We've emailed a code to %(address)s. Enter it below to turn on email codes."
 msgstr "Nous avons envoyé un code à %(address)s. Saisissez-le ci-dessous pour activer les codes par e-mail."
 
 #: django_mfa/templates/django_mfa/verify_email.html:8
-#, fuzzy
 msgid "We've emailed a code to %(address)s. It expires shortly."
 msgstr "Nous avons envoyé un code à %(address)s. Il expire bientôt."
 
 #: django_mfa/templates/django_mfa/verify_recovery_codes.html:7
-#, fuzzy
 msgid "You have %(remaining)s recovery code left. Each one works only once."
 msgid_plural "You have %(remaining)s recovery codes left. Each one works only once."
 msgstr[0] "Il vous reste %(remaining)s code de récupération. Chacun ne fonctionne qu’une seule fois."
 msgstr[1] "Il vous reste %(remaining)s codes de récupération. Chacun ne fonctionne qu’une seule fois."
 
 #: django_mfa/templates/django_mfa/email/recovery_code_used.txt:3
-#, fuzzy
 msgid "You have %(remaining)s recovery codes left."
 msgstr "Il vous reste %(remaining)s codes de récupération."
 
-#: django_mfa/templates/django_mfa/security.html:53
-#, fuzzy
+#: django_mfa/templates/django_mfa/security.html:62
 msgid "You haven't set up two-factor authentication yet."
 msgstr "Vous n’avez pas encore configuré l’authentification à deux facteurs."
 
 #: django_mfa/templates/django_mfa/enroll_email.html:29
-#, fuzzy
 msgid "Your account has no email address, so codes can't be delivered. Add one to your profile first."
 msgstr "Votre compte n’a pas d’adresse e-mail, les codes ne peuvent donc pas être envoyés. Ajoutez-en une à votre profil d’abord."
 
 #: django_mfa/templates/django_mfa/email/mfa_disabled.txt:1
-#, fuzzy
 msgid "Your account is no longer protected by two-factor authentication. A password is now all that's needed to sign in."
 msgstr "Votre compte n’est plus protégé par l’authentification à deux facteurs. Un mot de passe suffit désormais pour se connecter."
 
 #: django_mfa/views/verify.py:20
-#, fuzzy
 msgid "Your code is expired or invalid."
 msgstr "Votre code est expiré ou invalide."
 
 #: django_mfa/templates/django_mfa/security.html:17
-#, fuzzy
 msgid "Your methods"
 msgstr "Vos méthodes"
 
 #: django_mfa/templates/django_mfa/recovery_codes.html:38
-#, fuzzy
 msgid "Your recovery codes were generated earlier and can't be shown again. If you've lost them, remove and re-add two-factor authentication to get a fresh set."
 msgstr "Vos codes de récupération ont été générés précédemment et ne peuvent plus être affichés. Si vous les avez perdus, supprimez puis reconfigurez l’authentification à deux facteurs pour en obtenir de nouveaux."
 
 #: django_mfa/templates/django_mfa/email/otp_code_subject.txt:1
-#, fuzzy
 msgid "Your sign-in code"
 msgstr "Votre code de connexion"
 
 #: django_mfa/templates/django_mfa/email/otp_code.txt:1
-#, fuzzy
 msgid "Your sign-in code is %(code)s."
 msgstr "Votre code de connexion est %(code)s."
 
 #: django_mfa/templates/django_mfa/enroll_webauthn.html:32
-#, fuzzy
 msgid "e.g. YubiKey, work laptop"
 msgstr "p. ex. YubiKey, ordinateur portable professionnel"
 
 #: django_mfa/templates/django_mfa/security.html:32
-#, fuzzy
 msgid "last used %(used)s"
 msgstr "dernière utilisation %(used)s"
+
+#: django_mfa/templates/django_mfa/security.html:51
+msgctxt "second-factor method"
+msgid "Remove"
+msgstr "Supprimer"

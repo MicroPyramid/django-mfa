@@ -10,7 +10,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext_lazy as _
 from fido2.webauthn import AuthenticationResponse
 
-from django_mfa import events, ratelimit, session
+from django_mfa import events, flows, session
 from django_mfa.adapters.webauthn import AUTH_STATE_KEY, WebAuthnAdapter, get_server
 from django_mfa.backends import WebAuthnBackend, user_from_handle
 from django_mfa.conf import settings as mfa_settings
@@ -110,49 +110,18 @@ def verify_factor(request, factor_type):
         session.start_pending(request)
 
     if request.method == "POST":
-        # A locked-out user gets the same response as a wrong code, so the
-        # lockout is not itself an oracle.
-        allowed = ratelimit.check(request.user, factor_type)
-        verified = False
-        if allowed:
-            try:
-                verified = adapter.complete_verify(
-                    request, request.user, request.POST)
-            except (ValueError, TypeError, KeyError):
-                # Adapter ceremony failures -- clone detection (ValueError),
-                # a tampered/malformed credential payload (TypeError from
-                # fido2 parsing something that isn't a mapping), or a missing
-                # POST field (KeyError/MultiValueDictKeyError, e.g. no
-                # `credential`) -- must be indistinguishable from an ordinary
-                # wrong code: both in the response returned (falls straight
-                # into the same GENERIC_ERROR branch below) and for rate
-                # limiting (falls through to record_failure exactly like any
-                # other failed attempt). Letting any of these propagate would
-                # be an unhandled 500, and the 500-vs-400 split would itself
-                # be a weak oracle against that deliberately uniform
-                # response.
-                verified = False
-        if verified:
-            ratelimit.clear(request.user, factor_type)
-            session.mark_verified(request, factor_type)
-            events.mfa_verified.send_robust(
-                sender=type(adapter), user=request.user,
-                method=factor_type, request=request)
+        # Rate limiting, the uniform treatment of every adapter failure, the
+        # session stamp and both events all live in flows.attempt_verify --
+        # shared verbatim with the JSON API, which must not be able to drift
+        # from this on any of them. All that is left here is how to render
+        # the answer.
+        if flows.attempt_verify(request, request.user, factor_type,
+                                request.POST):
             # Trust this browser for MFA_REMEMBER_DAYS so a future login can
             # skip the challenge (see the user_logged_in signal in
             # signals.py, which checks verify_rmb_cookie()). update_rmb_cookie
             # is a no-op unless MFA_REMEMBER_MY_BROWSER is enabled.
             return update_rmb_cookie(request, redirect(next_url))
-        if allowed:
-            ratelimit.record_failure(request.user, factor_type)
-        # Emitted for a refused (rate-limited) attempt too -- see the signal's
-        # own comment in events.py. This is below the `if allowed` guard on
-        # purpose: record_failure is budget accounting and must not run when
-        # the attempt was never evaluated, while the event is an observation
-        # and must fire either way.
-        events.mfa_verification_failed.send_robust(
-            sender=type(adapter), user=request.user,
-            method=factor_type, request=request)
         context["error_message"] = GENERIC_ERROR
         context.update(adapter.begin_verify(request, request.user))
         return render(request, adapter.verify_template, context, status=400)
@@ -200,77 +169,68 @@ def passkey_begin(request):
     return JsonResponse({"options": json.dumps(dict(options))})
 
 
-def passkey_complete(request):
-    """Finish a passwordless WebAuthn authentication ceremony and log the
-    resolved user in.
+def resolve_passkey_assertion(request, credential):
+    """Validate a passwordless assertion and return the user it proves.
 
-    POST only. Every failure path -- missing/expired state, a malformed
+    Returns None for EVERY failure -- missing/expired state, a malformed
     payload, a userHandle that resolves to no user, a credential ID the
     resolved user does not hold, a bad signature, or a clone-detected
-    (regressed) sign counter -- returns the exact same generic 400 via
-    _passkey_failure(). This is deliberate and security-critical: if
-    "unknown handle" and "bad signature" produced different responses, an
-    attacker could use that difference as an oracle to enumerate which
-    opaque handles correspond to real accounts. None of the branches below
-    are allowed to leak which specific check failed, in the response body,
-    the status code, or which branch raises vs. returns -- they must all
-    funnel into the same `return _passkey_failure()`.
+    (regressed) sign counter. That uniformity is security-critical rather
+    than tidy: if "unknown handle" and "bad signature" were distinguishable,
+    the difference would be an oracle for enumerating which opaque handles
+    correspond to real accounts. No branch below may leak which check
+    failed -- not through the return value, not by raising where another
+    branch returns.
 
-    Sign-count/clone-detection enforcement is NOT reimplemented here: once
-    the user is resolved, this delegates to
-    WebAuthnAdapter.complete_verify(), the exact same method the
-    second-factor verification path (verify_factor) uses, so there is only
-    ever one copy of that logic to keep correct. The two paths use different
-    session keys for their in-flight ceremony state (PASSKEY_STATE_KEY here
-    vs. AUTH_STATE_KEY there) since this ceremony starts before any user is
-    known and that one starts after -- so the state popped from
-    PASSKEY_STATE_KEY is re-stashed under AUTH_STATE_KEY immediately before
-    calling complete_verify(), which pops it from there itself. Both keys
-    hold the exact same opaque `state` value authenticate_begin()/
-    authenticate_complete() round-trip unchanged; only the key name differs.
+    On success the session is marked verified *if* the assertion carried
+    User Verification, and the caller is left to log the user in. It does
+    not call login() itself, because the two callers (the HTML view and the
+    JSON API) differ in nothing else and must not differ in this either.
+
+    Sign-count/clone detection is NOT reimplemented here: once the user is
+    resolved this delegates to WebAuthnAdapter.complete_verify(), the exact
+    same method the second-factor path uses, so there is only ever one copy
+    of that logic. The two paths use different session keys for in-flight
+    ceremony state (PASSKEY_STATE_KEY here vs. AUTH_STATE_KEY there) since
+    this ceremony starts before any user is known and that one starts after
+    -- so the state popped from PASSKEY_STATE_KEY is re-stashed under
+    AUTH_STATE_KEY immediately before calling complete_verify(), which pops
+    it from there itself. Both hold the identical opaque `state` value;
+    only the key name differs.
     """
-    if request.method != "POST":
-        return HttpResponseNotAllowed(["POST"])
-
     state = request.session.pop(PASSKEY_STATE_KEY, None)
     if state is None:
-        return _passkey_failure()
+        return None
 
     try:
-        raw_credential = json.loads(request.POST["credential"])
-        parsed = AuthenticationResponse.from_dict(raw_credential)
-    except (KeyError, ValueError, TypeError):
-        # KeyError: no `credential` field in the POST body.
+        parsed = AuthenticationResponse.from_dict(json.loads(credential))
+    except (ValueError, TypeError):
         # ValueError: not valid JSON, or valid JSON that from_dict() can't
         #   parse as an AuthenticationResponse (missing/malformed fields).
         # TypeError: from_dict() handed something that isn't a mapping at
         #   all (e.g. a JSON array or scalar).
-        return _passkey_failure()
+        return None
 
     user_handle = parsed.response.user_handle
     if not user_handle:
         # A real discoverable-credential assertion always carries a
         # userHandle; an authenticator/credential this server never issued a
         # handle to (e.g. a different site's passkey, or a handcrafted
-        # payload) does not. Fails the same generic way as every other
-        # unresolvable case -- see the docstring above.
-        return _passkey_failure()
+        # payload) does not.
+        return None
 
     try:
         user = user_from_handle(user_handle.decode("utf-8"))
     except UnicodeDecodeError:
         user = None
     if user is None:
-        return _passkey_failure()
+        return None
 
-    # Bridge to WebAuthnAdapter.complete_verify() -- see the docstring above
-    # for why the state has to move to AUTH_STATE_KEY rather than
-    # complete_verify() being handed PASSKEY_STATE_KEY directly.
     request.session[AUTH_STATE_KEY] = state
     adapter = WebAuthnAdapter()
     try:
         verified = adapter.complete_verify(
-            request, user, {"credential": request.POST["credential"]})
+            request, user, {"credential": credential})
     except ValueError:
         # Ceremony rejection (wrong challenge/origin/RP ID, bad signature,
         # credential ID not among this user's own credentials -- which is
@@ -279,37 +239,53 @@ def passkey_complete(request):
         # (regressed sign counter) both raise ValueError here. Both fail
         # exactly the same way as an unknown handle.
         request.session.pop(AUTH_STATE_KEY, None)
-        return _passkey_failure()
+        return None
 
     if not verified:
         # complete_verify() returns False (rather than raising) for its own
         # narrower set of "cannot honour this assertion" cases -- see its
         # docstring in adapters/webauthn.py. Same generic failure either way.
-        return _passkey_failure()
+        return None
 
     # A passkey assertion only satisfies BOTH factors when it carries the
-    # User Verification flag (proof of PIN/biometric, not just possession) --
-    # see is_user_verified() below. authenticate_complete() itself only
-    # *requires* UV when MFA_FIDO2_USER_VERIFICATION="required"; at the
-    # default "preferred" it happily accepts a User-Present-only assertion,
-    # so that has to be checked independently here, the same way the
-    # adapter independently re-parses the sign counter (fido2 2.2.1's
-    # authenticate_complete() return value carries neither). Mark the
-    # session verified BEFORE calling auth.login(): the user_logged_in
-    # receiver in signals.py (stamp_pending_verification) checks
-    # session.is_verified(request) and skips re-stamping the session pending
-    # when it's already True -- doing this first is what makes a
-    # UV-carrying passkey login satisfy both factors in one step. For a
-    # UP-only assertion, mark_verified() is deliberately NOT called: the
-    # user is still logged in (WebAuthn login succeeded), but that same
-    # signal receiver then stamps the session pending exactly as it would
-    # for a plain password login, since is_verified() is still False at
-    # that point -- the user must still complete a second-factor challenge.
+    # User Verification flag (proof of PIN/biometric, not just possession).
+    # authenticate_complete() itself only *requires* UV when
+    # MFA_FIDO2_USER_VERIFICATION="required"; at the default "preferred" it
+    # happily accepts a User-Present-only assertion, so that has to be
+    # checked independently here, the same way the adapter independently
+    # re-parses the sign counter (fido2 2.2.1's authenticate_complete()
+    # return value carries neither). Marking the session verified BEFORE the
+    # caller's login() is what makes a UV-carrying passkey satisfy both
+    # factors in one step: the user_logged_in receiver in signals.py
+    # (stamp_pending_verification) checks session.is_verified(request) and
+    # skips re-stamping a session that already is. For a UP-only assertion
+    # mark_verified() is deliberately NOT called -- the user is still logged
+    # in, but that receiver then stamps the session pending exactly as for a
+    # plain password login, and a second factor is still required.
     if parsed.response.authenticator_data.is_user_verified():
         session.mark_verified(request, "webauthn")
         events.mfa_verified.send_robust(
-            sender=type(adapter), user=user,
-            method="webauthn", request=request)
+            sender=type(adapter), user=user, method="webauthn",
+            request=request)
+    return user
+
+
+def passkey_complete(request):
+    """Finish a passwordless ceremony and log the resolved user in.
+
+    POST only. The ceremony itself is resolve_passkey_assertion() above,
+    shared with the JSON API; everything here is the browser rendering of
+    its answer -- one generic 400 for every failure, a redirect on success.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    credential = request.POST.get("credential")
+    if credential is None:
+        return _passkey_failure()
+    user = resolve_passkey_assertion(request, credential)
+    if user is None:
+        return _passkey_failure()
 
     auth.login(request, user, backend=BACKEND_PATH)
     return redirect(_safe_next(request))

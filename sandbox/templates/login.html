@@ -168,6 +168,36 @@ body {
 										</div>
 									</div>
 								</form>
+
+								{# Passwordless sign-in. Everything here is driven by
+								   django_mfa's own webauthn.js purely from these element
+								   ids -- see docs/recipes.md. data-conditional="true"
+								   additionally offers passkeys from the email field's
+								   autofill dropdown above (which carries
+								   autocomplete="username webauthn", set in forms.py). #}
+								<div id="passkey-block" style="display: block;">
+									<hr>
+									<div id="webauthn-passkey-unsupported" class="text-center" hidden>
+										This browser doesn't support passkeys.
+									</div>
+									<p id="webauthn-passkey-error" class="error text-center"></p>
+									<form id="webauthn-passkey-form" method="post"
+									      action="{% url 'mfa:passkey_complete' %}"
+									      data-begin-url="{% url 'mfa:passkey_begin' %}"
+									      data-conditional="true">
+										{% csrf_token %}
+										<input type="hidden" name="credential" value="">
+										<div class="row">
+											<div class="col-sm-6 col-sm-offset-3">
+												<button type="button" id="webauthn-passkey-start"
+												        class="form-control btn btn-login">
+													Sign in with a passkey
+												</button>
+											</div>
+										</div>
+									</form>
+								</div>
+
 								<form id="register-form" action="" method="post" role="form" style="display: none;">
 									{% csrf_token %}
 									<div class="form-group">
@@ -205,11 +235,16 @@ body {
 <!-- Latest compiled JavaScript -->
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
 
+<!-- django-mfa's passkey driver. Nothing below wires it up: it finds the
+     form by id on DOMContentLoaded. -->
+<script src="{% static 'django_mfa/webauthn.js' %}" defer></script>
+
 <script type="text/javascript">
 	$(function() {
 	    $('#login-form-link').click(function(e) {
 	    	$("#login-form").delay(100).fadeIn(100);
 	 		$("#register-form").fadeOut(100);
+			$("#passkey-block").delay(100).fadeIn(100);
 			$('#register-form-link').removeClass('active');
 			$(this).addClass('active');
 			e.preventDefault();
@@ -217,6 +252,7 @@ body {
 		$('#register-form-link').click(function(e) {
 			$("#register-form").delay(100).fadeIn(100);
 	 		$("#login-form").fadeOut(100);
+			$("#passkey-block").fadeOut(100);
 			$('#login-form-link').removeClass('active');
 			$(this).addClass('active');
 			e.preventDefault();

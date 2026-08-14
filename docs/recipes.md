@@ -82,6 +82,48 @@ otherwise silent. It also requires discoverable credentials, so leave
 Whether one passkey tap satisfies *both* factors depends on user verification (PIN or
 biometric) rather than mere presence — see {doc}`mfa_flow`.
 
+### Offering passkeys from the autofill dropdown
+
+A button is a second thing to notice. **Conditional mediation** — "passkey autofill" —
+instead offers the user's passkeys from the browser's own dropdown the moment they
+focus the username field, the way saved passwords appear. Add `data-conditional="true"`
+to the form, and the `webauthn` token to your existing username input:
+
+    <form id="webauthn-passkey-form" method="post"
+          action="{% url 'mfa:passkey_complete' %}"
+          data-begin-url="{% url 'mfa:passkey_begin' %}"
+          data-conditional="true">
+      ...
+    </form>
+
+    <input name="username" autocomplete="username webauthn">
+
+Both halves are required, and the failure mode when you forget the input is the
+confusing one: the ceremony starts, no error appears anywhere, and nothing is ever
+offered — because the dropdown it would have appeared in doesn't exist. The input does
+not have to be inside the passkey form; it is normally your ordinary login form's own
+username field.
+
+The button keeps working alongside it. Only one WebAuthn request may be outstanding at
+a time, so clicking it aborts the autofill ceremony first and restarts it if the modal
+is dismissed.
+
+It degrades quietly rather than breaking: a browser without
+`PublicKeyCredential.isConditionalMediationAvailable()`, or one that reports autofill
+unavailable, simply gets the button. Errors on this path go to `console.debug` rather
+than into your error element — the user never asked for this ceremony, so a failure in
+it shouldn't put a message in front of them while the button is still there and still
+works.
+
+:::{warning}
+This is opt-in for a reason: it moves `mfa:passkey_begin` from "once, when someone
+clicks the button" to **once per login-page view, for every anonymous visitor**. That
+endpoint writes a challenge to the session, so with a database session backend you get
+a session row per login-page hit, bots included. Check that your session backend and
+`django-admin clearsessions` schedule can absorb that before enabling it on a
+high-traffic login page.
+:::
+
 ### Greeting a returning user by name
 
 With `MFA_QUICKLOGIN = True`, django-mfa sets a hint cookie naming the last account
@@ -100,9 +142,15 @@ missing, stale, or tampered cookie returns `None`.
 
 ## APIs and non-browser clients
 
+If what you want is for your users to *do* MFA from a non-browser client — enroll,
+be challenged, verify — that's {doc}`the JSON API <rest_api>`. Mount it and skip
+this section; everything below is about your *own* API endpoints coexisting with
+django-mfa, which is a different problem.
+
 `MfaMiddleware` responds to a pending session with a **redirect**, which is right for
 a browser and wrong for an API client — a mobile app or `fetch()` caller sees a 302
-to an HTML page instead of a useful error.
+to an HTML page instead of a useful error. (It already makes this exception for
+django-mfa's own API endpoints; it has no way to recognise yours.)
 
 If your API sits under a path prefix and authenticates with tokens rather than
 session cookies, the simplest fix is to exempt it, since token auth doesn't go

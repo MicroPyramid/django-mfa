@@ -111,23 +111,29 @@ class WheelContentsTests(unittest.TestCase):
         source, so a fully translated install looks untranslated with
         nothing in the logs to say why.
 
-        Asserted on the .po files and the .pot: no .mo ships yet, because
-        every entry is still a fuzzy machine draft (see
-        django_mfa/tests/test_i18n.py and docs/translations.md). When a
-        language is reviewed and starts shipping compiled catalogs, add the
-        .mo check here -- it is the file gettext actually reads at runtime.
+        The .mo files are the load-bearing half: gettext reads only those,
+        so a wheel carrying every .po and no .mo is a wheel with no
+        translations in it whatsoever, and looks complete in a file listing.
+        They are also the half most easily lost, being the only binary
+        artifact here and the natural thing for an ignore rule to sweep up
+        (which .gitignore's blanket `*.mo` did, until the negation in it).
         """
         self.assertIn("django_mfa/locale/django.pot", self.names)
-        catalogs = [n for n in self.names
-                    if n.startswith("django_mfa/locale/")
-                    and n.endswith("/LC_MESSAGES/django.po")]
-        on_disk = sorted(
-            p.relative_to(REPO_ROOT).as_posix()
-            for p in (REPO_ROOT / "django_mfa" / "locale").glob(
-                "*/LC_MESSAGES/django.po"))
-        self.assertEqual(
-            sorted(catalogs), on_disk,
-            "the locale directory on disk and in the wheel disagree")
+        locale = REPO_ROOT / "django_mfa" / "locale"
+        for suffix in (".po", ".mo"):
+            in_wheel = sorted(
+                n for n in self.names
+                if n.startswith("django_mfa/locale/")
+                and n.endswith(f"/LC_MESSAGES/django{suffix}"))
+            on_disk = sorted(
+                p.relative_to(REPO_ROOT).as_posix()
+                for p in locale.glob(f"*/LC_MESSAGES/django{suffix}"))
+            with self.subTest(suffix=suffix):
+                self.assertTrue(on_disk, f"no django{suffix} files on disk")
+                self.assertEqual(
+                    in_wheel, on_disk,
+                    f"the django{suffix} catalogs on disk and in the wheel "
+                    f"disagree")
 
     def test_migrations_ship(self):
         """A Django app whose migrations don't ship leaves `migrate` with

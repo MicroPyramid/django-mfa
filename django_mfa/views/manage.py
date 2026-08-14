@@ -3,8 +3,9 @@ from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponseForbidden, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.urls import reverse
+from django.utils.translation import gettext_lazy as _
 
-from django_mfa import events, policy
+from django_mfa import events, flows, policy
 from django_mfa.adapters.recovery_codes import RecoveryCodesAdapter
 from django_mfa.conf import settings as mfa_settings
 from django_mfa.decorators import mfa_recent_required
@@ -99,23 +100,9 @@ def manage_factors(request):
         raise Http404("No such authenticator") from None
     if (authenticator.type == Authenticator.Type.WEBAUTHN
             and mfa_settings.MFA_OWNED_BY_ENTERPRISE):
-        return HttpResponseForbidden(
+        return HttpResponseForbidden(_(
             "This security key is managed by your organization and cannot "
-            "be removed here.")
+            "be removed here."))
 
-    factor_type, name = authenticator.type, authenticator.name
-    authenticator.delete()
-    try:
-        sender = type(registry.get(factor_type))
-    except KeyError:
-        # A row whose type is no longer registered -- MFA_FACTORS narrowed,
-        # or registry.unregister() (which checks.py recommends as the
-        # WebAuthn opt-out). security_settings lists every row regardless of
-        # the registry, so removing one of these is a supported action and
-        # must not 500 after the delete has already committed. There is no
-        # adapter class to name as the sender in that case.
-        sender = None
-    events.factor_removed.send_robust(
-        sender=sender, user=request.user,
-        factor_type=factor_type, name=name, request=request)
+    flows.remove_factor(request, authenticator)
     return redirect(reverse("mfa:security_settings"))

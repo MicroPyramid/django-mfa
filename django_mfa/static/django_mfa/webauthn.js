@@ -178,6 +178,49 @@
       });
   }
 
+  // Conditional-mediation ("passkey autofill") variant of runPasskeyLogin.
+  //
+  // Same fetch/decode/get/encode/submit shape, with two additions that are
+  // what make it autofill rather than a modal prompt:
+  //
+  //   mediation: "conditional" -- do not show a modal. The promise stays
+  //     pending, quietly, until the user chooses one of their passkeys from
+  //     the browser's own autofill dropdown on an input marked
+  //     autocomplete="username webauthn". If they never do, it never
+  //     settles, which is the intended behaviour and not a leak.
+  //   signal -- an AbortSignal, because the platform allows only ONE
+  //     outstanding navigator.credentials.get() at a time. Without it, the
+  //     "Sign in with a passkey" button silently does nothing for the rest
+  //     of the page's life: its own get() is rejected on arrival because
+  //     this one still holds the slot. See the button handler below, which
+  //     aborts this before starting its own.
+  //
+  // Note both `mediation` and `signal` are siblings of `publicKey` in
+  // CredentialRequestOptions, NOT fields inside it -- nesting them under
+  // publicKey is silently ignored, and the ceremony then shows a modal
+  // exactly as if this function did not exist.
+  function runConditionalPasskeyLogin(form, controller) {
+    var beginUrl = form.getAttribute("data-begin-url");
+    return fetch(beginUrl, {credentials: "same-origin"})
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error("Unable to start passkey sign-in.");
+        }
+        return response.json();
+      })
+      .then(function (body) {
+        var options = decodeOptions(JSON.parse(body.options));
+        options.mediation = "conditional";
+        options.signal = controller.signal;
+        return navigator.credentials.get(options);
+      })
+      .then(function (credential) {
+        form.querySelector("[name=credential]").value =
+          JSON.stringify(encodeCredential(credential));
+        form.submit();
+      });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     var form = document.getElementById("webauthn-form");
     if (form) {
@@ -213,12 +256,22 @@
 
     // Passwordless login form, e.g. on a host project's own login page:
     //   <form id="webauthn-passkey-form" method="post" action="..."
-    //         data-begin-url="{% url 'mfa:passkey_begin' %}">
+    //         data-begin-url="{% url 'mfa:passkey_begin' %}"
+    //         data-conditional="true">
     //     {% csrf_token %}
     //     <input type="hidden" name="next" value="...">
     //     <input type="hidden" name="credential" value="">
     //     <button type="button" id="webauthn-passkey-start">Sign in with a passkey</button>
     //   </form>
+    //
+    // data-conditional="true" additionally offers the user's passkeys from
+    // the browser's own autofill dropdown, with no click on the button
+    // above. It needs a cooperating input ELSEWHERE on the page (typically
+    // the host's existing username field, which is not django-mfa's to
+    // render):
+    //   <input name="username" autocomplete="username webauthn">
+    // Without that autocomplete token the ceremony starts and simply never
+    // surfaces anywhere -- see docs/recipes.md.
     // Deliberately independent of the #webauthn-form block above (separate
     // element ids throughout) so a page is free to have neither, either, or
     // -- for a factor management page that also wants a "sign in as someone
@@ -228,6 +281,38 @@
       var passkeyButton = document.getElementById("webauthn-passkey-start");
       var passkeyUnsupported = document.getElementById("webauthn-passkey-unsupported");
       var passkeyError = document.getElementById("webauthn-passkey-error");
+      // Opt-in, per form: data-conditional="true". Off by default because
+      // it is not free -- see startConditional() below.
+      var wantsConditional =
+        passkeyForm.getAttribute("data-conditional") === "true";
+      // The in-flight conditional ceremony's controller, or null. Module
+      // state rather than a closure variable inside the handler, because
+      // the button handler and the restart path both need to reach it.
+      var conditionalAbort = null;
+
+      // Begin (or re-begin) an autofill ceremony. Kept restartable: the
+      // button aborts whatever is running here to claim the single
+      // get() slot, and hands it back if its own ceremony fails, so a user
+      // who opens the modal and presses Escape still has working autofill
+      // afterwards instead of a dropdown that has quietly gone dead.
+      function startConditional() {
+        conditionalAbort = new AbortController();
+        runConditionalPasskeyLogin(passkeyForm, conditionalAbort)
+          .catch(function (err) {
+            // AbortError is the normal, expected outcome every time the
+            // button takes over -- reporting it would put "signal is
+            // aborted without reason" in front of a user who did nothing
+            // wrong. Anything else is a real failure, but this ceremony
+            // was never explicitly requested by the user, so it is logged
+            // rather than rendered into the page: the visible passkey
+            // button is still there and still works.
+            if (!err || err.name !== "AbortError") {
+              if (window.console && window.console.debug) {
+                window.console.debug("[django-mfa] passkey autofill:", err);
+              }
+            }
+          });
+      }
 
       if (!window.PublicKeyCredential) {
         if (passkeyUnsupported) {
@@ -236,17 +321,47 @@
         if (passkeyButton) {
           passkeyButton.disabled = true;
         }
-      } else if (passkeyButton) {
-        passkeyButton.addEventListener("click", function () {
-          if (passkeyError) {
-            passkeyError.textContent = "";
-          }
-          runPasskeyLogin(passkeyForm).catch(function (err) {
+      } else {
+        // isConditionalMediationAvailable() is itself newer than WebAuthn,
+        // so its absence means "no autofill here" rather than an error --
+        // a browser without it still gets the button, unchanged.
+        if (wantsConditional
+            && typeof PublicKeyCredential.isConditionalMediationAvailable
+               === "function") {
+          PublicKeyCredential.isConditionalMediationAvailable()
+            .then(function (available) {
+              if (available) {
+                startConditional();
+              }
+            })
+            .catch(function () {
+              // Availability could not be determined; the button remains.
+            });
+        }
+
+        if (passkeyButton) {
+          passkeyButton.addEventListener("click", function () {
             if (passkeyError) {
-              passkeyError.textContent = err && err.message ? err.message : String(err);
+              passkeyError.textContent = "";
             }
+            // Claim the single outstanding-get() slot before asking for
+            // one, or this click resolves to nothing at all.
+            var wasConditional = conditionalAbort !== null;
+            if (conditionalAbort) {
+              conditionalAbort.abort();
+              conditionalAbort = null;
+            }
+            runPasskeyLogin(passkeyForm).catch(function (err) {
+              if (passkeyError) {
+                passkeyError.textContent =
+                  err && err.message ? err.message : String(err);
+              }
+              if (wasConditional) {
+                startConditional();
+              }
+            });
           });
-        });
+        }
       }
     }
   });
