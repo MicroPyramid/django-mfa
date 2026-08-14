@@ -41,6 +41,10 @@ WebAuthn** — see {doc}`installation_setup`.
 | Setting | Default | Purpose |
 |---|---|---|
 | `MFA_VERIFY_RATE_LIMIT` | `"5/5m"` | Failed second-factor attempts allowed per user per factor type, as `"<count>/<window><unit>"` where unit is `s`, `m`, or `h`. See {doc}`security`. |
+| `MFA_VERIFY_IP_RATE_LIMIT` | `"50/5m"` | Failed second-factor attempts allowed per client IP per factor type, across every account. Same grammar; `None` switches it off. See [below](#per-ip-rate-limiting). |
+| `MFA_RATE_LIMIT_BACKEND` | `"database"` | Where the counters live: `"database"` (a table, survives a cache restart) or `"cache"`. See [below](#mfa_rate_limit_backend). |
+| `MFA_RATE_LIMIT_FAIL_OPEN` | `True` | What to do when the counter store is *unreachable* — allow the attempt (`True`) or refuse it (`False`). Not consulted for a counter that is merely absent, which always means "no failures yet". |
+| `MFA_CLIENT_IP_RESOLVER` | `None` | How to find the client's address for the per-IP budget. `None` means `REMOTE_ADDR`. **Set this if you run behind a proxy** — see [below](#per-ip-rate-limiting). |
 | `MFA_EMAIL_SEND_RATE_LIMIT` | `"3/5m"` | How many emailed codes a user can be sent per window, same `"<count>/<window><unit>"` grammar as above. Refreshing a challenge page reuses a still-valid code rather than spending budget; past the limit no mail is sent and the page looks exactly the same. Only consulted when `"email"` is in `MFA_FACTORS`. |
 | `MFA_SECRET_ENCRYPTION_KEYS` | `None` | **Deprecated, and does not encrypt.** List of keys used to *sign* TOTP secrets at rest. The first key signs; every key is tried when reading. See [Signing stored secrets](#signing-stored-secrets-deprecated). |
 | `MFA_OWNED_BY_ENTERPRISE` | `False` | When `True`, users cannot remove their own WebAuthn authenticators from the security settings page — e.g. an organization-issued security key an administrator manages instead. |
@@ -80,6 +84,69 @@ that enabled RMB specifically to avoid challenges — see the 4.2.0 entry in
 
 This exists because a stolen or borrowed session could otherwise strip every
 factor from an account and enrol its own without presenting anything.
+
+### Per-IP rate limiting
+
+`MFA_VERIFY_RATE_LIMIT` budgets guesses *per account*, which an attacker with a
+list of stolen passwords simply routes around: one guess against each of ten
+thousand accounts means every counter sits at 1 and none of them ever binds.
+`MFA_VERIFY_IP_RATE_LIMIT` (new in 4.5.0, default `"50/5m"`) budgets the same
+attempts per client address instead, so that run is stopped at 50.
+
+Fifty *failed* second-factor attempts from one address in five minutes is far
+outside normal use — a real user makes one to three — so the default is on. An
+office behind a single NAT shares one budget, which is the case to think about
+before leaving it as-is.
+
+A successful verification clears the user's counter and deliberately **does
+not** clear the IP's. An attacker only needs one account of their own to log
+into, and clearing on success would hand them a fresh budget each time.
+
+:::{warning}
+The address comes from `REMOTE_ADDR`, and `X-Forwarded-For` is **not** read
+unless you say so. That default is deliberate: a header the client sets breaks
+the budget both ways — an attacker who varies it is never throttled, and one
+who sets it to your office's address locks your staff out.
+
+Behind a proxy or load balancer, `REMOTE_ADDR` is the *proxy*, so every request
+shares one counter and the limit binds far too early. Point
+`MFA_CLIENT_IP_RESOLVER` at a resolver that knows your topology:
+
+    # settings.py
+    MFA_CLIENT_IP_RESOLVER = "myapp.net.client_ip"
+
+    # myapp/net.py -- one proxy hop, which we control and which always appends
+    def client_ip(request):
+        forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        return forwarded.rsplit(",", 1)[-1].strip() or None
+
+Take the address your own infrastructure appended (the *last* entry), never the
+first — the first is whatever the client sent. Returning `None` skips the per-IP
+budget for that request; the per-user budget still applies.
+:::
+
+### `MFA_RATE_LIMIT_BACKEND`
+
+Default: `"database"`.
+
+`"database"` keeps counters in a `RateLimitCounter` table. `"cache"` keeps them
+in Django's cache, which is what every release before 4.5.0 did.
+
+The table is the default because a cache-only counter is erased by a Redis
+restart, an eviction under memory pressure, or a `cache.clear()` somewhere in a
+deploy script — and every erasure silently hands an attacker mid-run a fresh
+budget, leaving no trace. The cost is one row read per verification attempt and
+one write per *failed* one.
+
+Rows are garbage once expired, and `manage.py mfa_prune` deletes them. Run it on
+the same schedule as `django-admin clearsessions` — see {doc}`operations`.
+`"cache"` needs no pruning and no migration, and remains a reasonable choice for
+an install that would rather not add a write to the login path.
+
+`MFA_RATE_LIMIT_FAIL_OPEN` covers the store being *unreachable* — a refused Redis
+connection, a missing table — and nothing else. A counter that is simply absent
+is indistinguishable from "nobody has failed yet" and is always allowed; a
+limiter that denied on a cache miss would deny every first attempt ever made.
 
 ## Email codes
 
@@ -199,11 +266,10 @@ described above before they can affect a real user.
 E001–E003 are WebAuthn-only: they return no errors at all unless WebAuthn is
 actually switched on for this install, meaning `MFA_QUICKLOGIN` is on or a WebAuthn
 adapter is registered (true by default). A project with
-`MFA_FACTORS = ["totp", "recovery_codes"]` never trips any of them. `E004` and
-`E004`–`E006` are not gated the same way — `MFA_REQUIRED`, `MFA_STEPUP_MAX_AGE`
-and `MFA_API_AUTHENTICATION` are not WebAuthn settings, so there is nothing to
-gate on, and all three apply to every install regardless of which factors are
-registered.
+`MFA_FACTORS = ["totp", "recovery_codes"]` never trips any of them.
+`E004`–`E009` are not gated the same way — none of them is a WebAuthn setting, so
+there is nothing to gate on, and they apply to every install regardless of which
+factors are registered.
 
 | Check ID | Severity | Condition |
 |---|---|---|
@@ -213,6 +279,9 @@ registered.
 | `django_mfa.E004` | Error | `MFA_REQUIRED` is a dotted path that fails to import, or resolves to a value that isn't callable. |
 | `django_mfa.E005` | Error | `MFA_STEPUP_MAX_AGE` is not a positive integer or `None`. |
 | `django_mfa.E006` | Error | `MFA_API_AUTHENTICATION` is a dotted path that fails to import, or resolves to a value that isn't callable. |
+| `django_mfa.E007` | Error | `MFA_VERIFY_RATE_LIMIT`, `MFA_VERIFY_IP_RATE_LIMIT` or `MFA_EMAIL_SEND_RATE_LIMIT` is not a valid `"<count>/<window><unit>"` spec. |
+| `django_mfa.E008` | Error | `MFA_RATE_LIMIT_BACKEND` is not `"database"` or `"cache"`. |
+| `django_mfa.E009` | Error | `MFA_CLIENT_IP_RESOLVER` is a dotted path that fails to import, or resolves to a value that isn't callable. |
 
 `E003` exists because the failure it prevents is otherwise completely silent.
 Passwordless login logs a user in by calling `django.contrib.auth.login()` with an
@@ -223,7 +292,7 @@ resolves `request.user` to `AnonymousUser` — no exception, no log line, just a
 who was "logged in" a moment ago and is now anonymous again. Catching this at startup
 is far cheaper than a support ticket.
 
-All five are `Error` rather than `Warning` deliberately, though what each guards
+All nine are `Error` rather than `Warning` deliberately, though what each guards
 against differs slightly. E001–E003 guard a failure mode that is otherwise silent
 in production (see E003's own explanation below). A misconfigured `MFA_REQUIRED`
 is not silent even without E004 — `policy.resolve()` raises `ImproperlyConfigured`
@@ -231,7 +300,11 @@ or `ImportError` the first time `mfa_required_for()` runs, which is a loud 500 o
 whichever live request gets there first. What E004 changes is *when* that failure
 surfaces: at `manage.py check` (and therefore at `migrate`/`runserver`, and in CI if
 you run checks there), before any request has been served, rather than as a 500 on
-some user's request in production. If a check fires for a
+some user's request in production. E007–E009 are the same argument applied to the
+rate limiter, where the timing is worse than usual: without them a bad spec or an
+unimportable resolver raises from inside the *first verification attempt* after the
+deploy, which is a 500 on the challenge page for whichever user happens to log in
+first. If a check fires for a
 reason you understand and have already accounted for — say you provision
 `MFA_FIDO2_RP_ID` from a source Django's check framework can't see at check time —
 the standard Django escape hatch applies:

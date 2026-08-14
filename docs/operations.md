@@ -1,18 +1,18 @@
 # Operations
 
-Six `manage.py` commands for running django-mfa day to day, once it's already
+Seven `manage.py` commands for running django-mfa day to day, once it's already
 wired into your project: helping a locked-out user, checking rollout
-progress, granting a policy exemption, and migrating factors in from another
-package. Nothing on this page changes how django-mfa behaves — see
-{doc}`enforcement` and {doc}`settings` for that. This page is about the
-commands themselves.
+progress, granting a policy exemption, migrating factors in from another
+package, and one scheduled housekeeping job. Nothing on this page changes how
+django-mfa behaves — see {doc}`enforcement` and {doc}`settings` for that. This
+page is about the commands themselves.
 
-Three of the six — `mfa_status`, `mfa_reset`, `mfa_disable` — take a `user`
+Three of the seven — `mfa_status`, `mfa_reset`, `mfa_disable` — take a `user`
 argument as **username or pk** (`django_mfa`'s own `resolve_user()` tries
 `USERNAME_FIELD` first, then falls back to pk only when the value is all
-digits). `mfa_report` takes no `user` argument at all — it reports across
-every user. The two importers take an optional `--users` instead, to narrow
-an otherwise site-wide run — see
+digits). `mfa_report` and `mfa_prune` take no `user` argument at all — the
+first reports across every user, the second is housekeeping. The two importers
+take an optional `--users` instead, to narrow an otherwise site-wide run — see
 [Migrating from another package](#migrating-from-another-package) below.
 
 None of these commands write to a session directly, but that does **not**
@@ -114,6 +114,29 @@ hold a primary factor (recovery codes alone don't count; see
 skips the per-type counts. `--format csv` switches the outstanding list to
 `pk,<USERNAME_FIELD>` CSV on stdout with nothing else printed ahead of the
 header — pipe it straight into a file. It never prints `Authenticator.data`.
+
+## Pruning expired rate-limit counters
+
+    manage.py mfa_prune
+    manage.py mfa_prune --quiet          # for cron
+
+With `MFA_RATE_LIMIT_BACKEND = "database"` (the default since 4.5.0), each
+rate-limit budget is a row in `RateLimitCounter`. A row stops *counting* the
+moment `expires_at` passes — every query filters on it — but nothing deletes it,
+because doing that inside a request would put a write on the login path to save
+disk. This command is that deletion.
+
+**Schedule it exactly where you schedule `django-admin clearsessions`**, and for
+the same reason: neither is required for correctness, both accumulate rows
+forever if you skip them. Daily is ample.
+
+    0 4 * * *  manage.py mfa_prune --quiet
+
+It matters slightly more than disk, though. The per-IP budget puts a client
+address in `scope`, so the table holds personal data with no purpose beyond its
+five-minute window. Pruning is what keeps the retention honest. On
+`MFA_RATE_LIMIT_BACKEND = "cache"` there is nothing to prune and the command
+says so rather than silently deleting nothing.
 
 ## Exempting a user from `MFA_REQUIRED`
 

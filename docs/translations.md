@@ -6,7 +6,7 @@ it, with no configuration beyond switching Django's own i18n on.
 
 ## What ships
 
-    django_mfa/locale/django.pot                     the template, 75 entries
+    django_mfa/locale/django.pot                     the template
     django_mfa/locale/<lang>/LC_MESSAGES/django.po   the source catalog
     django_mfa/locale/<lang>/LC_MESSAGES/django.mo   the compiled catalog
 

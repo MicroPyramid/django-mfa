@@ -12,7 +12,7 @@ import time
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from django_mfa.adapters.totp import generate_secret
@@ -455,8 +455,9 @@ class EveryEndpointIsGatedTests(ApiTestCase):
     #: cannot draw a challenge screen it may not ask about. verify_*: they
     #: are how a session stops being pending. passkey_*: anonymous by
     #: definition -- they are a login.
-    PENDING_ALLOWED = {"state", "verify_begin", "verify_complete",
-                       "passkey_begin", "passkey_complete"}
+    PENDING_ALLOWED = {"state", "session", "verify_begin",
+                       "verify_complete", "passkey_begin",
+                       "passkey_complete"}
 
     def test_every_endpoint_refuses_a_pending_session(self):
         self.enroll_totp()
@@ -508,3 +509,216 @@ class ApiNotMountedTests(TestCase):
         self.client.force_login(user)
         self.assertEqual(
             self.client.get(reverse("mfa:security_settings")).status_code, 200)
+
+
+def user_from_header(request):
+    """A stand-in for a host project's own token authentication.
+
+    Reads an identity from a header, never from the session -- which is the
+    whole point: it makes the test client below a genuine cookie-less client,
+    the case django_mfa.api.tokens exists for.
+    """
+    pk = request.headers.get("X-Test-User")
+    return User.objects.filter(pk=pk).first() if pk else None
+
+
+@override_settings(ROOT_URLCONF=API_URLS,
+                   MFA_API_AUTHENTICATION=f"{__name__}.user_from_header")
+class TokenSessionTests(TestCase):
+    """MFA state for a client that holds no cookie.
+
+    Every client here is built with `Client()` and never logged in, so it has
+    no session cookie at all -- exactly the shape of a mobile app. Anything
+    that works below works because of the X-MFA-Session token and nothing
+    else.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.secret = generate_secret()
+        self.user = User.objects.create_user("ada", password="pw")
+        self.authenticator = Authenticator.objects.create(
+            user=self.user, type=Authenticator.Type.TOTP,
+            data={"secret": encrypt(self.secret)})
+
+    def url(self, name, **kwargs):
+        return reverse(f"mfa_api:{name}", kwargs=kwargs or None)
+
+    def client_for(self, user=None, token=None, **extra):
+        client = Client(**extra)
+        client.defaults["HTTP_X_TEST_USER"] = str((user or self.user).pk)
+        if token:
+            client.defaults["HTTP_X_MFA_SESSION"] = token
+        return client
+
+    def issue(self, user=None, client=None):
+        client = client or self.client_for(user)
+        response = client.post(self.url("session"))
+        self.assertEqual(response.status_code, 200, response.content)
+        return json.loads(response.content)
+
+    def verify(self, client):
+        return client.post(
+            self.url("verify_complete", factor_type="totp"),
+            data=json.dumps({"code": code_for(self.secret)}),
+            content_type="application/json")
+
+    # --- issuing ----------------------------------------------------------
+
+    def test_issuing_returns_a_token_and_names_its_header(self):
+        body = self.issue()
+        self.assertTrue(body["token"])
+        self.assertEqual(body["header"], "X-MFA-Session")
+        self.assertGreater(body["expires_in"], 0)
+
+    def test_issuing_is_reachable_before_any_challenge(self):
+        """It has to be: a token is how a client gets far enough to be
+        challenged at all. The token it mints is empty and confers nothing."""
+        client = self.client_for()
+        token = self.issue(client=client)["token"]
+        state = json.loads(client.post(self.url("session")).content)
+        self.assertNotEqual(state["token"], token)   # a second, separate one
+
+    def test_a_fresh_token_is_not_verified(self):
+        token = self.issue()["token"]
+        client = self.client_for(token=token)
+        body = json.loads(client.get(self.url("state")).content)
+        self.assertFalse(body["verified"])
+
+    # --- the point of the feature -----------------------------------------
+
+    def test_verification_survives_to_the_next_request(self):
+        token = self.issue()["token"]
+        client = self.client_for(token=token)
+
+        response = self.verify(client)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(json.loads(response.content)["verified"])
+
+        # The assertion this whole module exists for: a SEPARATE request,
+        # carrying nothing but the token, still counts as verified.
+        later = self.client_for(token=token)
+        self.assertTrue(json.loads(later.get(self.url("state")).content)
+                        ["verified"])
+
+    def test_without_a_token_verification_is_lost_immediately(self):
+        """The behaviour before 4.5.0, pinned so the fix cannot silently rot."""
+        client = self.client_for()
+        client.cookies.clear()
+        self.verify(client)
+        fresh = self.client_for()
+        fresh.cookies.clear()
+        self.assertFalse(json.loads(fresh.get(self.url("state")).content)
+                         ["verified"])
+
+    def test_a_verified_token_reaches_a_stepup_endpoint(self):
+        token = self.issue()["token"]
+        client = self.client_for(token=token)
+        self.verify(client)
+        response = client.post(self.url("recovery_codes"))
+        self.assertEqual(response.status_code, 201, response.content)
+
+    # --- binding ----------------------------------------------------------
+
+    def test_a_token_issued_to_someone_else_is_refused(self):
+        """Without this the API is a complete second-factor bypass: overhear
+        one verified token, present it with your own identity, inherit it."""
+        mallory = User.objects.create_user("mallory", password="pw")
+        token = self.issue()["token"]
+        self.verify(self.client_for(token=token))
+
+        response = self.client_for(user=mallory, token=token).get(
+            self.url("state"))
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(json.loads(response.content)["error"]["code"],
+                         "invalid_mfa_session")
+
+    def test_an_invented_token_is_refused(self):
+        response = self.client_for(token="not-a-real-session-key").get(
+            self.url("state"))
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(json.loads(response.content)["error"]["code"],
+                         "invalid_mfa_session")
+
+    def test_a_bad_token_is_refused_rather_than_ignored(self):
+        """Falling back to the cookie session would answer a question the
+        client did not ask, and hide a client-side bug indefinitely."""
+        client = Client()
+        client.force_login(self.user)
+        client.defaults["HTTP_X_TEST_USER"] = str(self.user.pk)
+        client.defaults["HTTP_X_MFA_SESSION"] = "garbage"
+        self.assertEqual(client.get(self.url("state")).status_code, 401)
+
+    def test_a_browser_session_key_is_not_a_token(self):
+        """The binding also keeps a stolen sessionid off the header path --
+        which matters because that path sheds CSRF protection."""
+        browser = Client()
+        browser.force_login(self.user)
+        sessionid = browser.cookies["sessionid"].value
+
+        response = self.client_for(token=sessionid).get(self.url("state"))
+        self.assertEqual(response.status_code, 401)
+
+    # --- revocation -------------------------------------------------------
+
+    def test_revoking_makes_the_token_stop_working(self):
+        token = self.issue()["token"]
+        client = self.client_for(token=token)
+        self.verify(client)
+
+        response = client.delete(self.url("session"))
+        self.assertTrue(json.loads(response.content)["revoked"])
+
+        self.assertEqual(
+            self.client_for(token=token).get(self.url("state")).status_code,
+            401)
+
+    def test_revoking_without_a_token_does_not_log_a_cookie_client_out(self):
+        client = Client()
+        client.force_login(self.user)
+        client.defaults["HTTP_X_TEST_USER"] = str(self.user.pk)
+        response = client.delete(self.url("session"))
+        self.assertFalse(json.loads(response.content)["revoked"])
+        self.assertIn("_auth_user_id", client.session)
+
+    # --- cookies and CSRF -------------------------------------------------
+
+    def test_a_token_request_is_never_answered_with_a_session_cookie(self):
+        token = self.issue()["token"]
+        client = self.client_for(token=token)
+        response = self.verify(client)
+        self.assertNotIn("sessionid", response.cookies)
+
+    def test_a_cookie_less_request_does_not_need_a_csrf_token(self):
+        """A browser will not attach a custom header cross-site without a
+        preflight, so a request carrying no cookie has no ambient credential
+        for CSRF to defend.
+
+        Both halves are checked with enforcement on, including the very first
+        call: keying the exemption on the *token* rather than on the absence
+        of cookies would leave a cookie-less client unable to mint its first
+        one, which is the only way in for the clients this exists for.
+        """
+        client = self.client_for(enforce_csrf_checks=True)
+        token = self.issue(client=client)["token"]
+        verified = self.client_for(token=token, enforce_csrf_checks=True)
+        self.assertEqual(self.verify(verified).status_code, 200)
+
+    def test_a_cookie_request_still_needs_one(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        client.defaults["HTTP_X_TEST_USER"] = str(self.user.pk)
+        response = client.post(self.url("session"))
+        self.assertEqual(response.status_code, 403)
+
+    # --- engines that cannot do this --------------------------------------
+
+    @override_settings(
+        SESSION_ENGINE="django.contrib.sessions.backends.signed_cookies")
+    def test_a_cookie_only_session_engine_says_so(self):
+        """There is no server-side key to hand out, and a token that silently
+        stopped working at the first write would be worse than refusing."""
+        response = self.client_for().post(self.url("session"))
+        self.assertEqual(response.status_code, 501)
+        self.assertEqual(json.loads(response.content)["error"]["code"],
+                         "token_sessions_unsupported")

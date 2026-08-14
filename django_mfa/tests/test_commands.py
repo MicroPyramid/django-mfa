@@ -10,7 +10,7 @@ from django.utils import timezone
 from django_mfa import events
 from django_mfa.adapters.recovery_codes import RecoveryCodesAdapter
 from django_mfa.crypto import encrypt
-from django_mfa.models import Authenticator, MfaExemption
+from django_mfa.models import Authenticator, MfaExemption, RateLimitCounter
 from django_mfa.registry import registry
 
 KNOWN_SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
@@ -307,3 +307,44 @@ class MfaReportTests(TestCase):
 
         self.assertIn("recovery_only", output)
         self.assertIn(f"(pk={recovery_only.pk})", output)
+
+
+class MfaPruneTests(TestCase):
+    """`mfa_prune` is scheduled housekeeping for the database rate-limit
+    backend -- the counterpart to `django-admin clearsessions`."""
+
+    def _counter(self, scope, *, expired):
+        offset = timedelta(seconds=-1 if expired else 300)
+        return RateLimitCounter.objects.create(
+            scope=scope, count=1, expires_at=timezone.now() + offset)
+
+    def test_deletes_expired_counters_and_keeps_live_ones(self):
+        self._counter("django_mfa:rl:1:totp", expired=True)
+        self._counter("django_mfa:rl:ip:203.0.113.7:totp", expired=True)
+        live = self._counter("django_mfa:rl:2:webauthn", expired=False)
+
+        out = StringIO()
+        call_command("mfa_prune", stdout=out)
+
+        self.assertIn("Deleted 2", out.getvalue())
+        self.assertEqual([c.pk for c in RateLimitCounter.objects.all()], [live.pk])
+
+    def test_quiet_prints_nothing(self):
+        self._counter("django_mfa:rl:1:totp", expired=True)
+        out = StringIO()
+        call_command("mfa_prune", "--quiet", stdout=out)
+        self.assertEqual(out.getvalue(), "")
+        self.assertEqual(RateLimitCounter.objects.count(), 0)
+
+    def test_it_is_a_no_op_rather_than_an_error_on_an_empty_table(self):
+        out = StringIO()
+        call_command("mfa_prune", stdout=out)
+        self.assertIn("Deleted 0", out.getvalue())
+
+    @override_settings(MFA_RATE_LIMIT_BACKEND="cache")
+    def test_it_says_so_when_the_backend_has_nothing_to_prune(self):
+        """Silently deleting nothing forever reads as a broken command rather
+        than an inapplicable one."""
+        out = StringIO()
+        call_command("mfa_prune", stdout=out)
+        self.assertIn("expire themselves", out.getvalue())

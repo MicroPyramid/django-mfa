@@ -1,6 +1,12 @@
 from django.test import TestCase, override_settings
 
-from django_mfa.checks import check_fido2_rp_id, check_webauthn_backend_configured
+from django_mfa.checks import (
+    check_client_ip_resolver,
+    check_fido2_rp_id,
+    check_rate_limit_backend,
+    check_rate_limit_specs,
+    check_webauthn_backend_configured,
+)
 from django_mfa.conf import settings as mfa_settings
 
 
@@ -169,3 +175,67 @@ class WebAuthnBackendCheckTests(TestCase):
     def test_backend_missing_is_fine_once_webauthn_is_fully_disabled(self):
         self._unregister_webauthn()
         self.assertEqual(check_webauthn_backend_configured(app_configs=None), [])
+
+
+class RateLimitCheckTests(TestCase):
+    """E007-E009. The failure each prevents lands inside a verification
+    attempt -- i.e. as a 500 on the challenge page for whichever user logs in
+    first after the deploy -- so catching them at `manage.py check` is most of
+    their value."""
+
+    def test_the_defaults_are_clean(self):
+        self.assertEqual(check_rate_limit_specs(app_configs=None), [])
+        self.assertEqual(check_rate_limit_backend(app_configs=None), [])
+        self.assertEqual(check_client_ip_resolver(app_configs=None), [])
+
+    @override_settings(MFA_VERIFY_RATE_LIMIT="5 per 5 minutes")
+    def test_a_malformed_verify_spec_is_an_error(self):
+        errors = check_rate_limit_specs(app_configs=None)
+        self.assertEqual([e.id for e in errors], ["django_mfa.E007"])
+        self.assertIn("MFA_VERIFY_RATE_LIMIT", errors[0].msg)
+
+    @override_settings(MFA_VERIFY_IP_RATE_LIMIT="0/5m")
+    def test_a_zero_count_is_an_error(self):
+        errors = check_rate_limit_specs(app_configs=None)
+        self.assertEqual([e.id for e in errors], ["django_mfa.E007"])
+
+    @override_settings(MFA_VERIFY_IP_RATE_LIMIT=None)
+    def test_the_ip_budget_may_be_switched_off(self):
+        self.assertEqual(check_rate_limit_specs(app_configs=None), [])
+
+    @override_settings(MFA_VERIFY_RATE_LIMIT=None)
+    def test_the_per_user_budget_may_not_be(self):
+        """Only the IP budget is nullable. Allowing None here would silently
+        remove the throttle every other guarantee in this package assumes."""
+        errors = check_rate_limit_specs(app_configs=None)
+        self.assertEqual([e.id for e in errors], ["django_mfa.E007"])
+
+    @override_settings(MFA_VERIFY_RATE_LIMIT="nope", MFA_EMAIL_SEND_RATE_LIMIT="x")
+    def test_every_bad_spec_is_reported_not_just_the_first(self):
+        errors = check_rate_limit_specs(app_configs=None)
+        self.assertEqual(len(errors), 2)
+        self.assertEqual({e.id for e in errors}, {"django_mfa.E007"})
+
+    @override_settings(MFA_RATE_LIMIT_BACKEND="postgres")
+    def test_an_unknown_backend_is_an_error(self):
+        errors = check_rate_limit_backend(app_configs=None)
+        self.assertEqual([e.id for e in errors], ["django_mfa.E008"])
+
+    @override_settings(MFA_RATE_LIMIT_BACKEND="cache")
+    def test_the_other_real_backend_is_accepted(self):
+        self.assertEqual(check_rate_limit_backend(app_configs=None), [])
+
+    @override_settings(MFA_CLIENT_IP_RESOLVER="myapp.nope.missing")
+    def test_an_unimportable_resolver_is_an_error(self):
+        errors = check_client_ip_resolver(app_configs=None)
+        self.assertEqual([e.id for e in errors], ["django_mfa.E009"])
+
+    @override_settings(MFA_CLIENT_IP_RESOLVER="django_mfa.conf.DEFAULTS")
+    def test_a_non_callable_resolver_is_an_error(self):
+        errors = check_client_ip_resolver(app_configs=None)
+        self.assertEqual([e.id for e in errors], ["django_mfa.E009"])
+
+    @override_settings(
+        MFA_CLIENT_IP_RESOLVER="django_mfa.tests.test_ratelimit.last_forwarded")
+    def test_a_good_resolver_passes(self):
+        self.assertEqual(check_client_ip_resolver(app_configs=None), [])

@@ -220,6 +220,10 @@ msgstr "没有可添加的项了。"
 msgid "This account has no email code to verify. Use another method, or contact support if you believe this is a mistake."
 msgstr "此账户没有可验证的邮件验证码。请使用其他方式，若您认为这是错误，请联系支持人员。"
 
+#: django_mfa/api/views.py:152
+msgid "This MFA session token is not valid."
+msgstr "此 MFA 会话令牌无效。"
+
 #: django_mfa/api/views.py:70
 msgid "This account must enroll a second factor first."
 msgstr "此账户需要先设置第二重验证方式。"
@@ -237,10 +241,14 @@ msgstr "此浏览器不支持安全密钥或通行密钥。请更换浏览器，
 msgid "This endpoint does not accept %(method)s."
 msgstr "此端点不接受 %(method)s。"
 
-#: django_mfa/api/views.py:330
+#: django_mfa/api/views.py:409
 #: django_mfa/views/manage.py:103
 msgid "This security key is managed by your organization and cannot be removed here."
 msgstr "此安全密钥由您的组织管理，无法在此移除。"
+
+#: django_mfa/api/views.py:295
+msgid "This server stores sessions in a way that cannot issue a token. Use cookie-based session authentication instead."
+msgstr "此服务器存储会话的方式无法签发令牌。请改用基于 Cookie 的会话身份验证。"
 
 #: django_mfa/api/views.py:67
 msgid "This session must complete a second-factor challenge first."

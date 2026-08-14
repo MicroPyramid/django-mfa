@@ -60,7 +60,40 @@ def enforcement_state(request, require_primary_factor=True):
         return UNAUTHENTICATED
     if session.is_pending(request):
         return PENDING
-    if require_primary_factor and not registry.has_primary_factor(user):
+
+    # Asked once and reused by both rungs below. The two used to be one
+    # question and are now two, and this is on every request to a decorated
+    # view -- a second .exists() here would be pure waste.
+    has_primary_factor = registry.has_primary_factor(user)
+
+    if has_primary_factor and not session.is_verified(request):
+        # Never challenged AT ALL -- no `mfa` key in the session -- while the
+        # user does hold a factor. is_pending() above is False for this, since
+        # it means "stamped, not yet passed"; without this rung such a request
+        # falls through to `return None` and is treated exactly as a verified
+        # one.
+        #
+        # The browser flow reaches this only for a session that missed
+        # signals.stamp_pending_verification: a host project's force_login(),
+        # or a session predating this app's installation. For a cookie-less
+        # API client it is the *normal* state of every request, which is what
+        # makes this load-bearing rather than defensive -- see
+        # django_mfa/api/tokens.py. An endpoint declared `require_verified=
+        # True` without `stepup=True` would otherwise serve an unchallenged
+        # token client; no such endpoint exists today, so the freshness rung
+        # happens to catch every one of them, and that is luck rather than
+        # design.
+        #
+        # Deliberately AFTER the is_pending() check and gated on
+        # has_primary_factor, so no request changes which rung it fails: a
+        # factorless user is excluded here and still falls to UNENROLLED,
+        # which is what keeps the enrollment path reachable at all.
+        # `require_primary_factor` does NOT gate this one -- a caller passing
+        # it False is saying "unenrolled is acceptable here", not "unverified
+        # is acceptable here".
+        return PENDING
+
+    if require_primary_factor and not has_primary_factor:
         # has_primary_factor(), not enabled_for(): a user holding only
         # recovery codes is not protected, and recovery codes must never be
         # somebody's sole second factor. has_primary_factor(), not

@@ -46,7 +46,7 @@ Django's own `user_logged_in` signal.
 | 🖥️ **Remember this browser** | Optional, off by default. Trust a browser for N days after one successful challenge. |
 | ➕ **Several keys at once** | A user can register a work laptop's Touch ID *and* a backup YubiKey, each with its own name. |
 | 🌍 **Six languages** | German, Spanish, French, Brazilian Portuguese, Japanese and Simplified Chinese ship translated. Switch on `USE_I18N` and they work. |
-| 🔌 **A JSON API** | Opt-in. Every flow above as JSON, for an SPA or mobile client that renders its own screens. No DRF dependency. |
+| 🔌 **A JSON API** | Opt-in. Every flow above as JSON, for an SPA or mobile client that renders its own screens. No DRF dependency, and a revocable session token for clients that hold no cookie. |
 
 ## Install
 
@@ -150,10 +150,13 @@ The parts that are easy to get subtly wrong, done deliberately:
   handle, unknown credential, bad signature, expired ceremony, tampered payload —
   returns one identical generic response.
 - **Rate limiting that isn't an oracle.** Failed attempts are capped per user per factor
-  (`MFA_VERIFY_RATE_LIMIT`, default 5 per 5 minutes). A locked-out attempt returns the
-  *same* response as a wrong code, so the lockout itself leaks nothing. The counter
-  lives in the cache with no database fallback, so it fails open rather than locking
-  everyone out — a secondary control shouldn't be able to take your site down.
+  (`MFA_VERIFY_RATE_LIMIT`, default 5 per 5 minutes) *and* per client address across
+  every account (`MFA_VERIFY_IP_RATE_LIMIT`, default 50 per 5 minutes) — the second
+  catches one guess sprayed at ten thousand accounts, which the first cannot see. A
+  locked-out attempt returns the *same* response as a wrong code, so the lockout itself
+  leaks nothing. Counters are rows by default, so a cache restart can't quietly hand an
+  attacker a fresh budget, and the limiter fails open if its store is unreachable — a
+  secondary control shouldn't be able to take your site down.
 - **Cloned-authenticator detection.** WebAuthn signature counters are checked on every
   assertion, with an explicit carve-out for authenticators that legitimately never
   implement one (iCloud passkeys always report 0).

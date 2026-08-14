@@ -15,8 +15,9 @@ from django.urls import NoReverseMatch, reverse
 from django_mfa import totp as totp_mod
 from django_mfa.adapters.webauthn import WebAuthnAdapter
 from django_mfa.crypto import encrypt
-from django_mfa.models import Authenticator
+from django_mfa.models import Authenticator, RateLimitCounter
 from django_mfa.tests.support.authenticator import SoftwareAuthenticator
+from django_mfa.totp import TOTP
 from django_mfa.views.verify import (
     GENERIC_ERROR,
     _generate_cookie_salt,
@@ -1221,3 +1222,90 @@ class RememberMyBrowserFactorBindingTests(TestCase):
 
         request = self._request(second, {"RMB_" + str(second.pk): value})
         self.assertFalse(verify_rmb_cookie(request))
+
+
+class IpBudgetThroughTheViewTests(TestCase):
+    """The per-IP budget, exercised through the real verify view.
+
+    The unit tests in test_ratelimit.py prove the counter works; this proves
+    it is actually wired into flows.attempt_verify, which is the part that
+    would fail silently -- an unwired budget looks exactly like a budget
+    nobody has exhausted yet.
+    """
+
+    def setUp(self):
+        cache.clear()
+        RateLimitCounter.objects.all().delete()
+        self.secret = "JBSWY3DPEHPK3PXP"
+
+    def _user(self, name):
+        user = User.objects.create_user(name, password="pw")
+        Authenticator.objects.create(user=user, type="totp",
+                                     data={"secret": self.secret})
+        return user
+
+    def _wrong_code(self, client):
+        return client.post(reverse("mfa:verify_factor", args=["totp"]),
+                           {"code": "000000"}, REMOTE_ADDR="203.0.113.7")
+
+    @override_settings(MFA_VERIFY_RATE_LIMIT="50/5m",
+                       MFA_VERIFY_IP_RATE_LIMIT="2/5m")
+    def test_one_address_is_throttled_across_separate_accounts(self):
+        """The attack the per-user budget structurally cannot see.
+
+        Each account contributes a single failure, so no per-user counter ever
+        approaches its limit -- deliberately set to 50 here so that it cannot
+        be what stops the run.
+        """
+        for name in ("a@example.com", "b@example.com"):
+            client = Client()
+            client.login(username=self._user(name).username, password="pw")
+            self.assertContains(self._wrong_code(client),
+                                "expired or invalid", status_code=400)
+
+        # A third account, untouched and with its own full per-user budget,
+        # is refused because the address has none left.
+        victim = self._user("c@example.com")
+        client = Client()
+        client.login(username=victim.username, password="pw")
+        self.assertContains(self._wrong_code(client),
+                            "expired or invalid", status_code=400)
+
+        correct = client.post(reverse("mfa:verify_factor", args=["totp"]),
+                              {"code": TOTP(self.secret).now()},
+                              REMOTE_ADDR="203.0.113.7")
+        self.assertEqual(correct.status_code, 400)
+        self.assertFalse(client.session.get("mfa", {}).get("verified"))
+
+    @override_settings(MFA_VERIFY_RATE_LIMIT="50/5m",
+                       MFA_VERIFY_IP_RATE_LIMIT="2/5m")
+    def test_a_different_address_is_unaffected(self):
+        user = self._user("a@example.com")
+        client = Client()
+        client.login(username=user.username, password="pw")
+        for _ in range(3):
+            self._wrong_code(client)
+
+        elsewhere = client.post(reverse("mfa:verify_factor", args=["totp"]),
+                                {"code": TOTP(self.secret).now()},
+                                REMOTE_ADDR="198.51.100.1")
+        self.assertEqual(elsewhere.status_code, 302)
+        self.assertTrue(client.session["mfa"]["verified"])
+
+    @override_settings(MFA_VERIFY_RATE_LIMIT="50/5m",
+                       MFA_VERIFY_IP_RATE_LIMIT="5/5m")
+    def test_success_does_not_refund_the_address(self):
+        """A verification clears the user's counter and not the shared one --
+        otherwise one account the attacker controls resets it at will."""
+        user = self._user("a@example.com")
+        client = Client()
+        client.login(username=user.username, password="pw")
+        self._wrong_code(client)
+        client.post(reverse("mfa:verify_factor", args=["totp"]),
+                    {"code": TOTP(self.secret).now()}, REMOTE_ADDR="203.0.113.7")
+
+        self.assertEqual(
+            RateLimitCounter.objects.filter(
+                scope__startswith="django_mfa:rl:ip:").get().count, 1)
+        self.assertFalse(RateLimitCounter.objects.filter(
+            scope=f"django_mfa:rl:{user.pk}:totp").exists())

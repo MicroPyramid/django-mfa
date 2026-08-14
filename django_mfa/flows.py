@@ -9,8 +9,10 @@ Everything else is here, once. The ordering below is not incidental; each
 step is load-bearing, and the failure modes if a second copy drifts are the
 quiet kind:
 
-* **Rate-limit check before the adapter, always.** Skip it in one layer and
-  that layer is an unmetered oracle for every factor.
+* **Rate-limit check before the adapter, always, on both budgets.** Skip it in
+  one layer and that layer is an unmetered oracle for every factor. Skip the
+  per-IP one specifically and the per-user budget is left holding a question it
+  structurally cannot answer -- see attempt_verify.
 * **Every failed attempt records a failure**, including one caused by a
   malformed payload rather than a wrong code. A layer that records only
   "wrong code" lets an attacker spend unlimited attempts by malforming them.
@@ -51,7 +53,15 @@ def attempt_verify(request, user, factor_type, data):
     # A locked-out attempt is never evaluated, and gets exactly the response
     # a wrong code gets, so that the lockout is not itself an oracle. That
     # sameness is the caller's job to preserve; this returns False for both.
-    allowed = ratelimit.check(user, factor_type)
+    #
+    # Two budgets, and exhausting either one refuses the attempt: the per-user
+    # one stops a single account being guessed at, the per-client-IP one stops
+    # the same guess being sprayed across thousands of accounts -- which the
+    # per-user budget cannot see at all, since every account contributes one
+    # failure and none of them reaches its own limit. Neither is told apart
+    # from the other, or from a wrong code, anywhere above this line.
+    allowed = (ratelimit.check(user, factor_type)
+               and ratelimit.check_client(request, factor_type))
     verified = False
     if allowed:
         try:
@@ -65,6 +75,10 @@ def attempt_verify(request, user, factor_type, data):
             verified = False
 
     if verified:
+        # The user's own counter only. The shared per-IP counter is
+        # deliberately NOT cleared: an attacker spraying an address needs just
+        # one account they control, or one lucky guess, to log into, and
+        # clearing on success would hand them a fresh budget every time.
         ratelimit.clear(user, factor_type)
         session.mark_verified(request, factor_type)
         events.mfa_verified.send_robust(
@@ -74,8 +88,10 @@ def attempt_verify(request, user, factor_type, data):
 
     if allowed:
         # Budget accounting: only an attempt that was actually evaluated
-        # spends from the budget.
+        # spends from the budget -- and it spends from BOTH, or the cheaper
+        # one to exhaust would shield the other.
         ratelimit.record_failure(user, factor_type)
+        ratelimit.record_client(request, factor_type)
     # An observation, not accounting -- so it fires either way, including
     # for the attempt the limiter refused.
     events.mfa_verification_failed.send_robust(

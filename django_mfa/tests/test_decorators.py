@@ -1,11 +1,19 @@
+import time
+
 from django.conf import settings as django_settings
 from django.contrib.auth.models import User
 from django.http import HttpResponse
-from django.test import Client, TestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import include, path, reverse
 from django.views.generic import View
 
-from django_mfa.decorators import MfaRequiredMixin, mfa_required
+from django_mfa.decorators import (
+    PENDING,
+    UNENROLLED,
+    MfaRequiredMixin,
+    enforcement_state,
+    mfa_required,
+)
 from django_mfa.models import Authenticator
 
 
@@ -141,3 +149,75 @@ class MixinPendingRungIsolatedFromMiddlewareTests(
     """Same proof, against the mixin's class-based view."""
 
     url_name = "protected_cbv"
+
+
+class UnchallengedSessionTests(TestCase):
+    """A session that was never stamped at all is not "verified".
+
+    `session.is_pending()` means "stamped, not yet passed", so it is False for
+    a session with no `mfa` key -- and without a rung of its own, such a
+    request falls through enforcement_state() to `None` and is treated exactly
+    as one that passed a challenge.
+
+    A browser reaches that state only by missing signals.stamp_pending_
+    verification: force_login() in a host project's own tests, or a session
+    that predates the app being installed. A cookie-less API client is in it
+    on every single request, which is what makes this load-bearing rather than
+    defensive -- see django_mfa/api/tokens.py.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user("a@example.com", password="pw")
+        self.factory = RequestFactory()
+
+    def _request(self, session=None):
+        request = self.factory.get("/somewhere/")
+        request.user = self.user
+        request.session = {} if session is None else session
+        return request
+
+    def test_a_user_with_a_factor_and_no_stamp_is_pending(self):
+        Authenticator.objects.create(
+            user=self.user, type=Authenticator.Type.TOTP, data={})
+        self.assertEqual(enforcement_state(self._request()), PENDING)
+
+    def test_a_user_with_no_factor_still_falls_to_unenrolled(self):
+        """The rung must not shadow the enrollment rung, or a factorless user
+        is redirected to verify -- a page with nothing to offer them -- instead
+        of to the security page where they can fix it."""
+        self.assertEqual(enforcement_state(self._request()), UNENROLLED)
+
+    def test_a_factorless_user_is_let_through_when_enrollment_is_waived(self):
+        """allow_unenrolled=True says "unenrolled is fine here", which is what
+        lets the built-in enroll views be reached. It must not also be read as
+        "unverified is fine here"."""
+        self.assertIsNone(
+            enforcement_state(self._request(), require_primary_factor=False))
+
+    def test_a_user_with_a_factor_is_pending_even_when_enrollment_is_waived(self):
+        Authenticator.objects.create(
+            user=self.user, type=Authenticator.Type.TOTP, data={})
+        self.assertEqual(
+            enforcement_state(self._request(), require_primary_factor=False),
+            PENDING)
+
+    def test_a_verified_session_still_passes(self):
+        Authenticator.objects.create(
+            user=self.user, type=Authenticator.Type.TOTP, data={})
+        verified = {"mfa": {"verified": True, "method": "totp",
+                            "at": int(time.time())}}
+        self.assertIsNone(enforcement_state(self._request(verified)))
+
+    def test_a_stamped_pending_session_is_unchanged(self):
+        Authenticator.objects.create(
+            user=self.user, type=Authenticator.Type.TOTP, data={})
+        pending = {"mfa": {"verified": False, "method": None, "at": None}}
+        self.assertEqual(enforcement_state(self._request(pending)), PENDING)
+
+    def test_recovery_codes_alone_do_not_trigger_it(self):
+        """has_primary_factor(), so an account holding only recovery codes is
+        still UNENROLLED rather than being challenged with the one factor it
+        must never be allowed to rely on."""
+        Authenticator.objects.create(
+            user=self.user, type=Authenticator.Type.RECOVERY_CODES, data={})
+        self.assertEqual(enforcement_state(self._request()), UNENROLLED)

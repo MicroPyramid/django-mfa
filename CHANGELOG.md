@@ -12,6 +12,74 @@ Versions follow [PEP 440](https://peps.python.org/pep-0440/). The version in
 `pyproject.toml` is the only place it is written; the git tag and the GitHub
 Release are derived from it (see [docs/contributing.md](docs/contributing.md)).
 
+## 4.5.0
+
+### Added
+
+- **MFA session tokens, for clients that cannot hold a cookie.** `POST` to
+  the new `session/` endpoint returns a token; present it in the
+  `X-MFA-Session` header and a verification completed on one request is
+  still in force on the next. This is what 4.4.0's JSON API was missing —
+  its own docs said a cookie-less client "can call every endpoint and will
+  still never get anywhere".
+
+  The token **is** a Django session key, deliberately: it is revocable
+  (`DELETE session/`), expires with `SESSION_COOKIE_AGE`, is cleaned up by
+  `clearsessions`, and leaves `django_mfa/session.py` as the only module
+  that touches MFA state. It is bound to the account it was issued to, so a
+  token presented alongside a different identity is refused rather than
+  inherited. A request carrying no cookie at all is CSRF-exempt — nothing
+  ambient for a cross-site page to forge — while any request with a cookie
+  keeps full enforcement. `SESSION_ENGINE = "...signed_cookies"` cannot
+  issue one and says so with a 501. See
+  [docs/rest_api.md](docs/rest_api.md).
+- **A per-IP verification budget**, `MFA_VERIFY_IP_RATE_LIMIT`, defaulting
+  to `"50/5m"`. `MFA_VERIFY_RATE_LIMIT` budgets guesses per *account*, which
+  an attacker holding a list of stolen passwords routes around entirely: one
+  guess against each of ten thousand accounts leaves every counter at 1 and
+  none of them ever binding. A successful verification clears the user's
+  counter and deliberately not the IP's.
+- **`MFA_CLIENT_IP_RESOLVER`** (default `None` → `REMOTE_ADDR`). `X-Forwarded-For`
+  is **not** read unless you point this at a resolver that does, because a
+  client-set header breaks the budget in both directions — an attacker who
+  varies it is never throttled, one who forges your office's address locks
+  your staff out. **Set this if you run behind a proxy.**
+- **`MFA_RATE_LIMIT_BACKEND`** (default `"database"`) and
+  **`MFA_RATE_LIMIT_FAIL_OPEN`** (default `True`). See below.
+- **`manage.py mfa_prune`**, deleting expired rate-limit counters. Schedule
+  it beside `django-admin clearsessions`.
+- **System checks `django_mfa.E007`–`E009`**, rejecting a malformed rate-limit
+  spec, an unknown rate-limit backend, and an unimportable or non-callable
+  `MFA_CLIENT_IP_RESOLVER`. Without them each of those surfaces from inside
+  the first verification attempt after a deploy — a 500 on the challenge page
+  for whichever user logs in first.
+
+### Changed
+
+- **Rate-limit counters now live in a database table by default**
+  (`RateLimitCounter`, migration `0010`), not the cache. A cache-only counter
+  is erased by a Redis restart, an eviction under memory pressure, or a
+  `cache.clear()` in an unrelated deploy step, and every erasure silently
+  hands an attacker mid-run a fresh budget with no trace. The cost is one row
+  read per verification attempt and one write per failed one. Set
+  `MFA_RATE_LIMIT_BACKEND = "cache"` for the previous behaviour; it needs no
+  migration and no pruning.
+- **A session that has never been challenged no longer counts as verified.**
+  `decorators.enforcement_state()` treats "holds a primary factor, and this
+  session carries no MFA stamp at all" as `PENDING`. Previously
+  `session.is_pending()` — which means *stamped, not yet passed* — was False
+  for such a session and the request fell through as though it had passed.
+  See [docs/upgrading.md](docs/upgrading.md) for who this affects; the
+  ordinary login path is unchanged, because `user_logged_in` stamps every
+  session it creates.
+
+### Fixed
+
+- Two rate-limit tests were passing spuriously: they patched
+  `ratelimit._db_get`/`_cache_get`, which the backend table binds at import,
+  so the "broken store" they simulated was in fact a healthy one. They now
+  break the store at the ORM and cache boundary.
+
 ## 4.4.0
 
 ### Added

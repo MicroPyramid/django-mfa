@@ -9,9 +9,12 @@ class DjangoMfaAppConfig(AppConfig):
 
     def ready(self):
         from django_mfa.checks import (
+            check_client_ip_resolver,
             check_fido2_rp_id,
             check_mfa_api_authentication,
             check_mfa_required_predicate,
+            check_rate_limit_backend,
+            check_rate_limit_specs,
             check_stepup_max_age,
             check_webauthn_backend_configured,
         )
@@ -21,6 +24,9 @@ class DjangoMfaAppConfig(AppConfig):
         register(check_mfa_required_predicate)
         register(check_stepup_max_age)
         register(check_mfa_api_authentication)
+        register(check_rate_limit_specs)
+        register(check_rate_limit_backend)
+        register(check_client_ip_resolver)
 
         from django_mfa import (
             adapters,  # noqa: F401  (registers built-ins)

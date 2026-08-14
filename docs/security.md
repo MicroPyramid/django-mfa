@@ -28,37 +28,61 @@ message.
 
 ### Rate limiting
 
-Failed attempts are counted per user **per factor type** and capped by
-`MFA_VERIFY_RATE_LIMIT` (default `"5/5m"`). A successful verification clears the
-counter.
+Two budgets, and exhausting either one refuses the attempt:
 
-A locked-out attempt returns exactly what a wrong code returns. The lockout is
-therefore not observable, and cannot be used to probe whether an account exists or
-has MFA enabled.
+- `MFA_VERIFY_RATE_LIMIT` (default `"5/5m"`) counts failures per user **per factor
+  type**. A successful verification clears it.
+- `MFA_VERIFY_IP_RATE_LIMIT` (default `"50/5m"`) counts them per **client address**,
+  across every account. A successful verification deliberately does **not** clear
+  it.
+
+The second exists because the first cannot see the attack that matters most at
+scale. An attacker holding a list of stolen passwords guesses once against each of
+ten thousand accounts: every per-user counter sits at 1, none of them ever binds,
+and the per-user budget never fires at all. Not clearing the IP counter on success
+is the other half — an attacker only needs one account of their own, or one lucky
+guess, to log into, and a counter reset on success would be reset at will.
+
+A locked-out attempt returns exactly what a wrong code returns, from either budget.
+The lockout is therefore not observable, and cannot be used to probe whether an
+account exists or has MFA enabled.
 
 The window is fixed from the first failed attempt, not slid forward by each
 subsequent one: five failures at 12:00:00 and 12:04:59 both fall in the same window,
 which reopens at 12:05:00.
 
-Three properties worth understanding before you rely on it:
+Four properties worth understanding before you rely on it:
 
-- **The counter lives in Django's cache, with no database fallback.** If the cache is
-  empty, flushed, or restarted, attempts are allowed again. This is a deliberate
+- **The client address comes from `REMOTE_ADDR`, and `X-Forwarded-For` is ignored**
+  unless `MFA_CLIENT_IP_RESOLVER` says otherwise. A client-set header breaks the
+  budget in both directions — an attacker who varies it is never throttled, and one
+  who forges your office's address locks your staff out. **Behind a proxy you must
+  set that resolver**, or `REMOTE_ADDR` is the proxy and every client shares one
+  counter.
+- **Counters are durable by default.** Since 4.5.0 they are rows
+  (`MFA_RATE_LIMIT_BACKEND = "database"`), because a cache-only counter is erased by
+  a restart, an eviction, or a stray `cache.clear()`, and each erasure silently hands
+  an attacker mid-run a fresh budget. Set the backend to `"cache"` for the older
+  behaviour, knowing that.
+- **It fails open when the store is unreachable**, which is a deliberate
   availability-over-control trade: a secondary throttle should not be able to lock
-  every user out of your site.
-- **It is only as shared as your cache is.** With `LocMemCache` and four worker
-  processes, each process keeps its own counter, so the effective limit is four times
-  what you configured. See the checklist below.
-- **It needs a cache backend with atomic `incr()`.** The counter is incremented with
-  `cache.add()` followed by `cache.incr()`, which redis and memcached evaluate
-  server-side and atomically. `FileBasedCache` implements neither atomically, so
-  parallel attempts can overwrite each other's increments and the limit stops binding
-  at the attacker's chosen concurrency — do not use it for this. (Django does not
-  recommend it for production generally.)
+  every user out of your site. `MFA_RATE_LIMIT_FAIL_OPEN = False` reverses that. Note
+  this covers an *outage*, not an absent counter — "nobody has failed yet" is always
+  allowed, or no first attempt could ever succeed.
+- **On the cache backend, it is only as shared as your cache is, and needs atomic
+  `incr()`.** With `LocMemCache` and four worker processes each keeps its own
+  counter, so the effective limit is four times what you configured. `FileBasedCache`
+  implements neither `add()` nor `incr()` atomically, so parallel attempts overwrite
+  each other's increments and the limit stops binding at the attacker's chosen
+  concurrency — do not use it for this. Neither caveat applies to the database
+  backend, where a single `UPDATE ... count = count + 1` is serialised by the
+  database.
 
-Invalid values are rejected loudly at parse time rather than silently misbehaving: a
-count of `0` would lock out every user permanently, and a window of `0` would expire
-the counter instantly and disable the throttle. Both raise `ValueError`.
+Invalid values are rejected loudly rather than silently misbehaving: a count of `0`
+would lock out every user permanently, and a window of `0` would expire the counter
+instantly and disable the throttle. Both raise `ValueError`, and `manage.py check`
+refuses them at startup (`django_mfa.E007`) rather than waiting for the first
+verification attempt after a deploy.
 
 ### Authenticator app (TOTP)
 

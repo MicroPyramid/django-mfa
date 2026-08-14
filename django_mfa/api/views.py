@@ -44,7 +44,7 @@ from django.views.decorators.csrf import csrf_protect
 
 from django_mfa import decorators, events, flows, session
 from django_mfa.adapters.recovery_codes import RecoveryCodesAdapter
-from django_mfa.api import auth
+from django_mfa.api import auth, tokens
 from django_mfa.conf import settings as mfa_settings
 from django_mfa.models import Authenticator
 from django_mfa.registry import registry
@@ -116,6 +116,12 @@ def endpoint(*methods, anonymous=False, require_verified=True,
 
     ``stepup=True`` adds the freshness rung, matching
     ``@mfa_recent_required`` on the corresponding HTML view.
+
+    Also the one place a token-borne session is swapped onto the request (see
+    django_mfa/api/tokens.py) and the one place CSRF is decided. Both happen
+    around the gates rather than inside a view, because every endpoint needs
+    them and an endpoint that quietly skipped either would be the bug this
+    module's docstring is about.
     """
     def decorator(view):
         @wraps(view)
@@ -136,6 +142,21 @@ def endpoint(*methods, anonymous=False, require_verified=True,
             # onto whichever account the session happened to name.
             request.user = user
 
+            # Swap in the token-borne session, if one was presented, BEFORE
+            # any gate reads it -- every rung below asks django_mfa.session
+            # about request.session, and the point of a token is that it names
+            # a different one from the (absent, or irrelevant) cookie's.
+            token_session = tokens.load(request, user)
+            if token_session is not None:
+                request.session = token_session
+            elif tokens.token_from(request) is not None:
+                # Presented something, and it was expired, revoked, invented,
+                # or issued to a different account. Falling back to the cookie
+                # session would silently ignore what the client asked for;
+                # answer the question it actually asked instead.
+                return error(401, "invalid_mfa_session",
+                             _("This MFA session token is not valid."))
+
             state = decorators.enforcement_state(
                 request, require_primary_factor=not allow_unenrolled)
             if state == decorators.PENDING and not require_verified:
@@ -146,16 +167,56 @@ def endpoint(*methods, anonymous=False, require_verified=True,
                 return _gate(state)
 
             try:
-                return view(request, *args, **kwargs)
+                response = view(request, *args, **kwargs)
             except ValueError as exc:
                 # json_body() and nothing else: an adapter's own ValueError
                 # is caught inside flows, never here.
-                return error(400, "malformed_body", str(exc))
+                response = error(400, "malformed_body", str(exc))
+            # Both branches, so that a rejected attempt still persists what the
+            # attempt changed -- adapters/email.py counts guesses against an
+            # issued code in the session, and dropping that write would make
+            # its MAX_ATTEMPTS cap unenforceable for token clients. Deliberately
+            # NOT in a finally: an unhandled exception must leave the session
+            # exactly as it was.
+            if token_session is not None:
+                tokens.persist(request)
+            return response
+
         # CSRF applies to every non-safe method, which is nearly all of
         # these. A session-authenticated JSON endpoint is exactly as
-        # forgeable as a form post without it; a token-authenticated client
-        # is unaffected, having no cookie to ride on.
-        return csrf_protect(wrapped)
+        # forgeable as a form post without it.
+        protected = csrf_protect(wrapped)
+
+        @wraps(view)
+        def dispatch(request, *args, **kwargs):
+            # CSRF defends against a request the *browser* sends credentials
+            # with on its own. Cookies are attached automatically; headers are
+            # not, and cannot be set cross-origin without a preflight the
+            # target site has to allow. A request carrying no cookie at all
+            # therefore has no ambient credential to forge, which is the same
+            # split DRF draws between SessionAuthentication (enforced) and
+            # TokenAuthentication (exempt).
+            #
+            # The test is "no cookies", not "presented a token", and that is
+            # deliberate twice over. A cookie-less client has no token yet
+            # when it calls POST session/ to mint its first one, so keying on
+            # the token would make the endpoint unreachable by exactly the
+            # clients it exists for. And keying on *any* cookie being absent,
+            # rather than on the session cookie specifically, keeps this safe
+            # for a host whose MFA_API_AUTHENTICATION resolver reads a cookie
+            # of its own -- that credential is ambient too, and it still gets
+            # CSRF.
+            if not request.COOKIES:
+                return wrapped(request, *args, **kwargs)
+            return protected(request, *args, **kwargs)
+
+        # The *global* CsrfViewMiddleware would otherwise reject the token
+        # request before this view ran and the branch above never happen, so
+        # the resolved view is marked exempt and csrf_protect re-imposes the
+        # check inline for every cookie-borne request. Marking the outermost
+        # callable is what matters: that is the one the middleware inspects.
+        dispatch.csrf_exempt = True
+        return dispatch
 
     return decorator
 
@@ -217,6 +278,36 @@ def state(request):
             RecoveryCodesAdapter().remaining(request.user),
         "stepup_max_age": mfa_settings.MFA_STEPUP_MAX_AGE,
     })
+
+
+@endpoint("POST", "DELETE", require_verified=False)
+def mfa_session(request):
+    """Mint or revoke an MFA session token, for a client without cookies.
+
+    Reachable while pending, and it has to be: a token is how a client gets
+    far enough to *be* challenged, and the one it mints is empty --
+    unverified, holding nothing but the identity it is bound to. Granting one
+    confers no access that the caller's own credential did not already carry.
+
+    ``DELETE`` revokes the token presented on that request, and only that one:
+    a caller with no token gets ``revoked: false`` rather than having its
+    cookie session flushed out from under it (see tokens.revoke).
+    """
+    if request.method == "DELETE":
+        return JsonResponse({"revoked": tokens.revoke(request)})
+    try:
+        token, expires_in = tokens.issue(request.user)
+    except tokens.TokenSessionsUnsupported:
+        # 501, not 400: the client's request was perfectly well formed and
+        # there is nothing it can change to make this work. The server is
+        # configured with a session engine that has no server-side key to
+        # hand out.
+        return error(
+            501, "token_sessions_unsupported",
+            _("This server stores sessions in a way that cannot issue a "
+              "token. Use cookie-based session authentication instead."))
+    return JsonResponse({"token": token, "expires_in": expires_in,
+                         "header": tokens.HEADER})
 
 
 @endpoint("POST", stepup=True)
