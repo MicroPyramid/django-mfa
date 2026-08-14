@@ -10,7 +10,7 @@
   <a href="https://pypi.python.org/pypi/django-mfa"><img alt="PyPI" src="https://img.shields.io/pypi/v/django-mfa.svg"></a>
   <a href="https://github.com/MicroPyramid/django-mfa/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/MicroPyramid/django-mfa/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://pypi.python.org/pypi/django-mfa"><img alt="Python versions" src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue"></a>
-  <a href="https://pypi.python.org/pypi/django-mfa"><img alt="Django versions" src="https://img.shields.io/badge/django-4.2%20%7C%205.2-0C4B33"></a>
+  <a href="https://pypi.python.org/pypi/django-mfa"><img alt="Django versions" src="https://img.shields.io/badge/django-4.2%20%7C%205.2%20%7C%206.1-0C4B33"></a>
   <a href="http://django-mfa.readthedocs.io/en/latest/"><img alt="Docs" src="https://readthedocs.org/projects/django-mfa/badge/?version=latest"></a>
   <a href="https://github.com/MicroPyramid/django-mfa/blob/master/LICENSE"><img alt="License" src="https://img.shields.io/github/license/micropyramid/django-mfa.svg"></a>
 </p>
@@ -209,13 +209,14 @@ this same API — there's no privileged path.
 |  |  |
 |---|---|
 | **Python** | 3.10 · 3.11 · 3.12 · 3.13 |
-| **Django** | 4.2 LTS · 5.2 LTS |
+| **Django** | 4.2 LTS · 5.2 LTS · 6.1 |
 | **Database** | Anything Django supports (state is a `JSONField`) |
 | **Dependencies** | `fido2`, `qrcode`. TOTP is implemented in-package, not pulled in. |
 
-Every combination in that grid runs the full suite in CI, along with a job that builds
-the wheel, installs it into a clean environment, and starts Django against it from
-outside the source tree.
+Every combination runs the full suite in CI — except Django 6.1 on Python 3.10 or
+3.11, which Django itself doesn't support (6.x requires Python 3.12+). Alongside it,
+a job builds the wheel, installs it into a clean environment, and starts Django
+against it from outside the source tree.
 
 ## Documentation
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "django-mfa"
-version = "4.2.0"
+version = "4.3.0"
 description = "Second-factor authentication for Django: authenticator apps (TOTP), security keys and passkeys (WebAuthn), and recovery codes."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,11 +23,12 @@ dependencies = [
 # SPDX `license` expression above (PEP 639). The expression is the source of
 # truth.
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Web Environment",
     "Framework :: Django",
     "Framework :: Django :: 4.2",
     "Framework :: Django :: 5.2",
+    "Framework :: Django :: 6.1",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python",

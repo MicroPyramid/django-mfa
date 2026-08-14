@@ -14,7 +14,7 @@ To run a single test, pass a label -- `test_runner.py` falls back to the whole s
 
     uv run python test_runner.py django_mfa.tests.test_conf
 
-To check one Python/Django combination locally (CI runs the full grid of Python 3.10-3.13 against Django 4.2 and 5.2):
+To check one Python/Django combination locally (CI runs the grid of Python 3.10-3.13 against Django 4.2, 5.2 and 6.1, minus the two combinations Django 6.1 doesn't support — it needs Python 3.12+):
 
     uv run --python 3.12 --with "django~=4.2.0" python test_runner.py
 

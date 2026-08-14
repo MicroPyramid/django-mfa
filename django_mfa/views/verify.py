@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render, resolve_url
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.translation import gettext_lazy as _
 from fido2.webauthn import AuthenticationResponse
 
 from django_mfa import events, ratelimit, session
@@ -16,7 +17,7 @@ from django_mfa.conf import settings as mfa_settings
 from django_mfa.models import Authenticator
 from django_mfa.registry import registry
 
-GENERIC_ERROR = "Your code is expired or invalid."
+GENERIC_ERROR = _("Your code is expired or invalid.")
 
 #: Session key the in-progress *passwordless* authentication
 #: challenge/state is stashed under between passkey_begin() and
@@ -37,12 +38,22 @@ def _passkey_failure():
 
     Deliberately generic and byte-for-byte identical across all of them
     (same status code, same body, constructed the same way every time): see
-    passkey_complete()'s docstring for why. A fresh JsonResponse is built on
-    every call rather than a module-level singleton being reused, since a
-    response object is mutated as it's rendered/sent and must not be shared
-    across requests.
+    passkey_complete()'s docstring for why. Translating it does not weaken
+    that -- the active language is a property of the request, not of which
+    failure occurred, so any given caller still gets one identical response
+    for every failure mode. A fresh JsonResponse is built on every call
+    rather than a module-level singleton being reused, since a response
+    object is mutated as it's rendered/sent and must not be shared across
+    requests.
+
+    The lazy string survives here only because JsonResponse encodes with
+    DjangoJSONEncoder by default, which resolves a translation proxy; a bare
+    json.dumps would raise TypeError ("Object of type __proxy__ is not JSON
+    serializable") and turn every passkey failure into a 500. Swap the
+    encoder or hand-roll the serialisation and that stops being true --
+    test_i18n.py pins the behaviour rather than the implementation.
     """
-    return JsonResponse({"error": "Passkey sign-in failed."}, status=400)
+    return JsonResponse({"error": _("Passkey sign-in failed.")}, status=400)
 
 
 def _adapter_or_404(factor_type):

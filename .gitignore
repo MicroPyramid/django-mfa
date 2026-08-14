@@ -49,6 +49,20 @@ coverage.xml
 *.mo
 *.pot
 
+# ...except this package's own catalogs, which are source, not build output.
+# This negation is load-bearing twice over: hatchling honours .gitignore when
+# it builds, so an ignored catalog is also an UNSHIPPED one -- Django then
+# finds no locale directory in the installed package and every string falls
+# back to English with nothing in the logs to say why. django.pot hit exactly
+# that and was caught by test_packaging.py.
+#
+# .mo is un-ignored for the same reason, ahead of need: no compiled catalog
+# ships today (every translation is still a fuzzy machine draft), and
+# test_i18n.py fails if one appears. When a language is reviewed and its
+# fuzzy flags come off, its .mo has to be committed to reach users.
+!django_mfa/locale/django.pot
+!django_mfa/locale/*/LC_MESSAGES/*.mo
+
 # Django stuff:
 *.log
 

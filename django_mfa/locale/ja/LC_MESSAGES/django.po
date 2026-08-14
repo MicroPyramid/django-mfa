@@ -1,0 +1,417 @@
+# Japanese translation for django-mfa.
+# Copyright (C) MicroPyramid
+# This file is distributed under the same licence as the django-mfa package.
+#
+# MACHINE-DRAFTED, NOT REVIEWED. Every entry below is marked "fuzzy", which
+# means gettext ignores it and users see the English source instead. Nothing
+# here reaches a user until a human reviews an entry and removes its fuzzy
+# flag. See docs/translations.md.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: django-mfa\n"
+"Report-Msgid-Bugs-To: https://github.com/MicroPyramid/django-mfa/issues\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ja\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: django_mfa/templates/django_mfa/enroll_email.html:14
+#: django_mfa/templates/django_mfa/verify_email.html:15
+#, fuzzy
+msgid "%(code_length)s-digit code"
+msgstr "%(code_length)s桁のコード"
+
+#: django_mfa/templates/django_mfa/security.html:78
+#, fuzzy
+msgid "%(remaining)s code remaining."
+msgid_plural "%(remaining)s codes remaining."
+msgstr[0] "残り %(remaining)s 個のコードがあります。"
+
+#: django_mfa/templates/django_mfa/email/factor_added_subject.txt:1
+#, fuzzy
+msgid "A new two-factor method was added to your account"
+msgstr "アカウントに新しい二要素認証の方法が追加されました"
+
+#: django_mfa/templates/django_mfa/email/factor_added.txt:1
+#, fuzzy
+msgid "A new two-factor method was added to your account: %(factor)s"
+msgstr "アカウントに新しい二要素認証の方法が追加されました: %(factor)s"
+
+#: django_mfa/templates/django_mfa/email/recovery_code_used.txt:1
+#, fuzzy
+msgid "A recovery code was just used to sign in to your account."
+msgstr "アカウントへのサインインに復旧コードが使用されました。"
+
+#: django_mfa/templates/django_mfa/email/recovery_code_used_subject.txt:1
+#, fuzzy
+msgid "A recovery code was used to sign in"
+msgstr "復旧コードでサインインしました"
+
+#: django_mfa/templates/django_mfa/email/factor_removed_subject.txt:1
+#, fuzzy
+msgid "A two-factor method was removed from your account"
+msgstr "アカウントから二要素認証の方法が削除されました"
+
+#: django_mfa/templates/django_mfa/security.html:59
+#, fuzzy
+msgid "Add a method"
+msgstr "方法を追加"
+
+#: django_mfa/templates/django_mfa/security.html:11
+#, fuzzy
+msgid "Add a method below to continue. Until you do, the rest of the site is unavailable."
+msgstr "続行するには、以下から方法を追加してください。追加するまでサイトの他の部分は利用できません。"
+
+#: django_mfa/templates/django_mfa/security.html:7
+#, fuzzy
+msgid "Add a second step to your sign-in so a stolen password isn't enough on its own."
+msgstr "サインインに 2 段階目を追加すると、パスワードが盗まれただけでは不十分になります。"
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:5
+#, fuzzy
+msgid "Add a security key or passkey"
+msgstr "セキュリティキーまたはパスキーを追加"
+
+#: django_mfa/templates/django_mfa/security.html:30
+#, fuzzy
+msgid "Added %(created)s"
+msgstr "%(created)s に追加"
+
+#: django_mfa/adapters/totp.py:47
+#: django_mfa/models.py:34
+#, fuzzy
+msgid "Authenticator app"
+msgstr "認証アプリ"
+
+#: django_mfa/templates/django_mfa/enroll_email.html:31
+#, fuzzy
+msgid "Back"
+msgstr "戻る"
+
+#: django_mfa/templates/django_mfa/enroll_totp.html:11
+#, fuzzy
+msgid "Can't scan it?"
+msgstr "スキャンできませんか？"
+
+#: django_mfa/templates/django_mfa/enroll_email.html:25
+#: django_mfa/templates/django_mfa/enroll_totp.html:31
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:42
+#, fuzzy
+msgid "Cancel"
+msgstr "キャンセル"
+
+#: django_mfa/templates/django_mfa/picker.html:6
+#, fuzzy
+msgid "Choose how you'd like to confirm your identity."
+msgstr "本人確認の方法を選択してください。"
+
+#: django_mfa/templates/django_mfa/recovery_codes.html:23
+#: django_mfa/templates/django_mfa/recovery_codes.html:41
+#, fuzzy
+msgid "Done"
+msgstr "完了"
+
+#: django_mfa/templates/django_mfa/recovery_codes.html:22
+#, fuzzy
+msgid "Download"
+msgstr "ダウンロード"
+
+#: django_mfa/adapters/email.py:104
+#: django_mfa/models.py:37
+#, fuzzy
+msgid "Emailed code"
+msgstr "メールで届くコード"
+
+#: django_mfa/templates/django_mfa/verify_recovery_codes.html:5
+#, fuzzy
+msgid "Enter a recovery code"
+msgstr "復旧コードを入力"
+
+#: django_mfa/templates/django_mfa/verify_email.html:5
+#: django_mfa/templates/django_mfa/verify_totp.html:5
+#, fuzzy
+msgid "Enter your code"
+msgstr "コードを入力"
+
+#: django_mfa/templates/django_mfa/email/recovery_code_used.txt:5
+#, fuzzy
+msgid "If this wasn't you, change your password and generate a fresh set of codes."
+msgstr "心当たりがない場合は、パスワードを変更し、新しいコードを生成してください。"
+
+#: django_mfa/templates/django_mfa/email/mfa_disabled.txt:3
+#, fuzzy
+msgid "If this wasn't you, change your password and set up two-factor authentication again immediately."
+msgstr "心当たりがない場合は、直ちにパスワードを変更し、二要素認証を再設定してください。"
+
+#: django_mfa/templates/django_mfa/email/factor_removed.txt:3
+#, fuzzy
+msgid "If this wasn't you, change your password immediately."
+msgstr "心当たりがない場合は、直ちにパスワードを変更してください。"
+
+#: django_mfa/templates/django_mfa/email/factor_added.txt:3
+#, fuzzy
+msgid "If this wasn't you, remove it and change your password immediately."
+msgstr "心当たりがない場合は、それを削除し、直ちにパスワードを変更してください。"
+
+#: django_mfa/templates/django_mfa/email/otp_code.txt:5
+#, fuzzy
+msgid "If you didn't try to sign in, someone may know your password. Change it."
+msgstr "サインインを試みていない場合、誰かがパスワードを知っている可能性があります。変更してください。"
+
+#: django_mfa/templates/django_mfa/email/otp_code.txt:3
+#, fuzzy
+msgid "It expires in %(validity_minutes)s minutes and can be used once."
+msgstr "%(validity_minutes)s 分で期限切れになり、一度だけ使用できます。"
+
+#: django_mfa/templates/django_mfa/security.html:46
+#, fuzzy
+msgid "Managed by your organization"
+msgstr "組織によって管理されています"
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:29
+#, fuzzy
+msgid "Name this key"
+msgstr "このキーに名前を付ける"
+
+#: django_mfa/templates/django_mfa/verify_totp.html:6
+#, fuzzy
+msgid "Open your authenticator app and enter the six-digit code it shows."
+msgstr "認証アプリを開き、表示された 6 桁のコードを入力してください。"
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:36
+#, fuzzy
+msgid "Optional. Helps you tell your keys apart later."
+msgstr "任意です。後でキーを見分けるのに役立ちます。"
+
+#: django_mfa/views/verify.py:54
+#, fuzzy
+msgid "Passkey sign-in failed."
+msgstr "パスキーでのサインインに失敗しました。"
+
+#: django_mfa/templates/django_mfa/verify_recovery_codes.html:14
+#, fuzzy
+msgid "Recovery code"
+msgstr "復旧コード"
+
+#: django_mfa/adapters/recovery_codes.py:21
+#: django_mfa/models.py:36
+#: django_mfa/templates/django_mfa/recovery_codes.html:5
+#: django_mfa/templates/django_mfa/security.html:75
+#, fuzzy
+msgid "Recovery codes"
+msgstr "復旧コード"
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:41
+#, fuzzy
+msgid "Register"
+msgstr "登録"
+
+#: django_mfa/templates/django_mfa/security.html:42
+#, fuzzy
+msgid "Remove"
+msgstr "削除"
+
+#: django_mfa/templates/django_mfa/security.html:41
+#, fuzzy
+msgid "Remove this method?"
+msgstr "この方法を削除しますか？"
+
+#: django_mfa/templates/django_mfa/recovery_codes.html:8
+#, fuzzy
+msgid "Save these somewhere safe. Each code works once, and this is the only time they'll be shown."
+msgstr "安全な場所に保管してください。各コードは一度だけ使用でき、表示されるのはこの一度きりです。"
+
+#: django_mfa/templates/django_mfa/enroll_totp.html:6
+#, fuzzy
+msgid "Scan this code with an authenticator app, then enter the six-digit code it shows."
+msgstr "このコードを認証アプリでスキャンし、表示された 6 桁のコードを入力してください。"
+
+#: django_mfa/adapters/webauthn.py:72
+#: django_mfa/models.py:35
+#, fuzzy
+msgid "Security key or passkey"
+msgstr "セキュリティキーまたはパスキー"
+
+#: django_mfa/templates/django_mfa/verify_webauthn.html:6
+#, fuzzy
+msgid "Select the button below, then follow your browser's prompt to use your security key or passkey."
+msgstr "下のボタンを選択し、ブラウザの指示に従ってセキュリティキーまたはパスキーを使用してください。"
+
+#: django_mfa/templates/django_mfa/enroll_totp.html:5
+#, fuzzy
+msgid "Set up an authenticator app"
+msgstr "認証アプリを設定"
+
+#: django_mfa/templates/django_mfa/enroll_email.html:5
+#, fuzzy
+msgid "Set up email codes"
+msgstr "メールコードを設定"
+
+#: django_mfa/templates/django_mfa/enroll_totp.html:20
+#: django_mfa/templates/django_mfa/verify_totp.html:12
+#, fuzzy
+msgid "Six-digit code"
+msgstr "6 桁のコード"
+
+#: django_mfa/templates/django_mfa/security.html:69
+#, fuzzy
+msgid "There is nothing left to add."
+msgstr "追加できるものはありません。"
+
+#: django_mfa/templates/django_mfa/verify_email.html:30
+#, fuzzy
+msgid "This account has no email code to verify. Use another method, or contact support if you believe this is a mistake."
+msgstr "このアカウントには確認できるメールコードがありません。別の方法を使用するか、誤りだと思われる場合はサポートにお問い合わせください。"
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:12
+#: django_mfa/templates/django_mfa/verify_webauthn.html:12
+#, fuzzy
+msgid "This browser doesn't support security keys or passkeys. Try another browser, or choose a different method."
+msgstr "このブラウザはセキュリティキーやパスキーに対応していません。別のブラウザを試すか、他の方法を選択してください。"
+
+#: django_mfa/templates/django_mfa/email/factor_removed.txt:1
+#, fuzzy
+msgid "This two-factor method was removed from your account: %(factor)s"
+msgstr "この二要素認証の方法がアカウントから削除されました: %(factor)s"
+
+#: django_mfa/templates/django_mfa/enroll_email.html:24
+#, fuzzy
+msgid "Turn on email codes"
+msgstr "メールコードを有効にする"
+
+#: django_mfa/templates/django_mfa/enroll_totp.html:30
+#, fuzzy
+msgid "Turn on two-factor authentication"
+msgstr "二要素認証を有効にする"
+
+#: django_mfa/templates/django_mfa/base.html:19
+#: django_mfa/templates/django_mfa/security.html:6
+#, fuzzy
+msgid "Two-factor authentication"
+msgstr "二要素認証"
+
+#: django_mfa/templates/django_mfa/email/mfa_disabled_subject.txt:1
+#, fuzzy
+msgid "Two-factor authentication is off for your account"
+msgstr "アカウントの二要素認証が無効になっています"
+
+#: django_mfa/templates/django_mfa/security.html:10
+#, fuzzy
+msgid "Two-factor authentication is required for your account."
+msgstr "このアカウントには二要素認証が必要です。"
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:6
+#, fuzzy
+msgid "Use a hardware security key, or a passkey built into this device such as Touch ID or Windows Hello."
+msgstr "ハードウェアセキュリティキー、または Touch ID や Windows Hello などこの端末に組み込まれたパスキーを使用してください。"
+
+#: django_mfa/templates/django_mfa/verify_email.html:26
+#: django_mfa/templates/django_mfa/verify_email.html:32
+#: django_mfa/templates/django_mfa/verify_recovery_codes.html:25
+#: django_mfa/templates/django_mfa/verify_totp.html:23
+#: django_mfa/templates/django_mfa/verify_webauthn.html:29
+#, fuzzy
+msgid "Use another method"
+msgstr "別の方法を使う"
+
+#: django_mfa/templates/django_mfa/security.html:79
+#, fuzzy
+msgid "Use one to sign in if you lose access to your other methods."
+msgstr "他の方法が使えなくなった場合、いずれか 1 つを使ってサインインできます。"
+
+#: django_mfa/templates/django_mfa/verify_webauthn.html:5
+#, fuzzy
+msgid "Use your security key"
+msgstr "セキュリティキーを使用"
+
+#: django_mfa/templates/django_mfa/verify_email.html:25
+#: django_mfa/templates/django_mfa/verify_recovery_codes.html:24
+#: django_mfa/templates/django_mfa/verify_totp.html:22
+#: django_mfa/templates/django_mfa/verify_webauthn.html:28
+#, fuzzy
+msgid "Verify"
+msgstr "確認"
+
+#: django_mfa/templates/django_mfa/picker.html:5
+#, fuzzy
+msgid "Verify it's you"
+msgstr "本人確認"
+
+#: django_mfa/templates/django_mfa/security.html:82
+#, fuzzy
+msgid "View recovery codes"
+msgstr "復旧コードを表示"
+
+#: django_mfa/templates/django_mfa/enroll_email.html:8
+#, fuzzy
+msgid "We've emailed a code to %(address)s. Enter it below to turn on email codes."
+msgstr "%(address)s にコードを送信しました。以下に入力してメールコードを有効にしてください。"
+
+#: django_mfa/templates/django_mfa/verify_email.html:8
+#, fuzzy
+msgid "We've emailed a code to %(address)s. It expires shortly."
+msgstr "%(address)s にコードを送信しました。まもなく期限切れになります。"
+
+#: django_mfa/templates/django_mfa/verify_recovery_codes.html:7
+#, fuzzy
+msgid "You have %(remaining)s recovery code left. Each one works only once."
+msgid_plural "You have %(remaining)s recovery codes left. Each one works only once."
+msgstr[0] "復旧コードが残り %(remaining)s 個あります。各コードは一度だけ使用できます。"
+
+#: django_mfa/templates/django_mfa/email/recovery_code_used.txt:3
+#, fuzzy
+msgid "You have %(remaining)s recovery codes left."
+msgstr "復旧コードが残り %(remaining)s 個あります。"
+
+#: django_mfa/templates/django_mfa/security.html:53
+#, fuzzy
+msgid "You haven't set up two-factor authentication yet."
+msgstr "まだ二要素認証を設定していません。"
+
+#: django_mfa/templates/django_mfa/enroll_email.html:29
+#, fuzzy
+msgid "Your account has no email address, so codes can't be delivered. Add one to your profile first."
+msgstr "アカウントにメールアドレスが登録されていないため、コードを配信できません。先にプロフィールに追加してください。"
+
+#: django_mfa/templates/django_mfa/email/mfa_disabled.txt:1
+#, fuzzy
+msgid "Your account is no longer protected by two-factor authentication. A password is now all that's needed to sign in."
+msgstr "アカウントは二要素認証で保護されなくなりました。今はパスワードだけでサインインできます。"
+
+#: django_mfa/views/verify.py:20
+#, fuzzy
+msgid "Your code is expired or invalid."
+msgstr "コードの有効期限が切れているか、無効です。"
+
+#: django_mfa/templates/django_mfa/security.html:17
+#, fuzzy
+msgid "Your methods"
+msgstr "あなたの方法"
+
+#: django_mfa/templates/django_mfa/recovery_codes.html:38
+#, fuzzy
+msgid "Your recovery codes were generated earlier and can't be shown again. If you've lost them, remove and re-add two-factor authentication to get a fresh set."
+msgstr "復旧コードは以前に生成されたもので、再表示はできません。紛失した場合は、二要素認証を削除して再度追加すると新しいコードを取得できます。"
+
+#: django_mfa/templates/django_mfa/email/otp_code_subject.txt:1
+#, fuzzy
+msgid "Your sign-in code"
+msgstr "サインインコード"
+
+#: django_mfa/templates/django_mfa/email/otp_code.txt:1
+#, fuzzy
+msgid "Your sign-in code is %(code)s."
+msgstr "サインインコードは %(code)s です。"
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:32
+#, fuzzy
+msgid "e.g. YubiKey, work laptop"
+msgstr "例: YubiKey、仕事用ノート PC"
+
+#: django_mfa/templates/django_mfa/security.html:32
+#, fuzzy
+msgid "last used %(used)s"
+msgstr "最終使用 %(used)s"

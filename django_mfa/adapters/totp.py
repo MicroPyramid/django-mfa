@@ -2,6 +2,8 @@ import base64
 import re
 import secrets
 
+from django.utils.translation import gettext_lazy as _
+
 from django_mfa import totp as totp_mod
 from django_mfa.atomic import update_data
 from django_mfa.conf import settings as mfa_settings
@@ -42,7 +44,7 @@ def generate_secret():
 
 class TOTPAdapter(Adapter):
     type = Authenticator.Type.TOTP
-    verbose_name = "Authenticator app"
+    verbose_name = _("Authenticator app")
 
     def begin_enroll(self, request):
         secret = generate_secret()

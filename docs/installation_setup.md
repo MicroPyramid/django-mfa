@@ -5,7 +5,10 @@
 |        |                        |
 |--------|------------------------|
 | Python | 3.10, 3.11, 3.12, 3.13 |
-| Django | 4.2, 5.2               |
+| Django | 4.2, 5.2, 6.1          |
+
+Django 6.1 needs Python 3.12 or newer — that is Django's own requirement, not
+django-mfa's. On Python 3.10 or 3.11, use Django 4.2 or 5.2 (both LTS).
 
 Any database Django supports works: factor state lives in a `JSONField`, and no
 backend-specific features are used.

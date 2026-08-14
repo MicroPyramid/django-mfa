@@ -11,6 +11,7 @@
 # every place this deviates from the brief's hypothesised calls.
 import json
 
+from django.utils.translation import gettext_lazy as _
 from fido2.server import Fido2Server
 from fido2.webauthn import (
     AttestedCredentialData,
@@ -68,7 +69,7 @@ def user_entity(user):
 
 class WebAuthnAdapter(Adapter):
     type = Authenticator.Type.WEBAUTHN
-    verbose_name = "Security key or passkey"
+    verbose_name = _("Security key or passkey")
     supports_multiple = True
 
     def _existing_credentials(self, user):

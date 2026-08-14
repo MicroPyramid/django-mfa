@@ -12,6 +12,47 @@ Versions follow [PEP 440](https://peps.python.org/pep-0440/). The version in
 `pyproject.toml` is the only place it is written; the git tag and the GitHub
 Release are derived from it (see [docs/contributing.md](docs/contributing.md)).
 
+## 4.3.0
+
+### Added
+
+- **Translation catalogs.** `django_mfa/locale/` now ships `django.pot` (75
+  entries) and machine-drafted `.po` files for `de`, `es`, `fr`, `pt_BR`,
+  `ja` and `zh_Hans`. Every entry is marked `fuzzy`, so gettext ignores it
+  and users still see English: **no language is live yet**, and a draft only
+  starts appearing after a human reviews it and removes the flags. See
+  [docs/translations.md](docs/translations.md). No compiled `.mo` files
+  ship, because a fully fuzzy catalog compiles to an empty one.
+- The Python side is now translatable, matching the templates (which already
+  were): the verification error, the passkey sign-in error, each adapter's
+  `verbose_name`, and `Authenticator.Type`'s labels. Wrapping the `Type`
+  labels needs **no migration** — a `gettext_lazy` proxy compares equal to
+  the string it wraps, so the autodetector sees no change to `choices`
+  (verified on Django 4.2, 5.2 and 6.1).
+
+- **Django 6.1 support**, now claimed in the classifiers and exercised in CI
+  on Python 3.12 and 3.13. Django 6.x requires Python 3.12+, so the matrix
+  excludes it on 3.10/3.11; those interpreters keep Django 4.2 and 5.2, both
+  still LTS. No source change was needed — the suite already passed on 6.x.
+  (Django 6.0 passes too, but is not claimed or tested.)
+
+### Changed
+
+- The PyPI classifier is now `Development Status :: 5 - Production/Stable`,
+  up from `4 - Beta`.
+- `publish.yml`'s pre-release smoke matrix now tests the newest supported
+  corner as Python 3.13 + Django 6.1, up from 3.13 + 5.2. The oldest corner
+  (3.10 + 4.2) is unchanged.
+
+### Fixed
+
+- `.gitignore`'s blanket `*.pot`/`*.mo` rules excluded the package's own
+  catalogs. Because hatchling honours `.gitignore` at build time, an ignored
+  catalog is also an unshipped one — Django would find no locale directory
+  in the installed package and silently fall back to English. Negations now
+  keep `django_mfa/locale/` tracked, and `test_packaging.py` asserts the
+  catalogs are in the built wheel.
+
 ## 4.2.0
 
 ### Added
