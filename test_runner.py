@@ -22,6 +22,18 @@ if __name__ == "__main__":
             'django.contrib.messages',
             'django.contrib.staticfiles',
             'django_mfa',
+            # Test-only: the importer commands (tasks 11-12) read these
+            # packages' models. Real models rather than stubs, so a field
+            # rename upstream fails the test instead of silently
+            # invalidating the importer. They are never runtime
+            # dependencies of django_mfa -- see mfa_import_django_otp.py
+            # and mfa_import_django_mfa2.py, which resolve them through
+            # apps.get_model() and degrade to a clean CommandError.
+            'django_otp',
+            'django_otp.plugins.otp_totp',
+            'django_otp.plugins.otp_static',
+            'django_otp.plugins.otp_email',
+            'mfa',
         ),
         MIDDLEWARE=(
             'django.middleware.security.SecurityMiddleware',
@@ -51,6 +63,16 @@ if __name__ == "__main__":
             },
         ],
         SECRET_KEY='test_secret_key',
+        # django-mfa2's own AppConfig ('mfa', pulled in for the importer
+        # tests -- see INSTALLED_APPS above) omits default_auto_field, which
+        # otherwise trips models.W042 on its User_Keys model. django_mfa's
+        # own AppConfig already sets default_auto_field explicitly
+        # (django_mfa/apps.py), so this global only affects apps that don't
+        # set their own -- it does not change django_mfa's behaviour. Django
+        # migrations hard-code their field types per file, so this also
+        # cannot alter any already-applied migration; it only affects a
+        # future makemigrations, which this project never runs against 'mfa'.
+        DEFAULT_AUTO_FIELD='django.db.models.BigAutoField',
         MFA_FIDO2_RP_ID='testserver',
         ALLOWED_HOSTS=['testserver', 'localhost'],
         # django_mfa.checks.E003 (task 19) flags a WebAuthn-capable install
@@ -66,6 +88,20 @@ if __name__ == "__main__":
         ],
         CACHES={"default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache"}},
+        # Pinned explicitly rather than left to Django's own default:
+        # that default is USE_TZ=False on Django 4.2 (this project's floor,
+        # and a leg of the CI matrix) but USE_TZ=True on Django 5.2 (another
+        # leg), so an unpinned suite exercises naive/aware datetime handling
+        # differently per Django version and a regression on one leg can go
+        # uncaught on the other. Three separate naive/aware bugs surfaced
+        # during the branch that added MfaExemption and its --until date
+        # handling, and the suite as it stood didn't catch any of them.
+        # Pinning True here doesn't remove USE_TZ=False coverage: the tests
+        # that specifically need it (e.g. MfaExemptionStrTests,
+        # MfaDisableUntilUseTzTests) wrap themselves in their own
+        # override_settings(USE_TZ=False) -- that's the deliberate other
+        # half of this pin, not a gap in it.
+        USE_TZ=True,
     )
 
     django.setup()

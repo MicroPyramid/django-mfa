@@ -145,3 +145,32 @@ def check_mfa_required_predicate(app_configs, **kwargs):
             id="django_mfa.E004",
         )]
     return []
+
+
+def check_stepup_max_age(app_configs, **kwargs):
+    """``MFA_STEPUP_MAX_AGE`` must be a positive integer, or None to disable.
+
+    Deliberately NOT gated on ``_webauthn_active()`` -- like E004, this
+    applies to every install.
+
+    Zero is refused rather than accepted because it means "always stale":
+    every gated view would redirect to mfa:verify, which marks the session
+    verified and redirects back, which is stale again the instant any
+    measurable time has passed -- a redirect loop rather than a security
+    setting. django_mfa.ratelimit.parse() refuses a zero count and a zero
+    window for the same class of reason. bool is excluded explicitly because
+    it is a subclass of int, so ``True`` would otherwise be accepted as a
+    one-second window.
+    """
+    value = mfa_settings.MFA_STEPUP_MAX_AGE
+    if value is None:
+        return []
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return [Error(
+            f"MFA_STEPUP_MAX_AGE must be a positive integer or None, "
+            f"got {value!r}.",
+            hint="It is a number of seconds -- 300 is the default. Set it to "
+                 "None to switch step-up re-authentication off entirely.",
+            id="django_mfa.E005",
+        )]
+    return []

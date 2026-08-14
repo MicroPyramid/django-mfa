@@ -33,6 +33,7 @@ customizing
 enforcement
 recipes
 custom_factors
+operations
 ```
 
 ```{toctree}

@@ -7,6 +7,7 @@ from django.urls import reverse
 from django_mfa import events, policy
 from django_mfa.adapters.recovery_codes import RecoveryCodesAdapter
 from django_mfa.conf import settings as mfa_settings
+from django_mfa.decorators import mfa_recent_required
 from django_mfa.models import Authenticator
 from django_mfa.registry import registry
 
@@ -31,15 +32,21 @@ def security_settings(request):
         # has_primary_factor, not primary_enabled_for: only the yes/no answer
         # is needed here, and this view is the one every enrollment-required
         # user lands back on after every action, so it runs on every one of
-        # those requests.
-        "mfa_enrollment_required": (
-            policy.mfa_required_for(request.user)
-            and not registry.has_primary_factor(request.user)),
+        # those requests. Same three-part order as the middleware's rung:
+        # policy.resolve() gates the other two so MFA_REQUIRED = False costs
+        # nothing, and has_primary_factor() then runs before
+        # mfa_required_for() so the exemption lookup inside it only runs for
+        # a user actually about to be walled.
+        "mfa_enrollment_required": bool(
+            policy.resolve()
+            and not registry.has_primary_factor(request.user)
+            and policy.mfa_required_for(request.user)),
     }
     return render(request, "django_mfa/security.html", context)
 
 
 @login_required
+@mfa_recent_required(allow_unenrolled=True)
 def recovery_codes(request):
     """Show the user their recovery codes.
 
@@ -72,6 +79,7 @@ def recovery_codes(request):
 
 
 @login_required
+@mfa_recent_required(allow_unenrolled=True)
 def manage_factors(request):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 
-from .models import Authenticator
+from .models import Authenticator, MfaExemption
 
 
 @admin.register(Authenticator)
@@ -48,6 +48,37 @@ class AuthenticatorAdmin(admin.ModelAdmin):
         # AUTH_USER_MODEL is swappable and a host project's user model need
         # not have that field at all.
         return ("name", f"user__{get_user_model().USERNAME_FIELD}")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(MfaExemption)
+class MfaExemptionAdmin(admin.ModelAdmin):
+    """Inspect-and-revoke only, for the same reasons as AuthenticatorAdmin.
+
+    Creating an exemption is a deliberate command-line act with a mandatory
+    reason (`manage.py mfa_disable`), so add and change are off. Deleting is
+    allowed and is A revoke path: it is fail-safe -- it re-imposes MFA --
+    and denying it would push operators to editing the database by hand.
+    It is NOT an audited one, though: unlike `manage.py mfa_disable
+    --revoke`, deleting here fires no `mfa_exemption_changed` (Django's
+    admin has nothing django-mfa listens for on delete) -- see
+    docs/operations.md's "Auditing operator actions" section. An operator
+    who needs the deletion to reach an audit receiver should use the
+    command instead of this page.
+    """
+
+    list_display = ("user", "reason", "created_at", "expires_at")
+    list_filter = ("created_at", "expires_at")
+    fields = ("user", "reason", "created_at", "expires_at")
+    readonly_fields = fields
+
+    def get_search_fields(self, request):
+        return ("reason", f"user__{get_user_model().USERNAME_FIELD}")
 
     def has_add_permission(self, request):
         return False

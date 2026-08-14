@@ -32,7 +32,7 @@ WebAuthn** — see {doc}`installation_setup`.
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `MFA_REMEMBER_MY_BROWSER` | `False` | When `True`, a signed cookie trusts a browser for `MFA_REMEMBER_DAYS` after it completes one second-factor challenge, skipping the challenge on later logins. Works with any factor type. The cookie is bound to the user's enrolled factors, so enrolling or removing one invalidates every previously trusted browser. |
+| `MFA_REMEMBER_MY_BROWSER` | `False` | When `True`, a signed cookie trusts a browser for `MFA_REMEMBER_DAYS` after it completes one second-factor challenge, skipping the challenge on later logins. Works with any factor type. The cookie is bound to the user's enrolled factors, so enrolling or removing one invalidates every previously trusted browser. Interacts with step-up (`MFA_STEPUP_MAX_AGE`) — see the note below. |
 | `MFA_REMEMBER_DAYS` | `90` | How long a trusted-browser cookie stays valid. Ignored unless the above is on. |
 | `MFA_QUICKLOGIN` | `False` | Sets a non-authenticating hint cookie naming the last account to log in on this browser, so your login page can offer a passkey before asking for a username. See {doc}`recipes`. |
 
@@ -45,6 +45,41 @@ WebAuthn** — see {doc}`installation_setup`.
 | `MFA_SECRET_ENCRYPTION_KEYS` | `None` | **Deprecated, and does not encrypt.** List of keys used to *sign* TOTP secrets at rest. The first key signs; every key is tried when reading. See [Signing stored secrets](#signing-stored-secrets-deprecated). |
 | `MFA_OWNED_BY_ENTERPRISE` | `False` | When `True`, users cannot remove their own WebAuthn authenticators from the security settings page — e.g. an organization-issued security key an administrator manages instead. |
 | `MFA_NOTIFY_ON_CHANGE` | `False` | When `True`, emails the user when a factor is added or removed, when a recovery code is spent, and when their last factor goes. Off by default so an upgrade doesn't start sending mail unannounced. The `django_mfa.events` signals fire either way — connect your own receiver for async delivery or for routing somewhere other than email. Sending is synchronous and best-effort: a failure is logged, never raised. |
+| `MFA_STEPUP_MAX_AGE` | `300` (seconds) | How recently a session must have completed a factor challenge before it may add, remove or regenerate a factor. See [below](#mfa_stepup_max_age). |
+
+### `MFA_STEPUP_MAX_AGE`
+
+Default: `300` (seconds).
+
+How recently a session must have completed a factor challenge before it may
+add, remove or regenerate a factor. A session older than this is redirected
+back through `mfa:verify` first. Set to `None` to switch the gate off for
+django-mfa's own three built-in views (`enroll_factor` and the two
+`manage_factors` views) and restore pre-4.2.0 behaviour there — they never
+pass their own `max_age`, so they fall back to this setting.
+
+**This does not disable a host view's own explicit `max_age`.**
+`@mfa_recent_required(max_age=60)` (or `mfa_stepup_max_age = 60` on
+`MfaRecentRequiredMixin`) keeps enforcing 60 seconds regardless of what this
+setting is — `decorators._enforce_recent` resolves `max_age if max_age is
+not None else MFA_STEPUP_MAX_AGE`, so an explicit per-view value always
+outranks the global one. Setting this to `None` is a *default*, not a
+ceiling: it switches off step-up for views that don't ask for their own
+freshness window, not for ones that do.
+
+**Interacts with `MFA_REMEMBER_MY_BROWSER`.** A trusted browser still skips
+the *login* challenge exactly as before, but the session it starts is only
+fresh at the moment it's created — `MFA_STEPUP_MAX_AGE` (or a view's own
+`max_age`) is enforced on every factor change regardless of how the session
+became verified. A trusted browser that changes a factor more than
+`MFA_STEPUP_MAX_AGE` seconds after logging in is challenged for that
+action, because the RMB cookie is consulted only at login, not re-checked
+by the step-up gate. This is expected, and a visible change for installs
+that enabled RMB specifically to avoid challenges — see the 4.2.0 entry in
+`CHANGELOG.md`.
+
+This exists because a stolen or borrowed session could otherwise strip every
+factor from an account and enrol its own without presenting anything.
 
 ## Email codes
 
@@ -153,10 +188,10 @@ described above before they can affect a real user.
 E001–E003 are WebAuthn-only: they return no errors at all unless WebAuthn is
 actually switched on for this install, meaning `MFA_QUICKLOGIN` is on or a WebAuthn
 adapter is registered (true by default). A project with
-`MFA_FACTORS = ["totp", "recovery_codes"]` never trips any of them. `E004` is not
-gated the same way — `MFA_REQUIRED` is not a WebAuthn setting, so there is nothing
-to gate on, and it applies to every install regardless of which factors are
-registered.
+`MFA_FACTORS = ["totp", "recovery_codes"]` never trips any of them. `E004` and
+`E005` are not gated the same way — `MFA_REQUIRED` and `MFA_STEPUP_MAX_AGE` are
+not WebAuthn settings, so there is nothing to gate on, and both apply to every
+install regardless of which factors are registered.
 
 | Check ID | Severity | Condition |
 |---|---|---|
@@ -164,6 +199,7 @@ registered.
 | `django_mfa.E002` | Error | WebAuthn is active and `MFA_FIDO2_RP_ID` is not a suffix of any `ALLOWED_HOSTS` entry. |
 | `django_mfa.E003` | Error | WebAuthn is active and `django_mfa.backends.WebAuthnBackend` is missing from `AUTHENTICATION_BACKENDS`. |
 | `django_mfa.E004` | Error | `MFA_REQUIRED` is a dotted path that fails to import, or resolves to a value that isn't callable. |
+| `django_mfa.E005` | Error | `MFA_STEPUP_MAX_AGE` is not a positive integer or `None`. |
 
 `E003` exists because the failure it prevents is otherwise completely silent.
 Passwordless login logs a user in by calling `django.contrib.auth.login()` with an
@@ -174,7 +210,7 @@ resolves `request.user` to `AnonymousUser` — no exception, no log line, just a
 who was "logged in" a moment ago and is now anonymous again. Catching this at startup
 is far cheaper than a support ticket.
 
-All four are `Error` rather than `Warning` deliberately, though what each guards
+All five are `Error` rather than `Warning` deliberately, though what each guards
 against differs slightly. E001–E003 guard a failure mode that is otherwise silent
 in production (see E003's own explanation below). A misconfigured `MFA_REQUIRED`
 is not silent even without E004 — `policy.resolve()` raises `ImproperlyConfigured`

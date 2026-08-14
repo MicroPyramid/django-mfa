@@ -52,13 +52,25 @@ def _adapter_or_404(factor_type):
         raise Http404(f"Unknown factor {factor_type!r}") from None
 
 
-def _safe_next(request):
+def safe_next_or_none(request):
+    """The request's ``next``, or None when absent or not safe to honour.
+
+    Split out of _safe_next() so views.picker can ask the same question
+    without inheriting the LOGIN_REDIRECT_URL fallback: the picker forwards
+    a URL and must append `next` only when there is a real one to append.
+    Both callers therefore apply one identical safety rule, and the picker
+    cannot become an open-redirect hop that verify_factor would have refused.
+    """
     candidate = request.POST.get("next") or request.GET.get("next")
     if candidate and url_has_allowed_host_and_scheme(
         candidate, allowed_hosts={request.get_host()}, require_https=request.is_secure()
     ):
         return candidate
-    return resolve_url(settings.LOGIN_REDIRECT_URL)
+    return None
+
+
+def _safe_next(request):
+    return safe_next_or_none(request) or resolve_url(settings.LOGIN_REDIRECT_URL)
 
 
 @login_required

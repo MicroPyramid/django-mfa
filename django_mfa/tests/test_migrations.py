@@ -305,6 +305,7 @@ class Migration0007ForwardFromZeroTests(TestCase):
                 "0006_mfa_user_handle",
                 "0007_drop_legacy_models",
                 "0008_email_factor",
+                "0009_mfa_exemption",
             },
         )
 

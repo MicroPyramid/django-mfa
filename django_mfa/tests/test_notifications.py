@@ -1,3 +1,4 @@
+import time
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -5,7 +6,7 @@ from django.core import mail
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from django_mfa import events
+from django_mfa import events, notifications
 from django_mfa.adapters.recovery_codes import RecoveryCodesAdapter
 from django_mfa.adapters.totp import generate_secret
 from django_mfa.crypto import encrypt
@@ -24,7 +25,10 @@ class NotificationTestCase(TestCase):
             data={"secret": encrypt(generate_secret())})
         self.client.login(username="ashwin", password="pw")
         session = self.client.session
-        session["mfa"] = {"verified": True, "method": "totp", "at": 0}
+        # A recent "at", not 0 -- these tests drive enroll_factor/manage,
+        # which now require a fresh challenge (mfa_recent_required), not
+        # merely a verified session. See test_stepup.py.
+        session["mfa"] = {"verified": True, "method": "totp", "at": int(time.time())}
         session.save()
 
 
@@ -62,14 +66,20 @@ class OffByDefaultTests(NotificationTestCase):
         The early return at the top of the receiver must make a default
         install exactly as cheap as before notifications existed: the
         registry is never even consulted.
-        """
-        self.verified_login()
-        webauthn = Authenticator.objects.create(
-            user=self.user, type="webauthn", data={})
 
+        Calls the receiver directly rather than going through mfa:manage:
+        that view is now gated by mfa_recent_required (see test_stepup.py),
+        which legitimately calls registry.has_primary_factor() itself on
+        every request regardless of this setting -- routing through the full
+        request would make those two calls indistinguishable from a
+        (hypothetical, regressed) call by the receiver this test exists to
+        catch.
+        """
         with mock.patch(
                 "django_mfa.registry.registry.has_primary_factor") as mocked:
-            self.client.post(reverse("mfa:manage"), {"pk": webauthn.pk})
+            notifications.notify_factor_removed(
+                sender=None, user=self.user, factor_type="webauthn",
+                name="k")
 
         mocked.assert_not_called()
 

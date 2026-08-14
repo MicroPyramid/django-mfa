@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import re
+import time
 import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
@@ -236,6 +237,21 @@ class AdapterFailureModeTests(TestCase):
             self.auth = adapter.complete_enroll(
                 request, {"credential": json.dumps(credential), "name": "k"})
 
+    def _stamp_fresh_session(self):
+        """This authenticator was enrolled directly through the adapter, not
+        through enroll_factor, so self.client's session was never marked
+        verified. enroll_factor is now gated by mfa_recent_required, so the
+        enroll_* tests below need a fresh stamp to reach the adapter failure
+        modes they actually test (covered separately by test_stepup.py's
+        GatedViewTests). Only used by those -- the verify_factor tests in
+        this class rely on the session starting out NOT verified, since they
+        assert on how it changes.
+        """
+        session = self.client.session
+        session["mfa"] = {"verified": True, "method": "webauthn",
+                          "at": int(time.time())}
+        session.save()
+
     # -- verify_factor (webauthn) --------------------------------------------
 
     def _verify_webauthn(self, data):
@@ -336,11 +352,13 @@ class AdapterFailureModeTests(TestCase):
     # -- enroll_factor (totp + webauthn) -------------------------------------
 
     def test_enroll_totp_missing_fields_is_400_not_500(self):
+        self._stamp_fresh_session()
         response = self.client.post(reverse("mfa:enroll_factor", args=["totp"]), {})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.context["error_message"], GENERIC_ERROR)
 
     def test_enroll_webauthn_missing_credential_field_is_400_not_500(self):
+        self._stamp_fresh_session()
         with self.settings(MFA_FIDO2_RP_ID="testserver"):
             self.client.get(reverse("mfa:enroll_factor", args=["webauthn"]))
             response = self.client.post(
@@ -349,6 +367,7 @@ class AdapterFailureModeTests(TestCase):
         self.assertEqual(response.context["error_message"], GENERIC_ERROR)
 
     def test_enroll_webauthn_tampered_credential_shape_is_400_not_500(self):
+        self._stamp_fresh_session()
         with self.settings(MFA_FIDO2_RP_ID="testserver"):
             self.client.get(reverse("mfa:enroll_factor", args=["webauthn"]))
             response = self.client.post(
@@ -425,6 +444,14 @@ class SecuritySettingsTests(TestCase):
         auth = Authenticator.objects.create(user=self.user, type="totp")
         get_response = self.client.get(reverse("mfa:security_settings"))
         self.assertIn(f'value="{auth.pk}"', get_response.content.decode())
+
+        # mfa:manage is gated by mfa_recent_required -- give this session a
+        # fresh stamp so the delete below exercises manage_factors itself
+        # rather than the gate (covered by test_stepup.py's GatedViewTests).
+        session = self.client.session
+        session["mfa"] = {"verified": True, "method": "totp",
+                          "at": int(time.time())}
+        session.save()
 
         post_response = self.client.post(reverse("mfa:manage"), {"pk": auth.pk})
         self.assertRedirects(post_response, reverse("mfa:security_settings"))
@@ -539,6 +566,18 @@ class ManageFactorsTests(TestCase):
         self.other = User.objects.create_user("b@example.com", password="pw")
         self.client = Client()
         self.client.login(username="a@example.com", password="pw")
+        # A baseline factor (webauthn: supports_multiple, so it never
+        # collides with a test's own totp/webauthn row) plus a fresh
+        # verified session, so these tests exercise manage_factors' own
+        # logic (delete, 404s, 405, forbidden) rather than the
+        # mfa_recent_required gate now in front of it -- gate behaviour
+        # itself is covered by test_stepup.py's GatedViewTests.
+        Authenticator.objects.create(
+            user=self.user, type="webauthn", name="baseline", data={})
+        session = self.client.session
+        session["mfa"] = {"verified": True, "method": "webauthn",
+                          "at": int(time.time())}
+        session.save()
 
     def test_deletes_own_authenticator_and_redirects(self):
         auth = Authenticator.objects.create(user=self.user, type="totp")

@@ -54,3 +54,55 @@ class Authenticator(models.Model):
         self.last_used_at = timezone.now()
         self.save(update_fields=["last_used_at"])
 
+
+class MfaExemptionManager(models.Manager):
+    def active_for(self, user):
+        """This user's exemption if it is currently in force, else None."""
+        return self.filter(user=user).filter(
+            models.Q(expires_at__isnull=True)
+            | models.Q(expires_at__gt=timezone.now())
+        ).first()
+
+
+class MfaExemption(models.Model):
+    """A user MFA_REQUIRED does not apply to, despite the predicate.
+
+    Written by the `mfa_disable` management command, never through the web
+    UI: exempting somebody from a security requirement is an operator action
+    that needs a reason attached and an audit trail (see the
+    mfa_exemption_changed signal), not something a user can do to themselves.
+
+    Suppresses MFA_REQUIRED ONLY. It does not open @mfa_required views --
+    MFA_REQUIRED picks users, the decorator picks views, and the two are not
+    interchangeable (see decorators.py's module docstring).
+    """
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL,
+                                related_name="mfa_exemption",
+                                on_delete=models.CASCADE)
+    reason = models.CharField(max_length=255)
+    created_at = models.DateTimeField(default=timezone.now)
+    #: None means permanent. A dated exemption is strongly preferred; the
+    #: mfa_disable command surfaces --until for exactly that reason.
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    objects = MfaExemptionManager()
+
+    def __str__(self):
+        # localtime(), not a bare strftime on the stored value: expires_at is
+        # UTC under USE_TZ=True, and formatting it directly shows an operator
+        # in a negative-offset timezone a date up to a day earlier than the
+        # one the exemption actually expires on. But localtime() itself
+        # raises on a naive datetime, and expires_at IS naive under
+        # USE_TZ=False (the Django 4.2-era default, still unset by conf.py)
+        # -- so only convert when there is a timezone to convert from; a
+        # naive value is already in the meaning the operator entered it in.
+        expires = self.expires_at
+        if expires is not None and timezone.is_aware(expires):
+            expires = timezone.localtime(expires)
+        suffix = f" until {expires:%Y-%m-%d}" if expires else ""
+        return f"MFA exemption for {self.user}{suffix}"
+
+    def is_active(self):
+        return self.expires_at is None or self.expires_at > timezone.now()
+

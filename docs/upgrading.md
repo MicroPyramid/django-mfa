@@ -104,3 +104,19 @@ These are fixes to real defects in 4.0.0. All are worth knowing about before you
 - **`Authenticator` is no longer editable in the Django admin.** It is registered read-only, with add and change disabled and `data` excluded from every field, changelist and search list — a staff account with `view_authenticator` could previously read (and with `change_authenticator`, overwrite) another user's TOTP secret. Deleting is still allowed, so revoking a lost authenticator for a locked-out user still works. **If your project relied on editing `Authenticator` rows through the admin, that will now fail**; register your own `ModelAdmin` if you genuinely need it, and keep `data` out of it.
 
 Separately, the documentation for `MFA_SECRET_ENCRYPTION_KEYS` was wrong: it described the setting as encrypting TOTP secrets at rest. It signs them (`django.core.signing`) and provides integrity only — the payload is plain base64 and recovers without any key. Nothing about the code changed; see {doc}`settings` and {doc}`security` for the corrected description, and re-check any risk assessment that relied on the old wording.
+
+## 4.2.0: factor changes now require a recent challenge
+
+`enroll_factor`, `manage_factors` and `recovery_codes` are gated on
+`MFA_STEPUP_MAX_AGE` (default 300 seconds). A user who verified more than
+five minutes ago is redirected through `mfa:verify` before the change is
+accepted.
+
+This is the one place 4.2.0 does not upgrade to byte-identical behaviour, and
+it is deliberate: the alternative leaves the hole open for every install that
+does not read this file. Set `MFA_STEPUP_MAX_AGE = None` to restore 4.1.0
+behaviour exactly.
+
+The verification picker now also honours `?next=`, so a single-factor user is
+returned to the page they requested after logging in rather than to
+`LOGIN_REDIRECT_URL`.

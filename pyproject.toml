@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "django-mfa"
-version = "4.1.0"
+version = "4.2.0"
 description = "Second-factor authentication for Django: authenticator apps (TOTP), security keys and passkeys (WebAuthn), and recovery codes."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -60,6 +60,24 @@ dev = [
     # packaging tests skip -- and skipping is exactly how the missing
     # adapters/ and views/ packages went unnoticed in the first place.
     "build>=1.2",
+    # Source packages for the mfa_import_django_otp / mfa_import_django_mfa2
+    # management commands' tests (tasks 11-12). These are test-only fixtures,
+    # never runtime dependencies -- the importer commands resolve the foreign
+    # models through apps.get_model() inside try/except LookupError so the
+    # package never imports either at runtime (see
+    # django_mfa/tests/test_packaging.py, which asserts [project.dependencies]
+    # stays Django/fido2/qrcode only). Kept in `dev` rather than a separate
+    # opt-in group for the same reason `build` above is in `dev`: an opt-in
+    # group is exactly how the missing adapters/ and views/ packages went
+    # unnoticed, because `uv run python test_runner.py` alone would silently
+    # skip the importer tests instead of running them against real models.
+    # django-mfa2 pulls in python-u2flib-server transitively (its own U2F
+    # support) -- that's expected, not a regression: this package removed
+    # U2F entirely (see test_u2f_removal.py, docs/upgrading.md) and never
+    # imports python-u2flib-server itself; it only rides along in uv.lock
+    # as django-mfa2's dependency.
+    "django-otp>=1.5",
+    "django-mfa2>=2.9",
 ]
 # The docs are Markdown; myst-parser is what lets Sphinx read them at all.
 # Kept as its own group so a test run doesn't pull the whole Sphinx stack.

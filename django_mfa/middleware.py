@@ -89,8 +89,18 @@ class MfaMiddleware(MiddlewareMixin):
         # .exists() query per registered adapter (via enabled_for()) on every
         # single authenticated request just to build a list this branch
         # immediately discards.
-        if (policy.mfa_required_for(request.user)
-                and not registry.has_primary_factor(request.user)):
+        #
+        # policy.resolve() gates the other two so MFA_REQUIRED = False (the
+        # default) still costs nothing: has_primary_factor() is a query, so
+        # it cannot be the unconditional first operand or every authenticated
+        # request pays it even with MFA_REQUIRED off. Once past that gate,
+        # has_primary_factor() runs before mfa_required_for() so the
+        # exemption lookup inside mfa_required_for() runs only for a user who
+        # is actually about to be walled, not for every enrolled user this
+        # policy applies to.
+        if (policy.resolve()
+                and not registry.has_primary_factor(request.user)
+                and policy.mfa_required_for(request.user)):
             if self._is_exempt(request.path, self.enrollment_exempt_paths()):
                 return None
             return redirect_to_login(
