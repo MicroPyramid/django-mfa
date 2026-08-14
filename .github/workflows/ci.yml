@@ -21,7 +21,15 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
-        django: ["4.2", "5.2"]
+        django: ["4.2", "5.2", "6.1"]
+        exclude:
+          # Django 6.x requires Python >=3.12. Without these, uv cannot
+          # resolve the combination and the leg fails on dependency
+          # resolution rather than on anything about this package.
+          - python-version: "3.10"
+            django: "6.1"
+          - python-version: "3.11"
+            django: "6.1"
 
     steps:
       - uses: actions/checkout@v7

@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 # Whether a factor type counts as "primary" (protects a user on its own) is
 # NOT decided here. It used to be a second, independent definition
@@ -19,10 +20,21 @@ class AuthenticatorManager(models.Manager):
 
 class Authenticator(models.Model):
     class Type(models.TextChoices):
-        TOTP = "totp", "Authenticator app"
-        WEBAUTHN = "webauthn", "Security key or passkey"
-        RECOVERY_CODES = "recovery_codes", "Recovery codes"
-        EMAIL = "email", "Emailed code"
+        # Labels are lazily translated: get_type_display() feeds the
+        # notification emails (django_mfa/notifications.py) and the admin
+        # changelist, so leaving them in English would put an untranslated
+        # factor name inside an otherwise translated message.
+        #
+        # This needs NO migration, which is not obvious: `choices` is part of
+        # a field's deconstruction, so changing it normally provokes an
+        # AlterField. A gettext_lazy proxy compares equal to the string it
+        # wraps, though, so the autodetector sees the same choices it already
+        # had. Verified against Django 4.2, 5.2 and 6.1; test_migrations.py's
+        # makemigrations --check test is what would catch it regressing.
+        TOTP = "totp", _("Authenticator app")
+        WEBAUTHN = "webauthn", _("Security key or passkey")
+        RECOVERY_CODES = "recovery_codes", _("Recovery codes")
+        EMAIL = "email", _("Emailed code")
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL,
                              related_name="mfa_authenticators",

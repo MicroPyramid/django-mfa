@@ -17,6 +17,7 @@ from django.conf import settings as django_settings
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.crypto import salted_hmac
+from django.utils.translation import gettext_lazy as _
 
 from django_mfa import ratelimit
 from django_mfa.conf import settings as mfa_settings
@@ -100,7 +101,7 @@ def _is_fresh(state):
 
 class EmailAdapter(Adapter):
     type = Authenticator.Type.EMAIL
-    verbose_name = "Emailed code"
+    verbose_name = _("Emailed code")
     supports_multiple = False
     supports_enroll = True
     counts_as_primary_factor = True

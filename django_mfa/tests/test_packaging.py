@@ -102,6 +102,33 @@ class WheelContentsTests(unittest.TestCase):
                        "django_mfa/static/django_mfa/style.css"):
             self.assertIn(needle, self.names, f"{needle} missing from the wheel")
 
+    def test_translation_catalogs_ship(self):
+        """Catalogs ride on file inclusion too, and their absence is silent.
+
+        Django looks for <app>/locale/<lang>/LC_MESSAGES/ inside the
+        *installed* package. A wheel without it doesn't error -- gettext
+        simply finds no catalog and every string falls back to the English
+        source, so a fully translated install looks untranslated with
+        nothing in the logs to say why.
+
+        Asserted on the .po files and the .pot: no .mo ships yet, because
+        every entry is still a fuzzy machine draft (see
+        django_mfa/tests/test_i18n.py and docs/translations.md). When a
+        language is reviewed and starts shipping compiled catalogs, add the
+        .mo check here -- it is the file gettext actually reads at runtime.
+        """
+        self.assertIn("django_mfa/locale/django.pot", self.names)
+        catalogs = [n for n in self.names
+                    if n.startswith("django_mfa/locale/")
+                    and n.endswith("/LC_MESSAGES/django.po")]
+        on_disk = sorted(
+            p.relative_to(REPO_ROOT).as_posix()
+            for p in (REPO_ROOT / "django_mfa" / "locale").glob(
+                "*/LC_MESSAGES/django.po"))
+        self.assertEqual(
+            sorted(catalogs), on_disk,
+            "the locale directory on disk and in the wheel disagree")
+
     def test_migrations_ship(self):
         """A Django app whose migrations don't ship leaves `migrate` with
         nothing to apply and no error -- the tables simply never exist.

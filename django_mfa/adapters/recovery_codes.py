@@ -3,6 +3,7 @@ import secrets
 import string
 
 from django.contrib.auth.hashers import check_password, make_password
+from django.utils.translation import gettext_lazy as _
 
 from django_mfa import events
 from django_mfa.atomic import update_data
@@ -17,7 +18,7 @@ ALPHABET = string.ascii_letters + string.digits
 
 class RecoveryCodesAdapter(Adapter):
     type = Authenticator.Type.RECOVERY_CODES
-    verbose_name = "Recovery codes"
+    verbose_name = _("Recovery codes")
     # Recovery codes are exhaustible and must never be a user's sole second
     # factor. They still appear in the verification picker (you can verify with
     # one), but must not make primary_enabled_for() non-empty.

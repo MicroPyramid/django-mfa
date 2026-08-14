@@ -4,7 +4,7 @@ This release is a ground-up rewrite: U2F support is gone, TOTP and WebAuthn/pass
 
 ## 1. Django 4.2+ and Python 3.10+ are now required
 
-Earlier releases supported Django 2.2-3.2 and Python 3.6-3.10. This release requires Django 4.2 or 5.2, and Python 3.10-3.13 (see `pyproject.toml`). The old code could not run on a newer Django at all -- it imported `django.utils.http.is_safe_url` and `django.utils.translation.ugettext`, both removed in Django 4.0 -- so there is no supported path that runs both the old and new code against the same Django version; the Django/Python upgrade and the django-mfa upgrade have to happen together.
+Earlier releases supported Django 2.2-3.2 and Python 3.6-3.10. This release requires Django 4.2, 5.2 or 6.1, and Python 3.10-3.13 (see `pyproject.toml`; Django 6.1 additionally needs Python 3.12+, which is Django's own floor). The old code could not run on a newer Django at all -- it imported `django.utils.http.is_safe_url` and `django.utils.translation.ugettext`, both removed in Django 4.0 -- so there is no supported path that runs both the old and new code against the same Django version; the Django/Python upgrade and the django-mfa upgrade have to happen together.
 
 ## 2. U2F support is removed entirely
 

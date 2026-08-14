@@ -1,0 +1,338 @@
+# Translation template for django-mfa.
+# Copyright (C) MicroPyramid
+# This file is distributed under the same licence as the django-mfa package.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: django-mfa\n"
+"Report-Msgid-Bugs-To: https://github.com/MicroPyramid/django-mfa/issues\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: django_mfa/templates/django_mfa/enroll_email.html:14
+#: django_mfa/templates/django_mfa/verify_email.html:15
+msgid "%(code_length)s-digit code"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:78
+msgid "%(remaining)s code remaining."
+msgid_plural "%(remaining)s codes remaining."
+msgstr[0] ""
+msgstr[1] ""
+
+#: django_mfa/templates/django_mfa/email/factor_added_subject.txt:1
+msgid "A new two-factor method was added to your account"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/factor_added.txt:1
+msgid "A new two-factor method was added to your account: %(factor)s"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/recovery_code_used.txt:1
+msgid "A recovery code was just used to sign in to your account."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/recovery_code_used_subject.txt:1
+msgid "A recovery code was used to sign in"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/factor_removed_subject.txt:1
+msgid "A two-factor method was removed from your account"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:59
+msgid "Add a method"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:11
+msgid "Add a method below to continue. Until you do, the rest of the site is unavailable."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:7
+msgid "Add a second step to your sign-in so a stolen password isn't enough on its own."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:5
+msgid "Add a security key or passkey"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:30
+msgid "Added %(created)s"
+msgstr ""
+
+#: django_mfa/adapters/totp.py:47
+#: django_mfa/models.py:34
+msgid "Authenticator app"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_email.html:31
+msgid "Back"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_totp.html:11
+msgid "Can't scan it?"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_email.html:25
+#: django_mfa/templates/django_mfa/enroll_totp.html:31
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:42
+msgid "Cancel"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/picker.html:6
+msgid "Choose how you'd like to confirm your identity."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/recovery_codes.html:23
+#: django_mfa/templates/django_mfa/recovery_codes.html:41
+msgid "Done"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/recovery_codes.html:22
+msgid "Download"
+msgstr ""
+
+#: django_mfa/adapters/email.py:104
+#: django_mfa/models.py:37
+msgid "Emailed code"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/verify_recovery_codes.html:5
+msgid "Enter a recovery code"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/verify_email.html:5
+#: django_mfa/templates/django_mfa/verify_totp.html:5
+msgid "Enter your code"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/recovery_code_used.txt:5
+msgid "If this wasn't you, change your password and generate a fresh set of codes."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/mfa_disabled.txt:3
+msgid "If this wasn't you, change your password and set up two-factor authentication again immediately."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/factor_removed.txt:3
+msgid "If this wasn't you, change your password immediately."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/factor_added.txt:3
+msgid "If this wasn't you, remove it and change your password immediately."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/otp_code.txt:5
+msgid "If you didn't try to sign in, someone may know your password. Change it."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/otp_code.txt:3
+msgid "It expires in %(validity_minutes)s minutes and can be used once."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:46
+msgid "Managed by your organization"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:29
+msgid "Name this key"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/verify_totp.html:6
+msgid "Open your authenticator app and enter the six-digit code it shows."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:36
+msgid "Optional. Helps you tell your keys apart later."
+msgstr ""
+
+#: django_mfa/views/verify.py:54
+msgid "Passkey sign-in failed."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/verify_recovery_codes.html:14
+msgid "Recovery code"
+msgstr ""
+
+#: django_mfa/adapters/recovery_codes.py:21
+#: django_mfa/models.py:36
+#: django_mfa/templates/django_mfa/recovery_codes.html:5
+#: django_mfa/templates/django_mfa/security.html:75
+msgid "Recovery codes"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:41
+msgid "Register"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:42
+msgid "Remove"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:41
+msgid "Remove this method?"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/recovery_codes.html:8
+msgid "Save these somewhere safe. Each code works once, and this is the only time they'll be shown."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_totp.html:6
+msgid "Scan this code with an authenticator app, then enter the six-digit code it shows."
+msgstr ""
+
+#: django_mfa/adapters/webauthn.py:72
+#: django_mfa/models.py:35
+msgid "Security key or passkey"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/verify_webauthn.html:6
+msgid "Select the button below, then follow your browser's prompt to use your security key or passkey."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_totp.html:5
+msgid "Set up an authenticator app"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_email.html:5
+msgid "Set up email codes"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_totp.html:20
+#: django_mfa/templates/django_mfa/verify_totp.html:12
+msgid "Six-digit code"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:69
+msgid "There is nothing left to add."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/verify_email.html:30
+msgid "This account has no email code to verify. Use another method, or contact support if you believe this is a mistake."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:12
+#: django_mfa/templates/django_mfa/verify_webauthn.html:12
+msgid "This browser doesn't support security keys or passkeys. Try another browser, or choose a different method."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/factor_removed.txt:1
+msgid "This two-factor method was removed from your account: %(factor)s"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_email.html:24
+msgid "Turn on email codes"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_totp.html:30
+msgid "Turn on two-factor authentication"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/base.html:19
+#: django_mfa/templates/django_mfa/security.html:6
+msgid "Two-factor authentication"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/mfa_disabled_subject.txt:1
+msgid "Two-factor authentication is off for your account"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:10
+msgid "Two-factor authentication is required for your account."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:6
+msgid "Use a hardware security key, or a passkey built into this device such as Touch ID or Windows Hello."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/verify_email.html:26
+#: django_mfa/templates/django_mfa/verify_email.html:32
+#: django_mfa/templates/django_mfa/verify_recovery_codes.html:25
+#: django_mfa/templates/django_mfa/verify_totp.html:23
+#: django_mfa/templates/django_mfa/verify_webauthn.html:29
+msgid "Use another method"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:79
+msgid "Use one to sign in if you lose access to your other methods."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/verify_webauthn.html:5
+msgid "Use your security key"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/verify_email.html:25
+#: django_mfa/templates/django_mfa/verify_recovery_codes.html:24
+#: django_mfa/templates/django_mfa/verify_totp.html:22
+#: django_mfa/templates/django_mfa/verify_webauthn.html:28
+msgid "Verify"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/picker.html:5
+msgid "Verify it's you"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:82
+msgid "View recovery codes"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_email.html:8
+msgid "We've emailed a code to %(address)s. Enter it below to turn on email codes."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/verify_email.html:8
+msgid "We've emailed a code to %(address)s. It expires shortly."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/verify_recovery_codes.html:7
+msgid "You have %(remaining)s recovery code left. Each one works only once."
+msgid_plural "You have %(remaining)s recovery codes left. Each one works only once."
+msgstr[0] ""
+msgstr[1] ""
+
+#: django_mfa/templates/django_mfa/email/recovery_code_used.txt:3
+msgid "You have %(remaining)s recovery codes left."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:53
+msgid "You haven't set up two-factor authentication yet."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_email.html:29
+msgid "Your account has no email address, so codes can't be delivered. Add one to your profile first."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/mfa_disabled.txt:1
+msgid "Your account is no longer protected by two-factor authentication. A password is now all that's needed to sign in."
+msgstr ""
+
+#: django_mfa/views/verify.py:20
+msgid "Your code is expired or invalid."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:17
+msgid "Your methods"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/recovery_codes.html:38
+msgid "Your recovery codes were generated earlier and can't be shown again. If you've lost them, remove and re-add two-factor authentication to get a fresh set."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/otp_code_subject.txt:1
+msgid "Your sign-in code"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/email/otp_code.txt:1
+msgid "Your sign-in code is %(code)s."
+msgstr ""
+
+#: django_mfa/templates/django_mfa/enroll_webauthn.html:32
+msgid "e.g. YubiKey, work laptop"
+msgstr ""
+
+#: django_mfa/templates/django_mfa/security.html:32
+msgid "last used %(used)s"
+msgstr ""
