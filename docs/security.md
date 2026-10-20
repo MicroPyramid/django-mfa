@@ -1,300 +1,335 @@
 # Security model
 
-What django-mfa defends against, how, and — just as important — what it doesn't.
+What django-mfa assumes, what each control does, what it leaves to you, and a
+checklist to work through before launch.
 
 ## What it assumes
 
-django-mfa is a **second factor**, not an authentication system. It assumes your
-project already authenticates users correctly (password hashing, session security,
-CSRF, HTTPS) and adds proof of possession on top. It assumes an attacker may know a
-victim's password.
+django-mfa adds a second factor to a login your project already performs. It
+assumes that:
 
-It does not assume your users are careful, that their devices are clean, or that your
-login page is the only way into your app.
+- Your project handles the first factor correctly: password storage, throttling of
+  password guesses, and password reset are yours. django-mfa does not rate-limit
+  password attempts.
+- Django sessions, CSRF protection and HTTPS are configured correctly.
+- An attacker may already know a user's password.
+
+It does not assume that users are careful, that their devices are clean, or that
+your login page is the only way into your site.
 
 ## Controls
 
-### No account enumeration
+### Sessions and enforcement
 
-Every failure on the passwordless login path returns an identical generic response:
-an unknown user handle, an unknown credential, a bad signature, missing or expired
-ceremony state, and a tampered payload are indistinguishable to the client. There is
-no status-code split, no differing message, and no exception path that would turn one
-case into a 500 while others return 400 — that difference would itself be an oracle.
-
-The same holds for second-factor verification: a wrong code, a malformed payload, a
-missing field, and a rate-limited attempt all produce the same HTTP 400 and the same
-message.
+- **At login.** When a user who holds a primary factor (`totp`, `webauthn` or
+  `email`) logs in, their session is marked pending. `MfaMiddleware` redirects
+  every request from a pending session to `mfa:verify` until a factor is verified.
+- **A pending session is still a logged-in Django session.**
+  `request.user.is_authenticated` is `True`. It is kept out only by `MfaMiddleware`,
+  the `django_mfa.decorators` decorators and mixins, the admin integration
+  (`MFA_PROTECT_ADMIN`) and the JSON API's own checks. Anything outside those, such
+  as a view listed in `MFA_EXEMPT_PATHS`, treats the user as logged in.
+- **Sessions opened before enrollment are challenged afterwards** (since 4.6.1). A
+  session that was never challenged, while its user now holds a primary factor, is
+  treated as pending. So after a user enrolls their first factor, every other
+  session they had open must pass the challenge. The session that enrolled is
+  already verified.
+- **What a pending session can reach:** the picker, each factor's verify page, the
+  paths in `MFA_EXEMPT_PATHS` (exact match on `request.path`), and the JSON API,
+  which applies the same checks itself. It cannot reach the enroll pages, so a
+  pending user cannot pass the challenge by enrolling a new factor of their own.
+- **Required but not enrolled.** When `MFA_REQUIRED` applies to a user who holds no
+  primary factor, the middleware redirects them to `mfa:security_settings`. Only the
+  enroll pages, the recovery codes page, the security page and `MFA_EXEMPT_PATHS`
+  stay reachable. Without `MFA_REQUIRED`, enrolling is voluntary and a user with no
+  factor is never challenged.
+- **Recovery codes never count as a primary factor.** They run out. A user holding
+  only recovery codes is never challenged and does not satisfy `MFA_REQUIRED`.
+- **Verification lasts for the life of the Django session.** Adding or removing a
+  factor, or generating recovery codes, also needs a challenge passed within
+  `MFA_STEPUP_MAX_AGE` seconds (default 300). See
+  [Step-up re-authentication](enforcement.md#step-up-re-authentication).
+- **Removing a factor does not end the user's other sessions.** Changing their
+  password does, through Django's own session invalidation.
+- **Remember this browser** (`MFA_REMEMBER_MY_BROWSER`, off by default). After a
+  successful challenge the browser gets a signed `HttpOnly` cookie (`Secure` unless
+  `DEBUG`) valid for `MFA_REMEMBER_DAYS` (default 90). The next login on that
+  browser skips the challenge. The cookie is bound to the user's current set of
+  factors, so adding or removing any factor invalidates it. Anyone holding that
+  browser's cookies and the password passes both factors.
 
 ### Rate limiting
 
-Two budgets, and exhausting either one refuses the attempt:
+| Budget | Setting (default) | Counts | Reset by a success |
+|---|---|---|---|
+| Per user | `MFA_VERIFY_RATE_LIMIT` (`"5/5m"`) | Failed attempts for one user on one factor type | Yes |
+| Per client address | `MFA_VERIFY_IP_RATE_LIMIT` (`"50/5m"`) | Failed attempts from one address, across all accounts | No |
+| Email sends | `MFA_EMAIL_SEND_RATE_LIMIT` (`"3/5m"`) | Codes emailed to one user | No |
 
-- `MFA_VERIFY_RATE_LIMIT` (default `"5/5m"`) counts failures per user **per factor
-  type**. A successful verification clears it.
-- `MFA_VERIFY_IP_RATE_LIMIT` (default `"50/5m"`) counts them per **client address**,
-  across every account. A successful verification deliberately does **not** clear
-  it.
+- **A refused attempt looks like a wrong code.** Once either verify budget is
+  spent, attempts are refused without being checked and get the same response as a
+  wrong code, so the lockout reveals nothing. `mfa_verification_failed` still fires
+  for them.
+- **Malformed submissions count.** A malformed or incomplete submission is
+  recorded as a failure, the same as a wrong code.
+- **The window is fixed from the first failure.** Five failures between 12:00:00 and
+  12:04:59 lock that budget until 12:05:00.
+- **The per-address budget stops guessing across accounts.** An attacker holding
+  ten thousand stolen passwords can try one code against each account without
+  tripping any per-user budget. A success does not reset the per-address budget, or
+  the attacker could reset it by logging into an account of their own.
+- **The client address is `REMOTE_ADDR`.** `X-Forwarded-For` is ignored unless
+  `MFA_CLIENT_IP_RESOLVER` names a function that reads it, because a client can set
+  that header to anything. Behind a proxy or load balancer you must set the
+  resolver, or every client shares the proxy's address and one budget. A resolver
+  that returns `None` skips the per-address budget for that request;
+  `MFA_VERIFY_IP_RATE_LIMIT = None` turns it off entirely.
+- **Counters are stored in the database by default** (`RateLimitCounter` rows,
+  incremented atomically). With `MFA_RATE_LIMIT_BACKEND = "cache"` they live in
+  Django's cache instead: a restart, an eviction or `cache.clear()` resets them, and
+  the cache must be shared by every worker and increment atomically. Redis and
+  Memcached work. `LocMemCache` (one counter per process) and `FileBasedCache` (not
+  atomic) do not.
+- **If the store is unreachable, attempts are allowed** and the error is logged
+  (`MFA_RATE_LIMIT_FAIL_OPEN = True`). Set it to `False` to refuse verification
+  instead, which turns a store outage into a login outage.
+- **Enrollment attempts are not counted.** The enrolling user is checking a secret
+  they were given moments earlier, not guessing anyone else's.
 
-The second exists because the first cannot see the attack that matters most at
-scale. An attacker holding a list of stolen passwords guesses once against each of
-ten thousand accounts: every per-user counter sits at 1, none of them ever binds,
-and the per-user budget never fires at all. Not clearing the IP counter on success
-is the other half — an attacker only needs one account of their own, or one lucky
-guess, to log into, and a counter reset on success would be reset at will.
+### Failures look the same
 
-A locked-out attempt returns exactly what a wrong code returns, from either budget.
-The lockout is therefore not observable, and cannot be used to probe whether an
-account exists or has MFA enabled.
-
-The window is fixed from the first failed attempt, not slid forward by each
-subsequent one: five failures at 12:00:00 and 12:04:59 both fall in the same window,
-which reopens at 12:05:00.
-
-Four properties worth understanding before you rely on it:
-
-- **The client address comes from `REMOTE_ADDR`, and `X-Forwarded-For` is ignored**
-  unless `MFA_CLIENT_IP_RESOLVER` says otherwise. A client-set header breaks the
-  budget in both directions — an attacker who varies it is never throttled, and one
-  who forges your office's address locks your staff out. **Behind a proxy you must
-  set that resolver**, or `REMOTE_ADDR` is the proxy and every client shares one
-  counter.
-- **Counters are durable by default.** Since 4.5.0 they are rows
-  (`MFA_RATE_LIMIT_BACKEND = "database"`), because a cache-only counter is erased by
-  a restart, an eviction, or a stray `cache.clear()`, and each erasure silently hands
-  an attacker mid-run a fresh budget. Set the backend to `"cache"` for the older
-  behaviour, knowing that.
-- **It fails open when the store is unreachable**, which is a deliberate
-  availability-over-control trade: a secondary throttle should not be able to lock
-  every user out of your site. `MFA_RATE_LIMIT_FAIL_OPEN = False` reverses that. Note
-  this covers an *outage*, not an absent counter — "nobody has failed yet" is always
-  allowed, or no first attempt could ever succeed.
-- **On the cache backend, it is only as shared as your cache is, and needs atomic
-  `incr()`.** With `LocMemCache` and four worker processes each keeps its own
-  counter, so the effective limit is four times what you configured. `FileBasedCache`
-  implements neither `add()` nor `incr()` atomically, so parallel attempts overwrite
-  each other's increments and the limit stops binding at the attacker's chosen
-  concurrency — do not use it for this. Neither caveat applies to the database
-  backend, where a single `UPDATE ... count = count + 1` is serialised by the
-  database.
-
-Invalid values are rejected loudly rather than silently misbehaving: a count of `0`
-would lock out every user permanently, and a window of `0` would expire the counter
-instantly and disable the throttle. Both raise `ValueError`, and `manage.py check`
-refuses them at startup (`django_mfa.E007`) rather than waiting for the first
-verification attempt after a deploy.
+- **Second-factor verification:** a wrong code, a malformed payload, a missing field
+  and a rate-limited attempt all return the same HTTP 400 and message, in the HTML
+  views and the JSON API.
+- **Passwordless login:** an unknown user handle, an unknown credential, a bad
+  signature, missing or expired ceremony state, a tampered payload and a regressed
+  sign counter all return one identical response. None of them reveals whether an
+  account exists.
+- **Emailed codes:** a throttled send and a failed delivery look the same as a sent
+  code.
 
 ### Authenticator app (TOTP)
 
-Secrets are 160-bit values from `secrets.token_bytes` (i.e. `os.urandom`), the length
-RFC 4226 recommends. They are never drawn from the `random` module, whose Mersenne
-Twister state is recoverable from observed output.
+- **Secrets are 160 bits from `secrets`** (the OS random source), the length RFC 4226
+  recommends.
+- **Each code works once.** django-mfa stores the time step of the last accepted
+  code and refuses any code at or before it (RFC 6238 section 5.2), including when
+  two requests race with the same code.
+- **The previous and next 30-second codes are accepted** as well as the current one,
+  so three codes are valid at any moment. The rate limit covers the wider window.
+- **During enrollment the secret goes to the browser** (in the QR code, drawn on your
+  server, and in a hidden form field) and comes back with a code. It is saved only
+  if the code matches it.
 
-**A code can be redeemed exactly once.** django-mfa records the time step each
-accepted code belonged to and refuses any code at or below it, as RFC 6238 §5.2
-requires. This matters because the ±1 window below means a code is otherwise valid
-for about 90 seconds: without single-use enforcement, a code read over someone's
-shoulder or captured in transit stays usable for the rest of that window.
+### Security keys and passkeys (WebAuthn)
 
-Verification accepts the previous and next 30-second code as well as the current one
-(`TOTP_VALID_WINDOW = 1`), matching Google Authenticator, django-otp and allauth. The
-tolerance costs three guesses out of a million rather than one, which the rate limit
-above covers.
-
-### Cloned-authenticator detection
-
-WebAuthn authenticators may maintain a signature counter that increments on every
-assertion. A counter that fails to advance suggests the credential has been copied.
-django-mfa checks this on every assertion and refuses the attempt when it regresses.
-
-There's a carve-out: authenticators that never implement a counter always report `0`,
-which includes Apple/iCloud passkeys. Treating "not greater than stored" as a clone
-would reject every iCloud passkey login. The check distinguishes the two cases — do
-not simplify it to `new > stored`.
+- **Credentials are bound to your domain.** The `fido2` library checks that every
+  ceremony came from an HTTPS origin on `MFA_FIDO2_RP_ID` or a subdomain of it, so a
+  passkey cannot be used on a look-alike site.
+- **Each challenge works once.** Ceremony state is removed from the session when it
+  is used.
+- **A credential only verifies for the user it was enrolled to.** Verification
+  checks the assertion against that user's own credentials.
+- **Cloned authenticators are detected.** Once a credential has reported a non-zero
+  signature counter, any assertion that does not increase it is refused.
+  Authenticators that always report 0, including Apple/iCloud passkeys, are
+  accepted.
+- **Passwordless login satisfies both factors only with user verification** (a PIN or
+  biometric). An assertion without it logs the user in, but the session stays
+  pending until they pass a second factor.
+- **User handles are random UUIDs** stored in `MfaUserHandle`. They reveal no
+  identity, and rotating `SECRET_KEY` does not break passkeys.
+- **Attestation is not verified.** `MFA_FIDO2_ATTESTATION_PREFERENCE` only changes
+  what the browser is asked for. django-mfa cannot restrict which authenticator
+  models users register.
+- **The quick-login cookie identifies an account but authenticates nobody.** With
+  `MFA_QUICKLOGIN` on, the browser keeps an `HttpOnly` cookie naming the account it
+  last signed into, so your login page can offer that account's passkey. Signing in
+  still takes a full WebAuthn ceremony.
 
 ### Recovery codes
 
-Ten codes, generated together, each usable once. They are hashed with Django's
-password hasher, and used codes are marked individually rather than deleted, so a
-replay is detected rather than silently accepted.
-
-Plaintext exists only for the duration of the response that displays them. It is
-never written to the session, the database, or a log; the download button builds the
-file client-side from the codes already on the page, precisely so the server never
-has to retain them. Revisiting the page shows nothing — there is nothing left to
-show.
-
-**Recovery codes can never be a user's only factor.** They're exhaustible, so
-`counts_as_primary_factor = False`: a user holding only recovery codes is offered
-them at the picker but is never challenged on their strength alone.
+- **Ten codes, each usable once.** Each is 10 characters from `[A-Za-z0-9]`, drawn
+  from `secrets`. Spending a code is atomic, so a replayed or raced code is refused.
+- **Hashed with Django's password hasher.** The plaintext exists only in the
+  response that displays them; the download button builds its file in the browser.
+  Revisiting the page shows nothing.
+- **Exception: migrated codes.** Codes copied from the pre-4.0 `UserRecoveryCodes`
+  table by migration `0005` stay in plaintext until the user generates a new set.
+  See {doc}`upgrading`.
 
 ### Emailed codes
 
-Emailing a one-time code (`"email"` in `MFA_FACTORS`, off by default — see
-{doc}`settings`) is the "lost my phone" factor, but it inherits whatever the
-mailbox it's sent to is worth as a credential.
-
-**It's usually also your password-reset channel.** An attacker who already has a
-victim's password and can reach their inbox — a shared family computer, a mail
-client left signed in, a compromised email provider — can satisfy both factors
-through the same channel. Recommend it as a *fallback* for someone who has lost
-their authenticator and their recovery codes, not as the factor you steer a
-high-value account (an administrator, anyone with billing access) toward. TOTP and
-WebAuthn don't share this property: neither can be satisfied by reading mail.
-
-**The enrolled address is fixed.** A code is sent to the address captured in
-`Authenticator.data` at enrollment time, not to whatever `user.email` says right
-now. A factor is possession of a specific mailbox; following a mutable profile
-field would mean that changing it — by whatever means the host project allows —
-silently redirects the factor to a mailbox chosen by whoever changed it. Changing
-the enrolled address is therefore a remove-and-re-enroll, not an edit.
-
-### Notifications
-
-`MFA_NOTIFY_ON_CHANGE` (off by default) emails a user when a factor is added or
-removed, when a recovery code is spent, or when their last remaining primary factor
-goes. Treat it as a courtesy, not a control:
-
-- **Sending is best-effort.** A mail-backend failure is logged at `ERROR` and
-  dropped, never raised — the security action it's reporting on (removing a key you
-  believe is compromised, say) has already succeeded and must not be rolled back or
-  blocked by a mail outage. A notification not arriving in someone's inbox says
-  nothing about whether the underlying action happened.
-- **Don't build alerting on it.** A delivered email is not a durable audit record,
-  and there is no retry or dead-letter queue behind it. The `django_mfa.events`
-  signals it's built on (see {doc}`api`) fire unconditionally, whether or not
-  `MFA_NOTIFY_ON_CHANGE` is on — connect your own receiver to a logging pipeline or
-  a queue if you need something you can actually alert on.
-
-### Secrets at rest
-
-TOTP secrets are stored in plaintext. WebAuthn stores only a public key, so there is
-no secret to protect. Recovery codes are hashed, not encrypted, because they never
-need to be read back.
+The email factor (`"email"` in `MFA_FACTORS`, off by default) is only as strong as
+the mailbox it sends to.
 
 :::{warning}
-`MFA_SECRET_ENCRYPTION_KEYS` does **not** encrypt anything, despite the name. It
-signs the stored value with `django.core.signing`, which gives integrity, not
-confidentiality — the payload is plain base64 and anyone holding the database can
-recover the secret without any key. It is deprecated and kept only so existing values
-keep reading. Treat the TOTP secret column as plaintext when deciding who may read
-your database.
+The mailbox is usually also your password-reset channel. Anyone who can read the
+user's email can then pass both factors. Offer email as a fallback for users who
+have lost their other factors, not as the factor for administrators or anyone with
+access to money.
 :::
 
-Any comparison between a submitted value and a stored one goes through
-`django_mfa.utils.strings_equal`, which normalizes and then uses
-`hmac.compare_digest`. There is no `==` on a secret anywhere in the package.
+- **Codes go to the address stored at enrollment**, not to whatever `user.email`
+  says now. Changing a user's profile address does not move the factor; the user
+  removes and re-enrolls it.
+- **Codes are short-lived and capped.** A code is valid for `MFA_EMAIL_CODE_VALIDITY`
+  seconds (default 300) and is discarded after three wrong guesses. The session
+  holds only an HMAC of it, keyed by `SECRET_KEY`.
+
+### Data at rest
+
+| Data | How it is stored |
+|---|---|
+| TOTP secret | Readable, in `Authenticator.data`. Anyone with the database can generate valid codes. |
+| WebAuthn credential | Public key, credential ID and sign counter. Nothing in it lets anyone sign in. |
+| Recovery codes | Hashed with Django's password hasher (except migrated codes, above). |
+| Email factor | The enrolled address. |
+| Rate-limit counters | `RateLimitCounter.scope` holds user IDs and client IP addresses. |
+| WebAuthn user handle | A random UUID per user (`MfaUserHandle`). |
+
+:::{warning}
+`MFA_SECRET_ENCRYPTION_KEYS` does not encrypt anything. It signs values with
+`django.core.signing` under an `mfa1:` prefix, which protects integrity only: the
+secret is recoverable from the database without any key. It is deprecated. Treat
+the TOTP secret column as plaintext, and protect it with database or disk
+encryption and access control.
+:::
+
+Submitted codes are compared in constant time, with `django_mfa.utils.strings_equal`
+or Django's password hasher.
 
 ### Django admin
 
-`AuthenticatorAdmin` never exposes `Authenticator.data` — not as a form field, not in
-the changelist, not as a search field. That blob holds the TOTP secret, the
-recovery-code hashes and the WebAuthn credential, so under a default `ModelAdmin` any
-staff account with `view_authenticator` could read another user's TOTP secret
-(including a superuser's) and generate valid codes for them, and one with
-`change_authenticator` could replace it with a secret of its own choosing.
+- **`AuthenticatorAdmin` never shows `Authenticator.data`**: not as a field, a
+  column or a search field. That blob holds TOTP secrets, so a staff user who could
+  read it could generate codes for anyone, including a superuser.
+- **Adding and editing are disabled.** Deleting is allowed, so support staff can
+  revoke a lost factor.
+- **Deleting in the admin sends no `factor_removed` signal.** Use
+  `manage.py mfa_reset` when the removal must reach your audit receivers (see
+  {doc}`operations`). If you register your own `ModelAdmin` for `Authenticator`, keep
+  `data` out of it.
 
-Adding and editing are disabled outright. **Deleting is deliberately still allowed**
-— revoking a lost authenticator for a locked-out user is the one legitimate support
-operation here, and removing it would push operators into editing the database by
-hand.
+`MFA_PROTECT_ADMIN = True` makes the default admin site require a verified session
+and adds staff users to `MFA_REQUIRED`. See {doc}`enforcement`.
 
-If you register your own `ModelAdmin` for `Authenticator`, keep `data` out of it.
+### JSON API
 
-### WebAuthn user handles
+The API is not reachable unless you include `django_mfa.api.urls`. The middleware
+lets API requests through; every endpoint applies the same checks itself and
+answers with a status code instead of a redirect. Session tokens for cookie-less
+clients are server-side session keys, bound to the user they were issued to. CSRF
+protection is skipped only for requests that carry no cookies at all. See
+{doc}`rest_api`.
 
-The opaque handle a passkey hands back during passwordless login is a **stored random
-UUID**, not a signed derivation of the user's primary key.
+### Notifications
 
-That distinction is deliberate and load-bearing. Rotating `SECRET_KEY` is routine
-security hygiene; passkeys are registered once and used for years. A handle derived
-from `SECRET_KEY` would become unresolvable the moment you rotated it — breaking
-passwordless login for every user with a passkey, silently, with no sign until they
-tried to log in. A stored value survives both key rotation and username changes while
-leaking no identity.
+`MFA_NOTIFY_ON_CHANGE` (off by default) emails users about changes to their
+factors. It is a courtesy, not a control: a failed send is logged at `ERROR` and
+dropped. For an audit trail, connect receivers to the signals in {doc}`api`, which
+fire whether or not notifications are on.
 
-### Open redirects
+### Redirects after verification
 
-The `next` parameter on verification is validated against the request's host and
-scheme before use, falling back to `LOGIN_REDIRECT_URL`. A verification link cannot
-be used to bounce a user to an attacker's site.
+The `next` parameter is used only when it points at the request's own host (and
+over HTTPS when the request was). Anything else falls back to
+`LOGIN_REDIRECT_URL`, so a verification link cannot send a user to another site.
 
 ### Startup checks
 
-Three misconfigurations that would otherwise fail silently in production are `Error`s
-at startup rather than warnings — see [System checks](settings.md#system-checks).
+`manage.py check` (and so `migrate` and `runserver`) runs `django_mfa.E001`–`E011`.
+All are errors. They catch settings that would otherwise fail silently or on a
+user's first request, from WebAuthn configuration to rate-limit specs. See
+[System checks](settings.md#system-checks).
 
 ## What it does not defend against
 
-Stated plainly, so you can decide what else you need:
-
-- **Real-time phishing / adversary-in-the-middle for TOTP.** A convincing fake login
-  page can collect a password and a TOTP code and replay both immediately. This is
-  inherent to shared-secret OTP, not specific to this package. **WebAuthn is the
-  mitigation** — credentials are bound to the origin, so a passkey cannot be used on
-  an attacker's domain. If phishing is in your threat model, prefer passkeys and
-  consider not offering TOTP.
-- **Compromised sessions, for actions django-mfa doesn't know about.** Adding,
-  removing or regenerating a factor already requires a *recent* challenge, not
-  merely a verified session — see [Step-up re-authentication](enforcement.md#step-up-re-authentication).
-  For any other sensitive action of your own, say, changing a password, apply the
-  same decorator (`mfa_recent_required`/`MfaRecentRequiredMixin`) yourself; a plain
-  verified session is otherwise good for the life of that session.
-- **A compromised server.** TOTP secrets are decryptable by your application by
-  definition. Encryption at rest protects against a leaked database dump, not
-  against code execution on your host.
-- **Malware on the user's device**, SIM swapping (there is no SMS factor — that's
-  intentional), or a stolen unlocked phone.
-- **Enrollment-time identity.** django-mfa verifies that whoever is logged in
-  controls the factor; whether that person should have been logged in is your login
-  flow's job.
-- **Account recovery policy.** There is no back door. An administrator deleting a
-  user's `Authenticator` rows is the recovery path, and verifying identity before
-  doing so is on you.
+- **Real-time phishing of TOTP and emailed codes.** A fake login page can collect a
+  password and a code and replay both at once. WebAuthn is the defence: credentials
+  are bound to your domain. If phishing is in your threat model, steer users to
+  passkeys and consider not offering TOTP or email.
+- **A stolen verified session.** Whoever holds the session cookie holds a verified
+  session until it ends. django-mfa asks for a fresh challenge only before changing
+  factors; protect your own sensitive views with `mfa_recent_required` (see
+  [Step-up re-authentication](enforcement.md#step-up-re-authentication)).
+- **A leaked database or backup.** TOTP secrets in it are readable and generate
+  valid codes. Code execution on your server is worse: it can read anything.
+- **Someone who has the password before the user enrolls.** A user's first factor
+  is enrolled with only a password login. If an attacker gets there first, they
+  enroll their own factor. `MFA_REQUIRED` with a short grace period narrows that
+  window; it does not close it.
+- **Malware on the user's device, or a stolen unlocked phone** that holds their
+  authenticator app or passkeys.
+- **Account recovery.** There is no built-in recovery flow. An operator removing a
+  user's factors (`manage.py mfa_reset`) is the recovery path, and checking the
+  user's identity first is your process.
 
 ## Production checklist
 
-Before turning this on for real users:
+Work through this before turning MFA on for real users.
 
 **Configuration**
 
-- [ ] `MFA_EXEMPT_PATHS` includes your logout URL, and you have tested logging out
-      from a half-verified session.
-- [ ] `MFA_FIDO2_RP_ID` is your registrable domain, set once, and recorded somewhere
-      as never-to-be-changed.
-- [ ] `manage.py check` is clean, with nothing added to `SILENCED_SYSTEM_CHECKS` that
-      you can't justify.
-- [ ] `MFA_ISSUER_NAME` is set, so authenticator apps show your product name.
+- [ ] Your logout URL is in `MFA_EXEMPT_PATHS`, written exactly as `request.path`
+  sees it (for example `"/accounts/logout/"`). Check it: log in as a user with a
+  factor, stop at the challenge, and confirm you can log out.
+- [ ] `manage.py check --deploy` shows no `django_mfa` errors, and nothing in
+  `SILENCED_SYSTEM_CHECKS` that you cannot justify.
+- [ ] `MFA_FIDO2_RP_ID` is your registrable domain, and you have recorded that it
+  must never change. Changing it invalidates every registered passkey and key.
+- [ ] `MFA_ISSUER_NAME` is set, so authenticator apps show your product's name.
+- [ ] You have decided who must enroll (`MFA_REQUIRED`), and set
+  `MFA_PROTECT_ADMIN = True` so staff need a second factor to use the admin.
+- [ ] `MFA_SECRET_ENCRYPTION_KEYS` is unset on a new install. On an existing install
+  that has it set, every key that has signed a stored value is still in the list.
+- [ ] If you enable the email factor, you accept that the mailbox becomes a
+  credential ([Emailed codes](#emailed-codes)).
 
-**Infrastructure**
+**Network**
 
-- [ ] **A shared cache backend** (Redis, Memcached) — not `LocMemCache` — or rate
-      limiting is per-process and your effective limit is multiplied by your worker
-      count.
-- [ ] HTTPS everywhere. WebAuthn requires a secure context, and a session cookie
-      carrying a verified MFA state deserves `SESSION_COOKIE_SECURE = True`.
-- [ ] Server clock synced via NTP. TOTP tolerates one 30-second window either side;
-      drift beyond that rejects correct codes.
+- [ ] The site is served only over HTTPS, with `SESSION_COOKIE_SECURE = True` and
+  `CSRF_COOKIE_SECURE = True`. Browsers refuse WebAuthn outside a secure context.
+- [ ] Behind a proxy or load balancer, `MFA_CLIENT_IP_RESOLVER` returns the real
+  client address (see {doc}`settings`). Check it on the database backend: after a
+  failed attempt, the `scope` of the new `RateLimitCounter` row contains your own
+  address, not your proxy's.
+- [ ] Server clocks are synchronised with NTP. Drift of more than about 30 seconds
+  starts rejecting correct TOTP codes.
 
-**Data**
+**Rate-limit storage**
 
-- [ ] Decide about `MFA_SECRET_ENCRYPTION_KEYS`. If you enable it, the keys are in
-      your secret store, and you know that existing plaintext secrets are not
-      retroactively encrypted.
-- [ ] Your database backups are protected at least as well as your password hashes —
-      they now contain second-factor material too.
+- [ ] With the default database backend, `manage.py mfa_prune --quiet` runs on a
+  schedule (daily is enough, next to `clearsessions`). Expired rows hold client IP
+  addresses until it does.
+- [ ] With `MFA_RATE_LIMIT_BACKEND = "cache"`, the cache is Redis or Memcached,
+  shared by every worker.
+- [ ] You have chosen `MFA_RATE_LIMIT_FAIL_OPEN`: allow attempts during a store
+  outage (default) or refuse them.
+
+**Data and monitoring**
+
+- [ ] Database access is restricted, and the database and its backups are
+  encrypted at rest. Unlike password hashes, the TOTP secrets in them work as soon
+  as someone reads them.
+- [ ] The `django_mfa` logger reaches your monitoring. Rate-limit store outages and
+  failed email deliveries are logged there at `ERROR`.
+- [ ] If you need an audit trail, receivers are connected to the signals in
+  {doc}`api`.
 
 **Process**
 
-- [ ] A documented recovery procedure for a user with no device and no recovery
-      codes, including how staff verify identity first.
-- [ ] Your support team knows that deleting an `Authenticator` row removes the user's
-      second factor entirely.
-- [ ] If you plan to narrow `MFA_FACTORS` later, you know it silently de-protects
-      users enrolled in the removed factor — see the warning in {doc}`settings`.
+- [ ] There is a written recovery procedure for a user with no device and no
+  recovery codes, including how staff verify their identity before running
+  `manage.py mfa_reset`.
+- [ ] Support staff know that deleting an `Authenticator` row removes that factor
+  immediately, and that deleting it in the admin is not reported to signal
+  receivers.
+- [ ] Anyone who might narrow `MFA_FACTORS` later knows that users enrolled only in
+  a removed factor stop being challenged (see {doc}`settings`).
 
 ## Reporting a vulnerability
 
-Please report security issues privately rather than in a public issue tracker:
+Report security issues privately, not in the public issue tracker:
 [open a security advisory](https://github.com/MicroPyramid/django-mfa/security/advisories/new)
 on the repository.

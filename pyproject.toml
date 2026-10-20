@@ -84,8 +84,10 @@ dev = [
 # Kept as its own group so a test run doesn't pull the whole Sphinx stack.
 docs = [
     "sphinx>=7",
-    "sphinx-rtd-theme>=2",
     "myst-parser>=3",
+    "furo>=2024.8.6",
+    "sphinx-copybutton>=0.5.2",
+    "sphinx-design>=0.6",
 ]
 
 # ---------------------------------------------------------------------------

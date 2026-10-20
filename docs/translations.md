@@ -1,122 +1,196 @@
 # Translations
 
-Every string django-mfa shows a user is translatable, and **six languages are
-live**: a user whose browser asks for one of them gets django-mfa's screens in
-it, with no configuration beyond switching Django's own i18n on.
+django-mfa's screens, emails and JSON API error messages ship in six languages
+besides English. A user whose browser asks for one of them sees django-mfa in that
+language once your project picks a language per request.
 
-## What ships
+## Switching languages on
 
-    django_mfa/locale/django.pot                     the template
-    django_mfa/locale/<lang>/LC_MESSAGES/django.po   the source catalog
-    django_mfa/locale/<lang>/LC_MESSAGES/django.mo   the compiled catalog
+Add Django's `LocaleMiddleware`, after the session middleware and before the
+common middleware:
 
-`de`, `es`, `fr`, `pt_BR`, `ja`, `zh_Hans` — complete, with no entry left
-untranslated or `fuzzy`.
+```python
+# settings.py
+USE_I18N = True  # Django's default
 
-:::{note}
-These catalogs were **machine-drafted and maintainer-reviewed, not reviewed by
-a native speaker.** They are live because a good translation that reaches
-users beats a perfect one that never ships — but if something reads wrong to
-you, that is a bug worth reporting, and a one-line pull request against a
-`.po` file is a genuinely welcome contribution.
-:::
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.locale.LocaleMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    # ...the rest, including django_mfa.middleware.MfaMiddleware
+]
+```
 
-The `.mo` files are the half that matters at runtime: **Django reads only
-compiled catalogs.** A `.po` is the source a translator edits; nothing serves
-it directly.
+To check it worked, set your browser's preferred language to German and open the
+security page (`mfa:security_settings`). The heading should read
+"Zwei-Faktor-Authentifizierung".
 
-## Using them in your project
+Without `LocaleMiddleware` (or another way of activating a language), every
+request uses `LANGUAGE_CODE`. That is enough for a site that runs in one language:
+set `LANGUAGE_CODE = "de"` and the MFA pages are in German.
 
-Django's i18n has to be switched on in the host project — django-mfa can't do
-it for you:
+## Shipped languages
 
-    USE_I18N = True
+| Language | Code in `LANGUAGES` | Catalog directory |
+|---|---|---|
+| German | `de` | `de` |
+| Spanish | `es` | `es` |
+| French | `fr` | `fr` |
+| Brazilian Portuguese | `pt-br` | `pt_BR` |
+| Japanese | `ja` | `ja` |
+| Simplified Chinese | `zh-hans` | `zh_Hans` |
 
-    MIDDLEWARE = [
-        ...,
-        "django.contrib.sessions.middleware.SessionMiddleware",
-        "django.middleware.locale.LocaleMiddleware",     # after sessions
-        "django.middleware.common.CommonMiddleware",
-    ]
+Django's default `LANGUAGES` includes all six. If you set your own `LANGUAGES`,
+a language you leave out is never selected.
 
-`LocaleMiddleware` is what picks a language per request. Without it every
-request uses `LANGUAGE_CODE` and per-user language selection does nothing.
+Every string is translated in every catalog. The translations were drafted by
+machine and reviewed by the maintainers, not by native speakers. If something
+reads wrong, please open an issue or send a pull request; see
+[Contributing a language or a fix](#contributing-a-language-or-a-fix).
 
-:::{warning}
-Shadowing a template drops its translations with it. A copy of
-`django_mfa/templates/django_mfa/verify_totp.html` in your own app replaces
-the shipped file *and* its `{% trans %}` tags — the strings in your copy are
-yours to translate, in your project's own catalog. See {doc}`customizing`.
-:::
+## Changing a wording
 
-## Working on the catalogs
+**For every language at once**, replace the template and write your own text; see
+[Replace individual templates](customizing.md#replace-individual-templates).
+Strings you leave unchanged inside `{% trans %}` keep django-mfa's translations.
+Strings you change are yours to translate in your project's own catalog.
 
-One command does everything mechanical:
+**For one language, without touching templates**, add the string to a catalog in
+one of your `LOCALE_PATHS`. Django gives those catalogs priority over every
+app's, so your translation wins. This works for English too:
 
-    uv run python tools/compile_catalogs.py
+```text
+# mfa_locale/en/LC_MESSAGES/django.po
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-It refreshes the `#:` source references in every catalog and recompiles every
-`.mo`. It never invents, reorders or drops a translation — editing those is
-the human part. `test_i18n.py` fails if a `.mo` is out of date with its `.po`,
-so a forgotten run is caught in CI rather than shipped as a translation
-nobody receives.
+msgid "Verify"
+msgstr "Confirm"
 
-This is `makemessages` + `msgfmt` reimplemented in Python
-(`django_mfa/tests/support/i18n.py`) because gettext's binaries are a system
-package this project declines to require — including of its own CI.
+msgctxt "second-factor method"
+msgid "Remove"
+msgstr "Delete"
+```
 
-### Fixing a translation
+```python
+# settings.py
+LOCALE_PATHS = [
+    BASE_DIR / "locale",      # your own strings, managed by makemessages
+    BASE_DIR / "mfa_locale",  # your django-mfa overrides
+]
+```
 
-Edit the `msgstr` in `django_mfa/locale/<lang>/LC_MESSAGES/django.po`, run the
-command above, and commit the `.po` and `.mo` together.
+```bash
+python manage.py compilemessages
+```
 
-Placeholders like `%(name)s` must appear in the translation exactly as in the
-source. Get one wrong and interpolation raises `KeyError` in the middle of
-somebody's sign-in — this is the one translation mistake that is an outage
-rather than an embarrassment. A test enforces it; understanding why matters
-more than the test does.
+`compilemessages` needs GNU gettext installed. Copy each `msgid`, and its
+`msgctxt` if it has one, exactly from django-mfa's `django.pot`. An entry whose
+text or context differs by a single character has no effect.
 
-### Adding a language
+Keep these overrides in a directory of their own, as above. `makemessages` only
+knows about strings in your own code, so in a catalog it manages it would mark
+django-mfa's entries obsolete, and obsolete entries are not compiled.
 
-Copy `django.pot` to `django_mfa/locale/<lang>/LC_MESSAGES/django.po`, set
-`Language:` and `Plural-Forms:` in its header, translate every `msgstr`, and
-run the command above.
+## Adding a language
 
-Getting `Plural-Forms` right matters more than it looks: it is what selects
-between `msgstr[0]` and `msgstr[1]`, so a wrong rule produces fluent text
-attached to the wrong number. The
-[gettext manual's table](https://www.gnu.org/software/gettext/manual/html_node/Plural-forms.html)
-has the correct expression for each language.
+1. Copy django-mfa's `django.pot` to
+   `mfa_locale/<directory>/LC_MESSAGES/django.po` in your project, where
+   `<directory>` is the locale name (`it`, `nl`, `pl`). This prints where the
+   installed package keeps it:
 
-A partial catalog is not useful here — a page rendered half in the user's
-language and half in English is worse than one rendered wholly in English —
-and `test_i18n.py` requires every entry to be translated.
+   ```bash
+   python -c "import django_mfa, pathlib; print(pathlib.Path(django_mfa.__file__).parent / 'locale' / 'django.pot')"
+   ```
+
+2. In its header, set `Language:` and `Plural-Forms:`. The
+   [gettext manual's table](https://www.gnu.org/software/gettext/manual/html_node/Plural-forms.html)
+   has the right `Plural-Forms` line for each language. A wrong one attaches
+   the right words to the wrong number.
+3. Fill in every `msgstr`. An entry left empty shows in English.
+4. Keep every placeholder, such as `%(code)s` or `%(remaining)s`, exactly as in
+   the `msgid`. A renamed placeholder makes Django fall back to English for that
+   string (or raise an error, for a string built in Python). A missing one drops
+   the value without warning: a sign-in email without its code.
+5. Add the directory to `LOCALE_PATHS` and run `python manage.py compilemessages`.
+
+Then, please consider contributing it back.
+
+## Contributing a language or a fix
+
+From a checkout of the repository:
+
+1. Edit or create `django_mfa/locale/<directory>/LC_MESSAGES/django.po`. For a
+   new language, follow the steps above, starting from `django_mfa/locale/django.pot`.
+2. Compile it. This does not need gettext:
+
+   ```bash
+   uv run python tools/compile_catalogs.py
+   ```
+
+3. Run the translation tests. They fail on an untranslated or `fuzzy` entry, a
+   `.mo` that does not match its `.po`, or a placeholder that differs from the
+   source string.
+
+   ```bash
+   uv run python test_runner.py django_mfa.tests.test_i18n
+   ```
+
+4. Send a pull request with the `.po` and the `.mo` together.
+
+## For maintainers
+
+### Regenerating catalogs
+
+```bash
+uv run python tools/compile_catalogs.py
+```
+
+This refreshes the `#:` source references in `django.pot` and every `.po`, and
+recompiles every `.mo`. It never adds, removes or changes a translation. It is a
+pure-Python stand-in for `makemessages` and `msgfmt`, so contributors and CI do
+not need gettext.
+
+### Why the `.mo` files are committed
+
+Django reads only compiled `.mo` files, so a `.po` edited without recompiling
+changes nothing a user sees. The build does not compile catalogs, and it leaves
+out anything `.gitignore` ignores. That is why `.gitignore` un-ignores the `.pot`
+and `.mo` files under `django_mfa/locale/`, and why each `.mo` is committed with
+its `.po`. `test_i18n.py` fails when the two disagree, and `test_packaging.py`
+fails when the wheel is missing a catalog.
 
 ### Adding or changing a string
 
-Wrap it: `{% trans %}` / `{% blocktrans %}` in a template, `gettext_lazy as _`
-in Python. Then add the entry by hand to `django.pot` and to each `.po`, and
-run the command above. `test_i18n.py` fails while the catalogs and the code
-disagree, so this cannot be half-done quietly.
+1. Wrap it: `{% trans %}` or `{% blocktrans %}` in a template, `gettext_lazy` in
+   Python.
+2. Add the entry by hand to `django.pot` and to every `.po`, translated. The
+   compile tool does not add entries, and the tests require every language to be
+   complete.
+3. Run `uv run python tools/compile_catalogs.py` and the tests.
 
-:::{warning}
-**Give a generic string a `context`.** gettext keys on the string itself, and
-Django merges every installed app's catalog into one per language — so a bare
-`{% trans "Save" %}` collides with `django.contrib.admin`'s own `"Save"`, and
-whichever app `INSTALLED_APPS` lists *first* wins the key. Admin is listed
-first in nearly every project.
+### Give generic strings a `context`
 
-The result is invisible: the page renders, in the right language, in another
-app's words — and only in the languages that app translates, so reading the
-English UI will never reveal it. `"Remove"` was exactly this, silently served
-as admin's wording, until it became:
+Django merges every installed app's catalog into one per language, keyed on the
+string itself. When two apps translate the same string, the app listed first in
+`INSTALLED_APPS` wins, and that is usually `django.contrib.admin`. A bare
+`{% trans "Remove" %}` was served with admin's wording in every language admin
+translates, which nobody reading the English page would notice. A context makes
+the key django-mfa's own:
 
-    {% trans "Remove" context "second-factor method" %}
+```html+django
+{% trans "Remove" context "second-factor method" %}
+```
 
-`test_i18n.py` now fails on any bare msgid that a bundled Django app also
-translates. The fix is always a context, never rewording around admin.
-:::
+In Python, use `pgettext_lazy("second-factor method", "Remove")`.
+`test_i18n.py` fails on any string without a context that a bundled Django app
+also translates. Fix it with a context, not by rewording.
 
-Two things are deliberately **not** translated: management-command output and
-system-check messages. Both are read by operators and developers, not end
-users, and both are matched against by scripts.
+### What is not translated
+
+Management command output and system check messages stay in English. Operators
+and developers read them, and scripts match against them.

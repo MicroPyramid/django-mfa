@@ -1,28 +1,36 @@
 # Contributing
 
-Feel free to create a new Pull request if you want to propose a new feature or fix a bug.
+Feel free to open a pull request if you want to propose a new feature or fix a bug.
 
 ## Development setup
 
-This project uses [uv](https://docs.astral.sh/uv/). There is no `requirements.txt` or `setup.py` -- `pyproject.toml` is the only packaging file, and `uv run` creates and syncs the environment for you, so there is no virtualenv to activate:
+This project uses [uv](https://docs.astral.sh/uv/). There is no `requirements.txt` or `setup.py`: `pyproject.toml` is the only packaging file, and `uv run` creates and syncs the environment for you, so there is no virtualenv to activate.
 
-    uv run python test_runner.py          # the whole suite
-    uv run ruff check .                   # lint
-    uv run ruff check . --fix             # and fix what's auto-fixable
+```bash
+uv run python test_runner.py          # the whole suite
+uv run ruff check .                   # lint
+uv run ruff check . --fix             # and fix what's auto-fixable
+```
 
-To run a single test, pass a label -- `test_runner.py` falls back to the whole suite only when given none:
+To run a single test, pass a label. `test_runner.py` falls back to the whole suite only when given none:
 
-    uv run python test_runner.py django_mfa.tests.test_conf
+```bash
+uv run python test_runner.py django_mfa.tests.test_conf
+```
 
-To check one Python/Django combination locally (CI runs the grid of Python 3.10-3.13 against Django 4.2, 5.2 and 6.1, minus the two combinations Django 6.1 doesn't support — it needs Python 3.12+):
+To check one Python/Django combination locally (CI runs the grid of Python 3.10–3.13 against Django 4.2, 5.2 and 6.1, minus the two combinations Django 6.1 doesn't support, since it needs Python 3.12+):
 
-    uv run --python 3.12 --with "django~=4.2.0" python test_runner.py
+```bash
+uv run --python 3.12 --with "django~=4.2.0" python test_runner.py
+```
 
 CI also runs the suite once at the *lowest* versions `pyproject.toml` allows: Python 3.10, with Django, `fido2` and `qrcode` each at their declared floor. Every other job runs the newest versions `uv.lock` pins, so this is the only check that those floors are true. To run it yourself, use a separate worktree. The run rewrites `uv.lock`, and a lowest-version lockfile left behind by an earlier run makes uv keep the versions it already holds instead of testing a floor you have since changed:
 
-    git worktree add --detach ../django-mfa-lowest
-    cd ../django-mfa-lowest
-    uv run --python 3.10 --resolution lowest-direct python test_runner.py
+```bash
+git worktree add --detach ../django-mfa-lowest
+cd ../django-mfa-lowest
+uv run --python 3.10 --resolution lowest-direct python test_runner.py
+```
 
 A worktree holds committed files only, so commit the change you want to check first.
 
@@ -30,15 +38,17 @@ A worktree holds committed files only, so commit the change you want to check fi
 
 The docs are Markdown, read by Sphinx through [MyST](https://myst-parser.readthedocs.io/), and live in `docs/`:
 
-    cd docs && make html          # build into docs/_build/html
-    cd docs && make linkcheck     # verify external links still resolve
+```bash
+cd docs && make html          # build into docs/_build/html
+cd docs && make linkcheck     # verify external links still resolve
+```
 
 `-W` is on by default, so a warning fails the build here exactly as it does in CI and on Read the Docs.
 
 Two things that build output alone will *not* catch, both pinned by `django_mfa/tests/test_docs.py` instead:
 
-- With MyST's `colon_fence` extension off, `:::{warning}` is not an error -- it renders the literal text `:::{warning}` into the published page and the build still reports success.
-- A page missing from `index.md`'s toctree builds fine and simply never gets linked.
+- With MyST's `colon_fence` extension off, `:::{warning}` is not an error. It renders the literal text `:::{warning}` into the published page and the build still reports success.
+- A page missing from `index.md`'s toctree builds fine and is never linked.
 
 When you add a setting to `django_mfa/conf.py`, document it in `docs/settings.md` in the same change; a test asserts every key in `DEFAULTS` appears there.
 
@@ -55,7 +65,7 @@ To cut a release, in full:
     `CHANGELOG.md`, in the same PR. Merge it to `master`.
 
 There is no step 2. You never create a tag and you never create a GitHub
-Release -- `.github/workflows/tag-release.yml` sees the version change, creates
+Release. `.github/workflows/tag-release.yml` sees the version change, creates
 tag `v<version>` on the commit that carried it, publishes a GitHub Release
 (marked pre-release if PEP 440 says the version is one), and starts
 `publish.yml` against that tag.
@@ -71,30 +81,30 @@ installs the wheel into a clean environment and starts Django against it, and
 only then uploads.
 
 Two guards survive from when tags were typed by hand, because the cost of
-getting a version wrong is unbounded -- PyPI does not allow re-uploading one:
+getting a version wrong is unbounded: PyPI does not allow re-uploading one.
 
 - The tag must match `pyproject.toml`'s `version`. Nothing in the build
   connects them: hatchling never looks at the tag, so a release tagged `v4.0.0`
   cut from a tree still saying `4.0.0a1` would publish `4.0.0a1` and report
-  success. That is not hypothetical -- it happened on 2026-08-13, and this
+  success. That is not hypothetical. It happened on 2026-08-13, and this
   guard is what stopped it.
 - The publish job must run on a tag ref. The `pypi` deployment environment only
   accepts tags matching `v*`, and the guard fails loudly rather than skipping
   when handed a branch.
 
-To release a version already sitting on `master` -- or the first time, when the
-version predates all of this -- run **Tag release** from the Actions tab
+To release a version already sitting on `master` (or the first time, when the
+version predates all of this), run **Tag release** from the Actions tab
 manually. Re-running it is harmless: if `v<version>` already exists it does
 nothing.
 
 :::{warning}
-Renaming `publish.yml`, or the `pypi` environment, breaks publishing --
-both names are part of what PyPI trusts, and a mismatch is rejected at upload
+Renaming `publish.yml`, or the `pypi` environment, breaks publishing. Both
+names are part of what PyPI trusts, and a mismatch is rejected at upload
 time with an authentication error that does not mention the rename. Change it on
 [PyPI](https://pypi.org/manage/project/django-mfa/settings/publishing/) first.
 
 `tag-release.yml` reaches `publish.yml` through `workflow_dispatch`, not through
-the Release it just created, and that is not incidental. GitHub suppresses
+the Release it has created, and that is not incidental. GitHub suppresses
 workflow runs caused by its own `GITHUB_TOKEN` so workflows cannot loop, with
 `workflow_dispatch` and `repository_dispatch` as the only exceptions. Chaining
 on `release: published` instead fails *silently*: the Release appears, nothing
@@ -103,22 +113,45 @@ publishes, and no workflow run exists anywhere to explain why.
 
 ## Sending pull requests
 
-1.  Fork the repo:
+1.  [Fork](https://docs.github.com/en/pull-requests/how-tos/work-with-forks/fork-a-repo)
+    [MicroPyramid/django-mfa](https://github.com/MicroPyramid/django-mfa) on
+    GitHub, then clone your fork and add the original repository as `upstream`:
 
-        https://github.com/MicroPyramid/django-mfa
+    ```bash
+    git clone https://github.com/YOUR-USERNAME/django-mfa.git
+    cd django-mfa
+    git remote add upstream https://github.com/MicroPyramid/django-mfa.git
+    ```
 
-2.  Create a branch for your specific changes:
+2.  Create a branch for your specific changes, starting from an up-to-date
+    `master`:
 
-        $ git checkout master
-        $ git pull
-        $ git checkout -b feature
+    ```bash
+    git checkout master
+    git pull upstream master
+    git checkout -b my-change
+    ```
 
-    To simplify things, please, make one branch per issue (pull request). It's also important to make sure your branch is up-to-date with upstream master, so that maintainers can merge changes easily.
+    Please make one branch per issue (and per pull request). Keep your branch
+    up to date with upstream `master`, so that maintainers can merge changes
+    easily.
 
-3.  Commit changes. Please update docs, if relevant.
+3.  Commit your changes. Please update the docs, if relevant.
 
-4.  Don't forget to run the tests (and `ruff`) to check that nothing breaks.
+4.  Run the tests and `ruff` (see [Development setup](#development-setup)) to
+    check that nothing breaks:
 
-5.  Ideally, write your own tests for new feature/bug fix.
+    ```bash
+    uv run python test_runner.py
+    uv run ruff check .
+    ```
 
-6.  Submit a [pull request](https://help.github.com/articles/using-pull-requests).
+5.  Ideally, write your own tests for the new feature or bug fix.
+
+6.  Push the branch to your fork and
+    [open a pull request](https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/creating-a-pull-request-from-a-fork)
+    against `master`:
+
+    ```bash
+    git push -u origin my-change
+    ```

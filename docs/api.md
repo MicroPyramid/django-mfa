@@ -1,260 +1,345 @@
 # Public API
 
-The Python surface a host project can depend on. Anything not listed here — the
-adapters' internals, `django_mfa.otp`, `django_mfa.totp`, the view functions
-themselves — is an implementation detail and may change without a deprecation cycle.
+The Python names a host project can rely on. Anything not on this page (adapter
+internals, `django_mfa.otp`, `django_mfa.totp`, `django_mfa.flows`, the view
+functions) is internal and can change without a deprecation period.
 
-## `django_mfa.session`
+The URL configurations are `django_mfa.urls` (namespace `mfa`) and the opt-in
+`django_mfa.api.urls` (namespace `mfa_api`). See {doc}`installation_setup` and
+{doc}`rest_api`.
 
-Read and write the MFA state on a session. **Always use these** rather than touching
-`request.session["mfa"]`: the dict's shape is not a public contract and has changed
-once already.
+## Session state: `django_mfa.session`
 
-| Function | Purpose |
+Read and write MFA state through these functions, never through
+`request.session["mfa"]`. The shape of that value is not part of the API.
+
+```python
+# myapp/views.py
+from django_mfa import session
+
+if session.is_verified(request):
+    ...
+```
+
+| Function | Returns or does |
 |---|---|
-| `is_verified(request)` | `True` if this session has completed a second factor. The one you'll actually use. |
-| `is_pending(request)` | `True` if the session is awaiting a second factor. |
-| `start_pending(request)` | Mark the session as awaiting verification. |
-| `mark_verified(request, method)` | Mark it satisfied by `method` (a factor type string). |
-| `verified_at(request)` | Unix timestamp of this session's last successful challenge, or `None`. |
-| `is_fresh(request, max_age)` | `True` if the session verified a factor within the last `max_age` seconds. A verified session with no `verified_at()` (e.g. one from before 4.2.0) counts as stale, not fresh — see {doc}`enforcement`'s step-up section. This is the primitive `mfa_recent_required`/`MfaRecentRequiredMixin` are built on; use it directly if you're writing your own step-up policy instead of the decorator/mixin. |
-| `reset(request)` | Remove MFA state entirely. |
+| `is_verified(request)` | `True` if this session has passed a second factor. Use this to decide whether to trust a session. |
+| `is_pending(request)` | `True` if the session was marked pending at login and has not passed yet. `False` for a session that was never marked, so `not is_pending()` does not mean verified. |
+| `verified_at(request)` | Unix timestamp (`int`) of the last successful challenge, or `None`. |
+| `is_fresh(request, max_age)` | `True` if the session passed a challenge within the last `max_age` seconds. A verified session with no timestamp counts as stale. |
+| `start_pending(request)` | Mark the session as waiting for a second factor. |
+| `mark_verified(request, method)` | Mark it verified by `method` (a factor type string) and record the time. |
+| `reset(request)` | Remove the MFA state from the session. |
 
-Example:
+You rarely need the last three: login marks the session pending, and the verify
+views mark it verified.
 
-    from django_mfa import session
+## Factors: `django_mfa.registry`
 
-    if session.is_verified(request):
-        ...
-
-You rarely need the writers: the `user_logged_in` receiver calls `start_pending()`
-and the verify view calls `mark_verified()`.
-
-## `django_mfa.registry`
-
-The registry decides which factors exist and what each user holds. Import the
-singleton — do not construct your own:
-
-    from django_mfa.registry import registry
+```python
+from django_mfa.registry import registry
+```
 
 | Method | Returns |
 |---|---|
-| `primary_enabled_for(user)` | Adapters that mean this user **is protected**. Excludes recovery codes. **This is the predicate for "does this user have MFA".** |
-| `has_primary_factor(user)` | The same question as a `bool`, in **one** query rather than one per registered adapter. Use this when you only need yes/no — the enrollment wall, `@mfa_required` and the notification receivers all do, and on a busy site the difference is per request. Both methods read `Adapter.counts_as_primary_factor`, so they cannot disagree. |
-| `enabled_for(user)` | Adapters this user can **verify with right now**. Includes recovery codes. This is what to offer on a challenge screen. |
-| `available_for(user)` | Adapters the user could still **add**. Excludes singletons they already hold and factors that aren't enrolled at all. |
+| `has_primary_factor(user)` | `True` if the user holds a factor that protects them on its own: one whose adapter has `counts_as_primary_factor = True`, which for the built-ins is everything except recovery codes. One query. This is the answer to "does this user have MFA". |
+| `primary_enabled_for(user)` | The adapters behind that answer, as a list. One query per registered adapter. |
+| `enabled_for(user)` | Adapters the user can verify with now, including recovery codes. What a challenge screen offers. |
+| `available_for(user)` | Adapters the user could add now: enrollable factors, minus single-instance factors they already hold. Email is left out for a user with no usable address. |
 | `all()` | Every registered adapter. |
-| `get(type)` | One adapter by type string. Raises `KeyError` if absent. |
-| `register(adapter)` | Add an adapter instance. Raises `ValueError` on a duplicate type. |
-| `unregister(type)` | Remove one. Raises `KeyError` if it wasn't registered. |
+| `get(type)` | The adapter for a type string. Raises `KeyError` if none is registered. |
+| `register(adapter)` | Register an adapter instance. Raises `ValueError` if its type is taken. |
+| `unregister(type)` | Remove an adapter. Raises `KeyError` if none is registered. |
 
-The distinction between the first two is the one that matters. A user holding only
-recovery codes appears in `enabled_for()` but not `primary_enabled_for()`, because
-recovery codes are exhaustible and must never be someone's sole factor. Deciding
-whether to challenge from `enabled_for()` would challenge users you cannot protect;
-deciding what to offer from `primary_enabled_for()` would hide the recovery option
-from exactly the people who need it.
+Never decide whether to challenge a user from `enabled_for()`. A user holding only
+recovery codes appears there but is not protected.
 
-`Adapter` is the base class for factor types — see {doc}`custom_factors`.
+`django_mfa.registry.Adapter` is the base class for a factor type; see
+{doc}`custom_factors`. The built-in adapters, which are also the `sender` of their
+signals, are `django_mfa.adapters.totp.TOTPAdapter`,
+`django_mfa.adapters.webauthn.WebAuthnAdapter`,
+`django_mfa.adapters.recovery_codes.RecoveryCodesAdapter` and
+`django_mfa.adapters.email.EmailAdapter`.
 
-## `django_mfa.models.Authenticator`
+## Models
+
+### `django_mfa.models.Authenticator`
 
 One row per enrolled factor.
 
 | Field | Notes |
 |---|---|
-| `user` | FK to `AUTH_USER_MODEL`, related name `mfa_authenticators`. |
-| `type` | `"totp"`, `"webauthn"`, or `"recovery_codes"` — see `Authenticator.Type`. |
-| `name` | User-supplied label. WebAuthn only, so several keys are distinguishable. |
-| `data` | `JSONField` of factor-specific state. Shape is owned by the adapter; don't reach into it. |
-| `created_at`, `last_used_at` | Timestamps. `last_used_at` is `None` until first use. |
+| `user` | Foreign key to `AUTH_USER_MODEL`, related name `mfa_authenticators`. |
+| `type` | `"totp"`, `"webauthn"`, `"recovery_codes"` or `"email"`: `Authenticator.Type.TOTP`, `.WEBAUTHN`, `.RECOVERY_CODES`, `.EMAIL`. |
+| `name` | The label a user gives a security key or passkey. Empty for other types. |
+| `data` | `JSONField` owned by the adapter. It holds the TOTP secret in readable form, so never display or log it. |
+| `created_at`, `last_used_at` | `last_used_at` is `None` until the first successful verification. |
 
-`record_usage()` stamps `last_used_at`. Adapters call it on successful verification.
+- `record_usage()` sets `last_used_at` to now. Adapters call it after a successful
+  verification.
+- `Authenticator.objects.for_user(user)` returns that user's rows.
+- The database constraint `mfa_one_singleton_authenticator_per_user` allows at most
+  one `totp`, one `recovery_codes` and one `email` row per user. `webauthn` rows are
+  unlimited.
 
-A database constraint (`mfa_one_singleton_authenticator_per_user`) allows at most one
-`totp` and one `recovery_codes` row per user; WebAuthn is unlimited.
+To remove every factor a user holds, use `manage.py mfa_reset <user>` (see
+{doc}`operations`), which sends `factor_removed` for each row.
+`Authenticator.objects.filter(user=user).delete()` removes them without any signal.
 
-To remove a user's MFA — the administrative recovery path:
+### `django_mfa.models.MfaExemption`
 
-    Authenticator.objects.filter(user=user).delete()
-
-## `django_mfa.models.MfaExemption`
-
-A user `MFA_REQUIRED` does not apply to, despite the predicate — see
-{doc}`enforcement`'s "Exempting a user" section. Written only by the
-`mfa_disable` management command (or by deleting the row, to revoke — see
-{doc}`operations`), never through a web view: exempting somebody from a
-security requirement is an operator action, not something a user can do to
-themselves.
+An operator's exemption of one user from `MFA_REQUIRED`. It is created by
+`manage.py mfa_disable`, never by a web view; see {doc}`operations`.
 
 | Field | Notes |
 |---|---|
-| `user` | `OneToOneField` to `AUTH_USER_MODEL`, related name `mfa_exemption`. |
-| `reason` | Required, free text. `mfa_disable` refuses to grant an exemption without one. |
-| `created_at` | Timestamp. |
-| `expires_at` | `None` means permanent. Otherwise the exemption stops applying once this passes. |
+| `user` | One-to-one with `AUTH_USER_MODEL`, related name `mfa_exemption`. |
+| `reason` | Required text. |
+| `created_at` | When it was granted. |
+| `expires_at` | `None` for permanent. Otherwise the exemption stops applying at this time. |
 
-| Method | Returns |
+- `MfaExemption.objects.active_for(user)` returns the user's exemption if it is in
+  force now, else `None`.
+- `exemption.is_active()` is the same check on an instance.
+
+An exemption lifts `MFA_REQUIRED` only. It does not open views protected by
+`@mfa_required`.
+
+## Enforcement
+
+### `django_mfa.middleware.MfaMiddleware`
+
+Add it after `django.contrib.auth.middleware.AuthenticationMiddleware`. For an
+authenticated request it makes two checks, in this order:
+
+1. **Pending.** If the session is pending, or was never challenged while the user
+   holds a primary factor, it redirects to `mfa:verify`. The second case covers a
+   session opened before the user enrolled their first factor (since 4.6.1).
+   Exempt: the picker, each factor's verify page and `MFA_EXEMPT_PATHS`.
+2. **Required but not enrolled.** If `MFA_REQUIRED` applies to the user and they hold
+   no primary factor, it redirects to `mfa:security_settings`. Exempt: the enroll
+   pages, the recovery codes page, the security page and `MFA_EXEMPT_PATHS`.
+
+URLs in the JSON API's namespace pass both checks; the API applies them itself and
+answers with status codes. `MFA_EXEMPT_PATHS` matches `request.path` exactly. To
+skip a whole path prefix, subclass the middleware and override
+`process_request()` (see {doc}`recipes`). The middleware also sets and clears the
+`MFA_QUICKLOGIN` cookie. See {doc}`enforcement` for the full behaviour.
+
+### `django_mfa.decorators`
+
+| Name | Use |
 |---|---|
-| `MfaExemption.objects.active_for(user)` | This user's exemption if it is currently in force (`expires_at` is `None` or in the future), else `None`. What `policy.mfa_required_for()` consults. |
-| `is_active()` | The same freshness check as an instance method, on an object you already have in hand. |
+| `@mfa_required` | The view needs a verified session. Sends an anonymous user to `LOGIN_URL`, a pending or never-challenged session to `mfa:verify`, and a user with no primary factor to `mfa:security_settings`. |
+| `MfaRequiredMixin` | The same for a class-based view. Put it before the view class in the bases. |
+| `@mfa_recent_required(max_age=None, next_url=None, allow_unenrolled=False)` | Everything `@mfa_required` checks, plus a challenge passed within `max_age` seconds (default `MFA_STEPUP_MAX_AGE`). Works bare or called. |
+| `MfaRecentRequiredMixin` | The same for a class-based view, configured with the attributes `mfa_stepup_max_age`, `mfa_stepup_next_url` and `mfa_allow_unenrolled`. |
 
-Suppresses `MFA_REQUIRED` only. It does not open `@mfa_required` views — see
-{doc}`enforcement` for why the two are deliberately independent.
+After a step-up challenge on a request other than `GET`, `HEAD`, `OPTIONS` or
+`TRACE`, the user is sent to `next_url` (default `mfa:security_settings`), because
+the request body cannot be replayed. `allow_unenrolled=True` lets a user with no
+factor through; use it only on a view that enrolls a first factor. See
+{doc}`enforcement`.
 
-## `django_mfa.conf.settings`
+### `django_mfa.policy`
 
-Resolved settings with defaults applied:
+Who `MFA_REQUIRED` applies to. See {doc}`enforcement`.
 
-    from django_mfa.conf import settings as mfa_settings
-    mfa_settings.MFA_VERIFY_RATE_LIMIT      # "5/5m" unless overridden
+| Name | Returns |
+|---|---|
+| `mfa_required_for(user)` | `True` if `MFA_REQUIRED` selects the user (plus every `is_staff` user when `MFA_PROTECT_ADMIN` is on), their grace period is over, and they have no active `MfaExemption`. It does not check whether they hold a factor. |
+| `is_staff` | A predicate for `MFA_REQUIRED`: users with `is_staff` set. |
+| `in_groups(*names)` | A new predicate for users in any of the named groups. Call it: `MFA_REQUIRED = in_groups("admins", "finance")`. |
+| `required_at(user)` | When the requirement starts for this user: the later of `MFA_REQUIRED_FROM` and the user's grace anchor (`date_joined` unless `MFA_GRACE_ANCHOR` says otherwise) plus `MFA_GRACE_PERIOD`. `None` when neither applies. |
+| `grace_state(user)` | A `GraceState` while the user would be required to enroll but is still inside their grace period, else `None`. |
+| `GraceState` | A frozen dataclass with `required_at` (a datetime) and `days_remaining` (an `int`, rounded up, for display only). |
 
-Asking for a name that isn't a django-mfa setting raises `AttributeError`, so typos
-surface immediately. See {doc}`settings` for the full list.
+### `django_mfa.admin_site.MfaAdminMixin`
 
-## `django_mfa.utils`
+For an `AdminSite` subclass of your own. `MFA_PROTECT_ADMIN` applies the same
+behaviour to `django.contrib.admin.site` only.
+
+```python
+# myproject/admin.py
+from django.contrib import admin
+
+from django_mfa.admin_site import MfaAdminMixin
+
+
+class MyAdminSite(MfaAdminMixin, admin.AdminSite):
+    pass
+```
+
+`has_permission()` also requires a verified session and a primary factor.
+`login()` sends a signed-in user who fails those checks to `mfa:verify` or
+`mfa:security_settings` instead of showing the admin login form. `MFA_ADMIN_STEPUP`
+applies here too, but system check `django_mfa.E011` refuses it unless
+`MFA_PROTECT_ADMIN` is also on. See {doc}`enforcement`.
+
+### `django_mfa.context_processors.mfa`
+
+Opt-in: add `"django_mfa.context_processors.mfa"` to the `context_processors` list
+in your `TEMPLATES` setting. It adds `mfa_grace` to every template context: the
+current user's `GraceState`, or `None` for anonymous users and anyone not in a
+grace period. It is computed only if a template uses it.
+
+```html+django
+{% if mfa_grace %}
+  <p>Set up two-factor authentication within {{ mfa_grace.days_remaining }} days.</p>
+{% endif %}
+```
+
+There is no context processor for "is this session verified". Call
+`session.is_verified(request)` in your view instead.
+
+## Settings: `django_mfa.conf.settings`
+
+Every django-mfa setting, with its default applied.
+
+```python
+from django_mfa.conf import settings as mfa_settings
+
+mfa_settings.MFA_VERIFY_RATE_LIMIT  # "5/5m" unless your settings override it
+```
+
+Values are read from Django's settings on every access, so `override_settings()`
+works in tests. A name that is not a django-mfa setting raises `AttributeError`.
+See {doc}`settings`.
+
+## Helpers
+
+### `django_mfa.utils`
 
 | Function | Purpose |
 |---|---|
-| `strings_equal(a, b)` | Timing-safe comparison. Normalizes to NFKC, then `hmac.compare_digest`. Use for any secret comparison in a custom factor. |
-| `build_uri(secret, name, initial_count=None, issuer_name=None)` | Build an `otpauth://` provisioning URI. |
+| `strings_equal(a, b)` | Constant-time string comparison: NFKC-normalises both, then uses `hmac.compare_digest`. Use it for every secret comparison in a custom factor. |
+| `build_uri(secret, name, initial_count=None, issuer_name=None)` | An `otpauth://` provisioning URI: TOTP, or HOTP when `initial_count` is given. |
 
-## `django_mfa.crypto`
+### `django_mfa.crypto` (deprecated)
 
-| Function | Purpose |
+These functions sign values; they do not encrypt them. Do not use them in new code.
+
+| Function | Behaviour |
 |---|---|
-| `encrypt(value)` | Encrypt with the first `MFA_SECRET_ENCRYPTION_KEYS` entry. Returns `value` unchanged when the setting is unset. |
-| `decrypt(value)` | Decrypt, trying every configured key. Passes through values stored before encryption was enabled. Raises `BadSignature` if no key works. |
+| `encrypt(value)` | Returns `value` unchanged when `MFA_SECRET_ENCRYPTION_KEYS` is unset. Otherwise returns `"mfa1:"` followed by `value` signed with the first key. The original is readable from the result without any key. |
+| `decrypt(value)` | Returns a value without the `mfa1:` prefix unchanged. Otherwise checks the signature against each configured key in turn and returns the original. Raises `django.core.signing.BadSignature` if no key matches, including after the setting has been removed. |
 
-Both are no-ops until a host project opts in, so a custom factor can use them
-unconditionally and gain encryption the day someone sets the keys.
+A custom factor that needs a secret kept confidential has to encrypt it some other
+way, such as a column-encryption library or database-level encryption. See
+{doc}`security`.
 
-## `django_mfa.handles`
+### `django_mfa.handles`
 
-WebAuthn user handles — opaque, stored, `SECRET_KEY`-independent.
+WebAuthn user handles: a random UUID per user, stored in `MfaUserHandle`.
 
-| Function | Purpose |
+| Function | Returns |
 |---|---|
-| `user_handle_for(user)` | The user's stable handle, creating it on first call. Idempotent. |
-| `user_from_handle(handle)` | Resolve a handle back to a user, or `None`. Never raises — input is untrusted. |
+| `user_handle_for(user)` | The user's handle as a string. Created on the first call, the same value afterwards. |
+| `user_from_handle(handle)` | The user, or `None` for an unknown or malformed handle. Never raises. |
 
-## `django_mfa.quicklogin`
+### `django_mfa.quicklogin`
 
-For a login page that offers a passkey to a returning visitor. Requires
-`MFA_QUICKLOGIN = True`.
+For a login page that offers a returning visitor their passkey. Requires
+`MFA_QUICKLOGIN = True`. `MfaMiddleware` already sets the cookie at login and
+clears it at logout; these are for a flow of your own. See {doc}`recipes`.
 
 | Name | Purpose |
 |---|---|
 | `COOKIE_NAME` | `"mfa_quicklogin"`. |
-| `user_from_hint(value)` | Resolve the cookie to a user, or `None`. Never raises. |
-| `set_hint(response, user, secure)` | Attach the cookie. No-op when the setting is off. |
-| `clear_hint(response)` | Remove it. Unconditional, so a stale cookie is cleaned up even after the feature is switched off. |
+| `user_from_hint(value)` | The user the cookie value names, or `None`. Never raises. |
+| `set_hint(response, user, secure)` | Sets the cookie (one year, `HttpOnly`, `SameSite=Lax`) and returns `response`. Does nothing when `MFA_QUICKLOGIN` is off. |
+| `clear_hint(response)` | Deletes the cookie, whether or not the setting is on, and returns `response`. |
 
-The cookie is a **UX hint, never a credential** — it identifies whose passkey prompt
-to show and authenticates nobody. See {doc}`recipes`.
+The cookie identifies an account; it authenticates nobody. Signing in still takes a
+full passkey ceremony.
 
-## `django_mfa.backends.WebAuthnBackend`
+### `django_mfa.backends.WebAuthnBackend`
 
-Required in `AUTHENTICATION_BACKENDS` for passwordless login. It performs no
-cryptography: the view validates the assertion first, and the backend only returns
-the already-resolved user through Django's standard contract.
+Required for passwordless login. Without it the user is anonymous again on the
+request after signing in; `django_mfa.E003` catches the omission.
 
-`authenticate()` deliberately ignores `username`/`password` and returns a user only
-when handed one explicitly as `mfa_user`, so another backend's call passing
-credentials through the chain can never authenticate anyone here.
+```python
+# settings.py
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "django_mfa.backends.WebAuthnBackend",
+]
+```
 
-Omitting this backend breaks passkey login **silently, one request later** —
-`django_mfa.E003` exists to catch that at startup.
+`authenticate(request, mfa_user=None, **kwargs)` returns `mfa_user` and ignores
+everything else, so a username and password passed down the backend chain never
+authenticate anyone here. The passkey view validates the assertion before it calls
+the backend. `get_user(user_id)` returns the user or `None`.
 
-## `django_mfa.middleware.MfaMiddleware`
+### `django_mfa.ratelimit`
 
-Redirects authenticated-but-unverified requests to the picker. Its exempt set is
-derived from the registry (the picker, plus each factor's verify page) unioned with
-`MFA_EXEMPT_PATHS`. Subclass and override `process_request` to carve out a path
-prefix — see {doc}`recipes`.
-
-## `django_mfa.ratelimit`
-
-Applied for you by the verify view; documented because a custom factor's tests may
-need to reset it.
+Every verification already goes through these; they are public so your tests and
+tools can inspect or reset budgets. `scope` is a factor type string such as
+`"totp"`.
 
 | Function | Purpose |
 |---|---|
-| `check(user, factor_type)` | `True` if another attempt is allowed on the per-user budget. |
-| `record_failure(user, factor_type)` | Count a failure against it. |
-| `clear(user, factor_type)` | Reset it, as a success does. |
-| `check_client(request, factor_type)` | The same question for the per-IP budget (`MFA_VERIFY_IP_RATE_LIMIT`). |
-| `record_client(request, factor_type)` | Count a failure against the client's address. |
-| `client_ip(request)` | The address that budget bills to, or `None`. |
-| `prune()` | Delete expired counters; what `manage.py mfa_prune` calls. |
+| `check(user, scope, setting="MFA_VERIFY_RATE_LIMIT")` | `True` if the user has budget left. `setting` names the budget to read. |
+| `record_failure(user, scope, setting="MFA_VERIFY_RATE_LIMIT")` | Count one failure against it. `record` is the same function. |
+| `clear(user, scope)` | Reset the user's counter, as a successful verification does. |
+| `check_client(request, scope)` | `True` if the client address has budget left under `MFA_VERIFY_IP_RATE_LIMIT`. Also `True` when no address is known or the setting is `None`. |
+| `record_client(request, scope)` | Count one failure against the client address. |
+| `client_ip(request)` | The address that budget is charged to, or `None`. |
+| `prune()` | Delete expired database counters and return how many were deleted. `manage.py mfa_prune` calls it. |
 
-There is deliberately no `clear_client()`. A successful verification clears the
-user's counter but must never clear the shared per-IP one — an attacker needs only
-one account they can log into for that to be a reset button. If a test needs the IP
-counter gone, delete the rows (or clear the cache) directly.
+There is no `clear_client()`: a success never resets the per-address counter (see
+{doc}`security`). To reset it in a test, delete the `RateLimitCounter` rows, or
+clear the cache on the cache backend.
 
 ## Signals
 
-django-mfa also **receives** `user_logged_in` (to stamp the session pending) and
-`user_logged_out` (to clear the quicklogin hint) — you don't connect anything for
-those, they're internal.
+Defined in `django_mfa.events` and also importable from `django_mfa.signals`.
 
-It **sends** six signals of its own, defined in `django_mfa.events` and re-exported
-from `django_mfa.signals` (either import path works):
-
-| Signal | kwargs | Fires when |
+| Signal | Keyword arguments | Sent when |
 |---|---|---|
-| `factor_added` | `user`, `authenticator`, `request` | An adapter's `complete_enroll()` succeeds — every ordinary enrollment, plus the first time a user generates recovery codes. `authenticator` is the created `Authenticator` row. |
-| `factor_removed` | `user`, `factor_type`, `name`, `request` | `mfa:manage` deletes a row. `factor_type` and `name` are passed by value, not as an instance — the row is already gone by the time this fires. |
-| `mfa_verified` | `user`, `method`, `request` | A second-factor challenge succeeds — from `verify_factor`'s success branch, and from `passkey_complete` when the passkey assertion carries User Verification (a UP-only passkey login logs the user in but has not satisfied a second factor, so it does not fire this). |
-| `mfa_verification_failed` | `user`, `method`, `request` | A challenge fails: a wrong code, a caught adapter exception (`ValueError`/`TypeError`/`KeyError`), **or an attempt refused outright by the rate limiter** — no adapter call happens in that last case, so a receiver watching for brute force needs to see refused attempts too, not only evaluated ones. |
-| `recovery_code_used` | `user`, `remaining`, `request` | A recovery code is spent. Sent from the adapter itself, not the view — only the adapter knows how many codes are left. |
-| `mfa_exemption_changed` | `user`, `reason`, `expires_at`, `revoked`, `request` | The `mfa_disable` management command grants or revokes an `MfaExemption`. `reason` and `expires_at` are `None` on a revoke. `sender` is the `MfaExemption` model class, not an `Adapter` subclass — there is no adapter behind this one. |
+| `factor_added` | `user`, `authenticator`, `request` | A factor is enrolled (in the HTML views or the JSON API), or a new set of recovery codes is generated. `authenticator` is the new row. |
+| `factor_removed` | `user`, `factor_type`, `name`, `request` | A user removes a factor, or `manage.py mfa_reset` removes one. The row is already deleted, so its type and name are passed as values. |
+| `mfa_verified` | `user`, `method`, `request` | A second-factor challenge succeeds, including a passwordless sign-in whose assertion carries user verification. |
+| `mfa_verification_failed` | `user`, `method`, `request` | A challenge fails: a wrong or malformed submission, or an attempt the rate limiter refused. Failed passwordless sign-ins do not send it. |
+| `recovery_code_used` | `user`, `remaining`, `request` | A recovery code is spent. `remaining` is how many unused codes are left. |
+| `mfa_exemption_changed` | `user`, `reason`, `expires_at`, `revoked`, `request` | `manage.py mfa_disable` grants or revokes an exemption. `reason` and `expires_at` are `None` on a revoke. |
 
-`request` is `None` when the event did not originate in a request — the
-`mfa_reset` and `mfa_disable` management commands emit these signals too, so
-that operator actions are auditable. Receivers must handle both, as the
-example below does.
+- **`sender`** is the adapter class, for example `TOTPAdapter`, so you can connect
+  with `sender=TOTPAdapter`. Two exceptions: `factor_removed` has `sender=None` when
+  the removed type is no longer registered (match on `factor_type` instead), and
+  `mfa_exemption_changed` always has `sender=MfaExemption`.
+- **`request` is `None`** when a management command (`mfa_reset`, `mfa_disable`)
+  sends the signal. Your receiver must handle that.
+- **Read the user from the `user` argument**, not from `request.user`. During a
+  passwordless sign-in, `mfa_verified` is sent before the user is logged in, while
+  `request.user` is still anonymous.
+- **A receiver cannot break the action it observes.** Signals are sent with
+  `send_robust()`, which catches and discards your receiver's exceptions. Log your
+  own failures.
+- **Some deletions send nothing.** Deleting an `Authenticator` in the admin or with
+  a queryset `delete()` sends no `factor_removed`. Connect `post_delete` on
+  `Authenticator` if you need to see every deletion. Deleting an `MfaExemption` in
+  the admin sends no `mfa_exemption_changed` either.
 
-Read the user off the `user` kwarg, never off `request.user`. On the passkey path
-`mfa_verified` fires between `session.mark_verified()` and `auth.login()` — the
-order is forced, since the login signal's own receiver checks whether the session is
-already verified — so `request.user` is still `AnonymousUser` there, while the `user`
-kwarg is correct on every path.
+A receiver for an audit log:
 
-`sender` is the `Adapter` **class** for the factor involved (e.g. `TOTPAdapter`), so
-a receiver can narrow with `sender=TOTPAdapter` — except on `factor_removed`, whose
-`sender` is `None` when the removed row's type is no longer registered (`MFA_FACTORS`
-was narrowed since it was enrolled, or a third-party adapter was unregistered): match
-on the `factor_type` kwarg instead of `sender` if you need to handle that case. On
-`mfa_exemption_changed`, `sender` is always the `MfaExemption` model class — there is
-no adapter behind an exemption at all.
+```python
+# myapp/signals.py
+import logging
 
-A receiver:
+from django.dispatch import receiver
 
-    import logging
+from django_mfa.signals import factor_removed
 
-    from django.dispatch import receiver
-    from django_mfa.signals import factor_removed
+logger = logging.getLogger("myapp.security")
 
-    logger = logging.getLogger("myapp.security")
 
-    @receiver(factor_removed)
-    def audit_factor_removal(sender, user, factor_type, name, request, **kwargs):
-        # request is None when mfa_reset/mfa_disable removed the row instead
-        # of a request to django_mfa:manage -- log a source that makes sense
-        # either way rather than assuming request is never None.
-        source = request.META.get("REMOTE_ADDR") if request else "console"
-        logger.info("factor removed: user=%s type=%s name=%r from=%s",
-                    user.pk, factor_type, name, source)
+@receiver(factor_removed)
+def audit_factor_removal(sender, user, factor_type, name, request, **kwargs):
+    # request is None when manage.py mfa_reset removed the factor.
+    source = request.META.get("REMOTE_ADDR") if request else "management command"
+    logger.info("factor removed: user=%s type=%s name=%r from=%s",
+                user.pk, factor_type, name, source)
+```
 
-All six are sent with `send_robust()`, not `send()`: a raising receiver cannot break
-the security action it's observing — enrolling, verifying, or removing a factor
-succeeds or fails independently of what your receiver does with the event. The other
-side of that trade is that `send_robust()` catches and discards the exception rather
-than letting it propagate, so a receiver that fails does so **silently** unless it
-logs its own failure.
-
-To react with something other than a signal receiver, `post_save` on `Authenticator`
-still works too — these signals are additional, not a replacement for the model
-layer.
+Import the module from your app's `AppConfig.ready()` so the receiver is connected.

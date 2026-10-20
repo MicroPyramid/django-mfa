@@ -1,0 +1,71 @@
+/* Small additions on top of Furo. Colours follow the brand values set in
+   conf.py's html_theme_options, so sphinx-design's cards and tabs match the
+   theme instead of using that extension's default blue. */
+
+:root {
+  --sd-color-primary: #0c4b33;
+  --sd-color-primary-highlight: #0a3d29;
+  --sd-color-tabs-label-active: #0c4b33;
+  --sd-color-tabs-underline-active: #0c4b33;
+  --sd-color-tabs-label-hover: #0c6e4a;
+  --sd-color-tabs-underline-hover: #0c6e4a;
+}
+
+body[data-theme="dark"] {
+  --sd-color-primary: #5fd4a0;
+  --sd-color-primary-highlight: #7fe0b5;
+  --sd-color-tabs-label-active: #5fd4a0;
+  --sd-color-tabs-underline-active: #5fd4a0;
+  --sd-color-tabs-label-hover: #7fe0b5;
+  --sd-color-tabs-underline-hover: #7fe0b5;
+}
+
+@media (prefers-color-scheme: dark) {
+  body:not([data-theme="light"]) {
+    --sd-color-primary: #5fd4a0;
+    --sd-color-primary-highlight: #7fe0b5;
+    --sd-color-tabs-label-active: #5fd4a0;
+    --sd-color-tabs-underline-active: #5fd4a0;
+    --sd-color-tabs-label-hover: #7fe0b5;
+    --sd-color-tabs-underline-hover: #7fe0b5;
+  }
+}
+
+/* The landing page's opening paragraph. */
+.mfa-lead {
+  font-size: 1.2rem;
+  line-height: 1.6;
+  color: var(--color-foreground-secondary);
+  margin-bottom: 1.5rem;
+}
+
+.sd-card {
+  border-radius: 0.6rem;
+}
+
+.sd-card-title {
+  font-weight: 600;
+}
+
+.sd-card.sd-card-hover:hover {
+  border-color: var(--color-brand-primary);
+}
+
+/* Settings tables carry long names in their first column. Keep those on one
+   line so the table reads as name, default, purpose. */
+table.docutils td:first-child code {
+  white-space: nowrap;
+}
+
+/* Furo draws html_logo at the full sidebar width; keep it a mark, not a
+   poster. */
+.sidebar-logo {
+  max-width: 3.5rem;
+}
+
+/* Furo centres narrow tables; in a reference page that leaves them floating
+   away from the text that introduces them. */
+article table.docutils.align-default {
+  margin-left: 0;
+  margin-right: 0;
+}
