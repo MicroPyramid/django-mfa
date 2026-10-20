@@ -28,6 +28,13 @@ Once basic setup (see {doc}`installation_setup`) is done, django-mfa exposes the
 3.  `mfa:verify` (the picker) looks at which factors this user actually holds. If there's exactly one, it redirects straight to `mfa:verify_factor/<type>/` -- no need to make a user with a single factor choose from a list of one. Otherwise it renders a list to choose from.
 4.  `GET mfa:verify_factor/<type>/` renders that factor's challenge screen; POSTing the code/assertion marks the session fully verified on success (or a generic error on failure -- see the rate-limiting note below) and redirects to `next` (validated against open redirects) or `LOGIN_REDIRECT_URL`.
 
+A session opened before its user enrolled their first factor was never marked
+pending in step 1, because there was nothing to challenge yet. Once the user enrolls,
+`MfaMiddleware` treats that session as pending too and sends it through steps 2–4.
+Anyone else signed in as that user beforehand has to present the new factor to get
+back in. The session that did the enrolling is not affected, since completing
+enrollment verifies it.
+
 Failed attempts against a single factor are rate-limited (`MFA_VERIFY_RATE_LIMIT`, default 5 per 5 minutes per user per factor type); a locked-out attempt gets the exact same response as a wrong code, so the lockout itself never reveals whether MFA is even enabled for that account.
 
 ## Being required to enroll

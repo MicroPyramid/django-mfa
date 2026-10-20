@@ -63,6 +63,59 @@ class EnforcementTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class SessionOpenedBeforeEnrollmentTests(TestCase):
+    """A session opened while its user held no factor is never stamped
+    (signals.stamp_pending_verification deliberately skips a factorless
+    user), so it carries no `mfa` key at all. Once that user enrolls, the session
+    must be challenged exactly like a pending one. Otherwise whoever opened
+    it keeps every page MfaMiddleware alone protects, and that is precisely
+    the person a user enrolling because "someone is in my account" is trying
+    to lock out.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user("a@example.com", password="pw")
+        self.client = Client()
+        self.client.login(username="a@example.com", password="pw")
+
+    def test_is_challenged_once_the_user_enrolls(self):
+        Authenticator.objects.create(user=self.user, type="totp")
+        response = self.client.get(reverse("mfa:security_settings"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("mfa:verify"), response.url)
+        self.assertIn("next=" + reverse("mfa:security_settings"), response.url)
+
+    def test_recovery_codes_alone_do_not_trigger_a_challenge(self):
+        # Not a primary factor, so not something to challenge with. The login
+        # signal applies the same rule.
+        Authenticator.objects.create(user=self.user, type="recovery_codes")
+        response = self.client.get(reverse("mfa:security_settings"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_verify_page_stays_reachable(self):
+        # Otherwise the challenge redirects to itself, forever.
+        Authenticator.objects.create(user=self.user, type="totp")
+        response = self.client.get(reverse("mfa:verify_factor", args=["totp"]))
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(MFA_EXEMPT_PATHS=["/logout/"])
+    def test_exempt_paths_stay_reachable(self):
+        Authenticator.objects.create(user=self.user, type="totp")
+        response = self.client.get("/logout/")
+        # Not redirected: the request falls through to URL resolution, and
+        # the suite's URLconf has no /logout/.
+        self.assertEqual(response.status_code, 404)
+
+    @override_settings(ROOT_URLCONF="django_mfa.tests.support.api_urls")
+    def test_api_is_left_to_its_own_gate(self):
+        # A 302 to an HTML page is no answer a JSON client can act on; the
+        # API's endpoint() decorator gates these URLs itself.
+        Authenticator.objects.create(user=self.user, type="totp")
+        response = self.client.get(reverse("mfa_api:state"))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["verified"])
+
+
 @override_settings(MFA_REMEMBER_MY_BROWSER=True, MFA_REMEMBER_DAYS=30)
 class RememberMyBrowserEnforcementTests(TestCase):
     """Fix round 1, finding 1: MFA_REMEMBER_MY_BROWSER was retained by the
@@ -459,3 +512,37 @@ class MfaRequiredQueryCostTests(TestCase):
             "MFA_REQUIRED=False (has_primary_factor's own .exists()), not "
             "one per registered adapter. Queries when required: "
             f"{[q['sql'] for q in required.captured_queries]}")
+
+
+class NeverChallengedQueryCostTests(TestCase):
+    """What SessionOpenedBeforeEnrollmentTests costs. Telling a session that
+    was never challenged apart from one whose user simply has no factor
+    takes one query, so that query must run only for a session that has not
+    passed a challenge, and only once per request.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user("a@example.com", password="pw")
+        self.client = Client()
+        self.client.login(username="a@example.com", password="pw")
+
+    def authenticator_queries(self):
+        table = Authenticator._meta.db_table
+        with CaptureQueriesContext(connection) as queries:
+            self.client.get("/some/other/page/")
+        return [q["sql"] for q in queries.captured_queries if table in q["sql"]]
+
+    def test_verified_session_never_asks(self):
+        Authenticator.objects.create(user=self.user, type="totp")
+        session = self.client.session
+        session["mfa"] = {"verified": True, "method": "totp", "at": 0}
+        session.save()
+        self.assertEqual(self.authenticator_queries(), [])
+
+    def test_never_challenged_session_asks_once(self):
+        self.assertEqual(len(self.authenticator_queries()), 1)
+
+    @override_settings(MFA_REQUIRED=True)
+    def test_never_challenged_session_asks_once_when_mfa_is_required(self):
+        # The enrollment wall needs the same answer; it must not ask again.
+        self.assertEqual(len(self.authenticator_queries()), 1)

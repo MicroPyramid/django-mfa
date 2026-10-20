@@ -156,10 +156,14 @@ request fell through as though it had passed a challenge, because
 `session.is_pending()` means *stamped, but not yet passed* and is False for a
 session with no stamp.
 
-The ordinary login path is unaffected: `user_logged_in` stamps every session it
-creates, so a real login is either pending or verified and always was. What
-changes is the sessions that never went through it:
+The ordinary login path is unaffected for a user who holds a factor when they log
+in: `user_logged_in` stamps that session, so it is either pending or verified and
+always was. What changes is the sessions that carry no stamp:
 
+- **Sessions opened before their user enrolled.** Login stamps nothing for a user
+  with no factor, since there is nothing to challenge yet. Once they enroll, those
+  sessions are challenged on decorated views and the API. `MfaMiddleware` only
+  started doing the same in 4.6.1 (see below).
 - **Your own tests using `force_login()` on a user who holds a factor.** They
   now hit the verify redirect (or `verification_required` on the API) where they
   previously sailed through. Either enroll the factor after logging in, or mark
@@ -172,3 +176,27 @@ changes is the sessions that never went through it:
   endpoint declared `require_verified=True` and no `stepup=True` would serve an
   unchallenged token client. See {doc}`rest_api` for the session tokens that fix
   the underlying problem.
+
+## 4.6.1: sessions opened before enrolling are challenged by the middleware
+
+A session opened while its user held no factor carries no MFA stamp, because
+login has nothing to challenge yet. `MfaMiddleware` used to let such a session
+through even after the user enrolled, so anyone else signed in as that user
+before enrollment kept every page the middleware alone protects. It now
+redirects that session to `mfa:verify`, the same as a pending one. The session
+that completed the enrollment is unaffected, since enrolling verifies it.
+
+What you may notice:
+
+- **Users with other sessions open when they enrolled** are asked for their new
+  factor once on each of those sessions.
+- **Tests that log in a user, create an `Authenticator` row directly, and then
+  request a page protected only by the middleware** now get a redirect to
+  `mfa:verify` instead of the page. Enroll through the real enroll view, which
+  verifies the session it runs in, or pass the challenge afterwards; the testing
+  section of {doc}`recipes` shows both.
+- **One extra query per request for users with no factor.** Telling a session
+  that was never challenged apart from one whose user has nothing to challenge
+  with means asking whether the user holds a factor. Verified sessions are
+  decided from the session alone and pay nothing. With `MFA_REQUIRED` on, the
+  enrollment wall already asked this question, and the two share one query.

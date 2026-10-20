@@ -73,11 +73,14 @@ def enforcement_state(request, require_primary_factor=True):
         # falls through to `return None` and is treated exactly as a verified
         # one.
         #
-        # The browser flow reaches this only for a session that missed
-        # signals.stamp_pending_verification: a host project's force_login(),
-        # or a session predating this app's installation. For a cookie-less
-        # API client it is the *normal* state of every request, which is what
-        # makes this load-bearing rather than defensive -- see
+        # The browser flow reaches this for a session no login ever stamped.
+        # The common case is one opened while its user held no factor:
+        # signals.stamp_pending_verification skips a factorless user, so
+        # enrolling afterwards leaves that session unstamped. The rarer ones
+        # are a host project's force_login() and a session predating this
+        # app's installation. MfaMiddleware applies this same rung. For a
+        # cookie-less API client it is the *normal* state of every request,
+        # which is what makes this load-bearing rather than defensive; see
         # django_mfa/api/tokens.py. An endpoint declared `require_verified=
         # True` without `stepup=True` would otherwise serve an unchallenged
         # token client; no such endpoint exists today, so the freshness rung

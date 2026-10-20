@@ -385,8 +385,24 @@ class SecuritySettingsTests(TestCase):
         self.client = Client()
         self.client.login(username="a@example.com", password="pw")
 
+    def enroll(self, **fields):
+        """Give the user a factor the way enrolling one in this session would.
+
+        A real enrollment verifies the session it runs in (flows.attempt_enroll
+        calls session.mark_verified). A bare row created behind the session's
+        back leaves it never challenged, which MfaMiddleware sends to
+        mfa:verify (see test_enforcement.SessionOpenedBeforeEnrollmentTests),
+        and these tests are about the page, not that gate.
+        """
+        auth = Authenticator.objects.create(user=self.user, **fields)
+        session = self.client.session
+        session["mfa"] = {"verified": True, "method": auth.type,
+                          "at": int(time.time())}
+        session.save()
+        return auth
+
     def test_renders_enabled_available_and_remaining(self):
-        Authenticator.objects.create(user=self.user, type="totp")
+        self.enroll(type="totp")
         response = self.client.get(reverse("mfa:security_settings"))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "django_mfa/security.html")
@@ -436,47 +452,44 @@ class SecuritySettingsTests(TestCase):
         authenticator's own pk) must actually be present in the rendered
         page, not just work if you already know the URL and pk.
         """
-        auth = Authenticator.objects.create(user=self.user, type="totp")
+        auth = self.enroll(type="totp")
         response = self.client.get(reverse("mfa:security_settings"))
         content = response.content.decode()
         self.assertIn(reverse("mfa:manage"), content)
         self.assertIn(f'value="{auth.pk}"', content)
 
     def test_a_user_can_delete_their_own_authenticator_through_the_rendered_page(self):
-        auth = Authenticator.objects.create(user=self.user, type="totp")
+        auth = self.enroll(type="totp")
         get_response = self.client.get(reverse("mfa:security_settings"))
         self.assertIn(f'value="{auth.pk}"', get_response.content.decode())
 
-        # mfa:manage is gated by mfa_recent_required -- give this session a
-        # fresh stamp so the delete below exercises manage_factors itself
-        # rather than the gate (covered by test_stepup.py's GatedViewTests).
-        session = self.client.session
-        session["mfa"] = {"verified": True, "method": "totp",
-                          "at": int(time.time())}
-        session.save()
+        # mfa:manage is gated by mfa_recent_required. enroll() left this
+        # session freshly verified, so the delete below exercises
+        # manage_factors itself rather than the gate (covered by
+        # test_stepup.py's GatedViewTests).
 
         post_response = self.client.post(reverse("mfa:manage"), {"pk": auth.pk})
         self.assertRedirects(post_response, reverse("mfa:security_settings"))
         self.assertFalse(Authenticator.objects.filter(pk=auth.pk).exists())
 
     def test_webauthn_credential_lists_its_own_name_and_created_date(self):
-        auth = Authenticator.objects.create(
-            user=self.user, type="webauthn", name="YubiKey 5C")
+        auth = self.enroll(
+            type="webauthn", name="YubiKey 5C")
         response = self.client.get(reverse("mfa:security_settings"))
         content = response.content.decode()
         self.assertIn("YubiKey 5C", content)
         self.assertIn(str(auth.created_at.year), content)
 
     def test_webauthn_removal_form_present_when_not_enterprise_owned(self):
-        auth = Authenticator.objects.create(
-            user=self.user, type="webauthn", name="key")
+        auth = self.enroll(
+            type="webauthn", name="key")
         response = self.client.get(reverse("mfa:security_settings"))
         self.assertIn(f'value="{auth.pk}"', response.content.decode())
 
     @override_settings(MFA_OWNED_BY_ENTERPRISE=True)
     def test_webauthn_removal_form_absent_when_enterprise_owned(self):
-        auth = Authenticator.objects.create(
-            user=self.user, type="webauthn", name="key")
+        auth = self.enroll(
+            type="webauthn", name="key")
         response = self.client.get(reverse("mfa:security_settings"))
         content = response.content.decode()
         # Still listed (name visible)...
@@ -490,7 +503,7 @@ class SecuritySettingsTests(TestCase):
         manage_factors in views/manage.py) -- the page must reflect that,
         not blanket-hide every removal form.
         """
-        auth = Authenticator.objects.create(user=self.user, type="totp")
+        auth = self.enroll(type="totp")
         response = self.client.get(reverse("mfa:security_settings"))
         self.assertIn(f'value="{auth.pk}"', response.content.decode())
 

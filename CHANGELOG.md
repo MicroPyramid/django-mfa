@@ -12,6 +12,32 @@ Versions follow [PEP 440](https://peps.python.org/pep-0440/). The version in
 `pyproject.toml` is the only place it is written; the git tag and the GitHub
 Release are derived from it (see [docs/contributing.md](docs/contributing.md)).
 
+## 4.6.1
+
+### Fixed
+
+- **A session opened before its user enrolled was never challenged by
+  `MfaMiddleware`.** Login stamps nothing for a user with no factor, since
+  there is nothing to challenge yet, and the middleware only challenged
+  sessions that carried a pending stamp. So anyone signed in as that user
+  before they enrolled kept every page the middleware alone protects, after
+  enrollment as well as before. That includes someone the user enrolled
+  specifically to lock out. `@mfa_required`, `@mfa_recent_required` and the
+  JSON API were not affected; they already treated such a session as pending
+  (4.5.0). The middleware now does the same, and redirects it to
+  `mfa:verify`.
+
+### Upgrading
+
+No migration. Users who had other sessions open when they enrolled are asked
+for their factor once on each of them. Telling a never-challenged session apart
+from one whose user holds no factor costs one query per request, paid only by
+sessions that have not passed a challenge (in practice, users who have not
+enrolled); with `MFA_REQUIRED` on, the enrollment wall shares it. Tests that
+create an `Authenticator` row directly after logging in, then request a page
+only the middleware protects, now get a redirect. See
+[docs/upgrading.md](docs/upgrading.md).
+
 ## 4.6.0
 
 ### Added
