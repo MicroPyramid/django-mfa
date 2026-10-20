@@ -249,7 +249,7 @@ Read only if you mount `django_mfa.api.urls`.
 | Setting | Default | What it does |
 |---|---|---|
 | `MFA_PROTECT_ADMIN` | `False` | Every page of the default admin site (`django.contrib.admin.site`) needs a factor and a passed challenge, and `MFA_REQUIRED` also applies to staff. Works without `MfaMiddleware`. See {doc}`enforcement`. |
-| `MFA_ADMIN_STEPUP` | `False` | With `MFA_PROTECT_ADMIN` on, admin pages also need a challenge within `MFA_STEPUP_MAX_AGE`. On its own it does nothing (`django_mfa.E011`). |
+| `MFA_ADMIN_STEPUP` | `False` | Admin pages also need a challenge within `MFA_STEPUP_MAX_AGE`. Applies to the default site with `MFA_PROTECT_ADMIN` on, and to any site built with `MfaAdminMixin`. With neither it does nothing (`django_mfa.E011`). |
 
 `MFA_PROTECT_ADMIN` covers only the default site. If you mount your own `AdminSite`
 instance, mix `django_mfa.admin_site.MfaAdminMixin` into its class instead.
@@ -285,8 +285,9 @@ MFA_SECRET_ENCRYPTION_KEYS = [
 - Existing values are not rewritten; a secret is signed when the user next enrolls
   TOTP.
 - An `mfa1:` value whose key is no longer in the list cannot be read, and that user
-  cannot verify with TOTP until they enroll again. Keep the setting, with the key
-  that signed them, while any such values remain.
+  cannot verify with TOTP until they enroll again. Each attempt fails like a wrong
+  code and logs an error on the `django_mfa.adapters.totp` logger. Keep the setting,
+  with the key that signed them, while any such values remain.
 
 ## System checks
 
@@ -309,7 +310,7 @@ default) or `MFA_QUICKLOGIN` is `True`. The rest apply to every install.
 | `django_mfa.E008` | `MFA_RATE_LIMIT_BACKEND` is not `"database"` or `"cache"`. |
 | `django_mfa.E009` | `MFA_CLIENT_IP_RESOLVER` is set, but is not a callable or a dotted path that imports to one. |
 | `django_mfa.E010` | Grace is set up but cannot work: `MFA_REQUIRED_FROM` is not a `date` or `datetime`; `MFA_GRACE_PERIOD` is negative, or not a number or `timedelta`; `MFA_GRACE_PERIOD` has no start date to count from (no `MFA_GRACE_ANCHOR`, and no `date_joined` on the user model); or `MFA_GRACE_ANCHOR` does not import, is not callable, or is set without `MFA_GRACE_PERIOD`. |
-| `django_mfa.E011` | `MFA_ADMIN_STEPUP` is on but `MFA_PROTECT_ADMIN` is not, so the admin is unprotected. |
+| `django_mfa.E011` | `MFA_ADMIN_STEPUP` is on, but `MFA_PROTECT_ADMIN` is off and no admin site uses `MfaAdminMixin`, so nothing reads it. |
 
 If a check fires for a reason you have already handled, silence it by ID. That
 hides the error without fixing its cause, so prefer correcting the setting, or

@@ -32,6 +32,7 @@ from base64 import urlsafe_b64encode
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
+from django.conf import settings
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.models import User
 from django.contrib.sessions.backends.db import SessionStore
@@ -41,11 +42,12 @@ from django.urls import reverse
 from fido2.webauthn import AuthenticatorData
 
 from django_mfa import events
-from django_mfa.backends import user_from_handle, user_handle_for
+from django_mfa.backends import WebAuthnBackend, user_from_handle, user_handle_for
 from django_mfa.conf import settings as mfa_settings
 from django_mfa.middleware import MfaMiddleware
 from django_mfa.models import Authenticator
 from django_mfa.tests.support.authenticator import SoftwareAuthenticator
+from django_mfa.views.verify import _passkey_failure
 
 FLAG_UP = AuthenticatorData.FLAG.UP
 
@@ -212,6 +214,72 @@ class PasswordlessLoginTests(TestCase):
                                     {"credential": json.dumps(assertion)})
         self.assertEqual(response.status_code, 400)
         self.assertNotIn("a@example.com", response.content.decode())
+
+    # -- An inactive account is refused, as ModelBackend refuses it ----------
+
+    def _passkey_post(self, **extra):
+        begin = self.client.get(reverse("mfa:passkey_begin"))
+        assertion = self.device.get(json.loads(begin.json()["options"]))
+        return self.client.post(reverse("mfa:passkey_complete"),
+                                {"credential": json.dumps(assertion),
+                                 "next": "/home/"}, **extra)
+
+    def test_inactive_user_cannot_sign_in_with_a_passkey(self):
+        """Deactivating an account (is_active=False) is how Django turns a
+        user off. A password login is refused by ModelBackend; a passkey must
+        be refused too, with the same response as every other failure."""
+        self.user.is_active = False
+        self.user.save()
+
+        response = self._passkey_post()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.content, _passkey_failure().content)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_deactivating_a_user_ends_their_passkey_session(self):
+        self._passkey_post()
+        self.assertEqual(
+            self.client.get(reverse("mfa:security_settings")).status_code, 200)
+
+        self.user.is_active = False
+        self.user.save()
+
+        response = self.client.get(reverse("mfa:security_settings"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(settings.LOGIN_URL, response.url)
+
+    def test_backend_refuses_an_inactive_user(self):
+        self.user.is_active = False
+        self.user.save()
+        backend = WebAuthnBackend()
+        self.assertIsNone(backend.get_user(self.user.pk))
+        self.assertIsNone(backend.authenticate(None, mfa_user=self.user))
+
+    # -- webauthn.js posts with fetch() and asks for JSON ----------------------
+
+    def test_a_script_asking_for_json_gets_the_destination_as_json(self):
+        """webauthn.js posts the assertion with fetch() so a failure can be
+        shown on the login page. On success it needs the destination as
+        data: following the redirect inside fetch() would load the landing
+        page once for nothing (and consume any one-time messages on it)."""
+        response = self._passkey_post(HTTP_ACCEPT="application/json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"redirect": "/home/"})
+        self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
+
+    def test_a_form_post_is_still_redirected(self):
+        response = self._passkey_post()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/home/")
+
+    def test_a_failure_asked_for_as_json_is_the_usual_failure(self):
+        self.user.is_active = False
+        self.user.save()
+        response = self._passkey_post(HTTP_ACCEPT="application/json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.content, _passkey_failure().content)
 
     def test_every_named_failure_mode_returns_a_byte_identical_response(self):
         """unknown handle, unknown credential, bad signature, missing

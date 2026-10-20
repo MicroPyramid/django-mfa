@@ -173,8 +173,7 @@ class MyAdminSite(MfaAdminMixin, admin.AdminSite):
 `has_permission()` also requires a verified session and a primary factor.
 `login()` sends a signed-in user who fails those checks to `mfa:verify` or
 `mfa:security_settings` instead of showing the admin login form. `MFA_ADMIN_STEPUP`
-applies here too, but system check `django_mfa.E011` refuses it unless
-`MFA_PROTECT_ADMIN` is also on. See {doc}`enforcement`.
+applies here too, with or without `MFA_PROTECT_ADMIN`. See {doc}`enforcement`.
 
 ### `django_mfa.context_processors.mfa`
 
@@ -256,7 +255,9 @@ full passkey ceremony.
 ### `django_mfa.backends.WebAuthnBackend`
 
 Required for passwordless login. Without it the user is anonymous again on the
-request after signing in; `django_mfa.E003` catches the omission.
+request after signing in; `django_mfa.E003` catches the omission. Like Django's
+`ModelBackend`, it refuses a user with `is_active=False`, so deactivating an account
+also ends its passkey sessions.
 
 ```python
 # settings.py

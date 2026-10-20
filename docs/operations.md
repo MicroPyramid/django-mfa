@@ -82,13 +82,12 @@ Removed 2 factor(s) from alice.
 Any answer other than `y` or `yes` aborts without removing anything. A user with
 no factors gets `alice has no factors enrolled; nothing to do.`
 
-**Afterwards, tell the user to log out and log back in.** If they were stuck on the
-"Verify it's you" page, it now lists no methods, and the rest of the site keeps
-sending them back to it until they log in again. Logging out from there needs your
-logout URL in `MFA_EXEMPT_PATHS` (see {doc}`settings`); without it they must clear
-the site's cookies. After the new login nobody asks them for a code. If
-`mfa_status` showed `Required: yes`, they land on the security settings page to
-enroll; otherwise they can enroll from that page when they choose.
+**Afterwards, the user can carry on.** If they were stuck on the "Verify it's
+you" page, reloading it is enough: with no method left to verify, django-mfa drops
+the pending challenge, as a fresh login would never have set it. Nobody asks them
+for a code. If `mfa_status` showed `Required: yes`, they land on the security
+settings page to enroll; otherwise they can enroll from that page when they
+choose.
 
 Also worth knowing:
 
@@ -104,9 +103,9 @@ Also worth knowing:
   user already past their deadline must enroll straight away.
 - An exemption granted with `mfa_disable` stays in place; the two are
   independent.
-- With `MFA_NOTIFY_ON_CHANGE` on, the user gets an email for each removed factor
-  and may get "Two-factor authentication is off" more than once. Warn them so
-  they do not take it for an attack.
+- With `MFA_NOTIFY_ON_CHANGE` on, the user gets an email for each removed factor,
+  and one saying "Two-factor authentication is off". Warn them so they do not
+  take it for an attack.
 
 To remove one factor and keep the rest (for example one lost security key),
 delete that row in the Django admin under **Authenticators** instead. That path

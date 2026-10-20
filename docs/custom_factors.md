@@ -40,8 +40,6 @@ class BackupTokenAdapter(Adapter):
 
     def complete_enroll(self, request, data):
         expected = request.session.pop(SESSION_KEY, None)
-        if self.get_instances(request.user).exists():
-            raise ValueError("This user already holds a backup token.")
         if not expected or not check_password(data.get("token", ""), expected):
             raise ValueError("Token did not match.")
         return Authenticator.objects.create(
@@ -202,7 +200,7 @@ Subclass `django_mfa.registry.Adapter`.
 |---|---|---|
 | `type` | `None` | Required. The URL segment, the `Authenticator.type` value and the template suffix. Use lowercase letters, digits and underscores, at most 32 characters, and not a built-in name. |
 | `verbose_name` | `None` | Required. The name users see in the picker and under "Add a method". Wrap it in `gettext_lazy` if your site is translated. |
-| `supports_multiple` | `False` | Whether a user may hold several, as with security keys. When `False`, the factor stops being offered under "Add a method" once the user holds one. That is all it does; see [Known limitations](#known-limitations). |
+| `supports_multiple` | `False` | Whether a user may hold several, as with security keys. When `False`, the factor stops being offered under "Add a method" once the user holds one, and a second enrollment is refused with the usual 400. See [Known limitations](#known-limitations). |
 | `supports_enroll` | `True` | Set `False` for a factor that is created some other way, as recovery codes are generated on their own page. The enroll page then returns 404 and the factor is never offered under "Add a method". You do not need `begin_enroll`, `complete_enroll` or an enroll template. |
 | `counts_as_primary_factor` | `True` | Whether holding this factor protects the user on its own. Set `False` for anything that can run out, as recovery codes and the example above do. Such a factor is still offered at login, but a user holding only it is never challenged and does not satisfy `MFA_REQUIRED`. |
 
@@ -267,9 +265,10 @@ security page can show when the method was last used.
   from the matching entry in `enabled_adapters`, whose `verbose_name` is right.
 - **No database constraint for one-per-user.** The database allows only one
   `totp`, `recovery_codes` and `email` row per user. For your type,
-  `supports_multiple = False` only hides the "Add a method" link: a user who
-  types the enroll URL can still submit it. Check in `complete_enroll`, as the
-  example does.
+  `supports_multiple = False` is checked before `complete_enroll` runs, so a
+  second submission is refused, but two submitted at the same moment can both
+  pass that check. If a duplicate would matter, add a `UniqueConstraint` of your
+  own.
 - **`MFA_FACTORS` lists built-ins only.** Your factor is registered by your own
   `ready()`. Naming it in `MFA_FACTORS` raises `ImproperlyConfigured`. Use your
   own setting if you need to switch it off.

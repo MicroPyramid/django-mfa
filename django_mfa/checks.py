@@ -428,20 +428,45 @@ def check_grace_configuration(app_configs, **kwargs):
     return errors
 
 
-def check_admin_stepup(app_configs, **kwargs):
-    """MFA_ADMIN_STEPUP without MFA_PROTECT_ADMIN does nothing at all.
+def _mfa_admin_site_exists():
+    """Is any AdminSite built with MfaAdminMixin?
 
-    Nothing reads MFA_ADMIN_STEPUP unless the admin site has been wrapped,
-    and only MFA_PROTECT_ADMIN wraps it. An operator setting the stronger
-    of the two alone believes the admin is step-up protected and it is not
-    protected at all.
+    Such a site reads MFA_ADMIN_STEPUP whatever MFA_PROTECT_ADMIN says. It
+    is usually created in a module the URLconf imports, which may not have
+    happened yet when this runs: Django's own URL check imports the URLconf
+    too, but checks run in no fixed order. So load it first. A URLconf that
+    fails to import is that check's to report, not this one's.
     """
-    if mfa_settings.MFA_ADMIN_STEPUP and not mfa_settings.MFA_PROTECT_ADMIN:
+    from importlib import import_module
+
+    from django.contrib.admin import sites
+
+    from django_mfa.admin_site import MfaAdminMixin
+
+    try:
+        import_module(django_settings.ROOT_URLCONF)
+    except Exception:
+        pass
+    return any(isinstance(site, MfaAdminMixin) for site in sites.all_sites)
+
+
+def check_admin_stepup(app_configs, **kwargs):
+    """MFA_ADMIN_STEPUP with nothing to read it does nothing at all.
+
+    Two things read it: the default admin site once MFA_PROTECT_ADMIN has
+    wrapped it, and any AdminSite a project builds with MfaAdminMixin. With
+    neither, an operator setting MFA_ADMIN_STEPUP believes the admin is
+    step-up protected and it is not protected at all.
+    """
+    if (mfa_settings.MFA_ADMIN_STEPUP and not mfa_settings.MFA_PROTECT_ADMIN
+            and not _mfa_admin_site_exists()):
         return [Error(
-            "MFA_ADMIN_STEPUP is set but MFA_PROTECT_ADMIN is not.",
-            hint="Nothing reads MFA_ADMIN_STEPUP unless MFA_PROTECT_ADMIN "
-                 "has wrapped the admin site, so the admin is currently "
-                 "unprotected. Set MFA_PROTECT_ADMIN = True.",
+            "MFA_ADMIN_STEPUP is set but nothing reads it.",
+            hint="MFA_ADMIN_STEPUP applies to the default admin site when "
+                 "MFA_PROTECT_ADMIN is on, and to any AdminSite built with "
+                 "django_mfa.admin_site.MfaAdminMixin. With neither, the "
+                 "admin is unprotected. Set MFA_PROTECT_ADMIN = True, or "
+                 "mix MfaAdminMixin into your own AdminSite.",
             id="django_mfa.E011",
         )]
     return []

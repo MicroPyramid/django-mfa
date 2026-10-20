@@ -65,9 +65,9 @@ at_risk = (Authenticator.objects.filter(type=removing)
            .values_list("user__pk", flat=True))
 ```
 
-Users who were in the middle of logging in when you made the change may see an
-empty "Verify it's you" page; see
-[The "Verify it's you" page lists no methods](#the-verify-its-you-page-lists-no-methods).
+Users who were in the middle of logging in when you made the change, and now hold
+no registered method, are let through on their next page load: a fresh login would
+not challenge them either.
 
 ## Redirects and logging out
 
@@ -316,15 +316,9 @@ It lists the methods it will remove and asks for confirmation (`--yes` skips the
 prompt). The user can then log in with their password alone and enroll again. If
 `MFA_REQUIRED` applies to them, they are taken to the security page to do so.
 
-If the user is stuck on the challenge page right now, tell them to log out and log
-back in after the reset; see the next entry.
-
-### The "Verify it's you" page lists no methods
-
-The session was marked pending at login, and the user no longer holds any method
-that can answer it: an administrator ran `mfa_reset`, or `MFA_FACTORS` was narrowed.
-That session cannot recover. The user logs out (your logout URL must be in
-`MFA_EXEMPT_PATHS`) and logs back in; the new session is not challenged.
+If the user is stuck on the challenge page right now, they only need to reload
+it after the reset. With nothing left to verify, django-mfa drops the pending
+challenge and lets the session continue, exactly as a fresh login would.
 
 ### A user has used up their recovery codes
 

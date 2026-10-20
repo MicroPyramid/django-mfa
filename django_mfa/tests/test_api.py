@@ -278,6 +278,19 @@ class EnrollTests(ApiTestCase):
         self.assertEqual(self.error_code(response), "invalid")
         self.assertFalse(Authenticator.objects.filter(user=self.user).exists())
 
+    def test_a_second_authenticator_app_is_refused_not_a_500(self):
+        """The same refusal the HTML view gives, from the shared flow."""
+        for expected in (201, 400):
+            secret = self.body(self.post("enroll_begin",
+                                         factor_type="totp"))["secret_key"]
+            response = self.post("enroll_complete", factor_type="totp",
+                                 body={"secret_key": secret,
+                                       "code": code_for(secret)})
+            self.assertEqual(response.status_code, expected)
+        self.assertEqual(self.error_code(response), "invalid")
+        self.assertEqual(Authenticator.objects.filter(
+            user=self.user, type="totp").count(), 1)
+
     def test_recovery_codes_are_not_enrollable(self):
         """They are generated, not enrolled -- the same 404 the HTML view
         gives a hand-typed URL."""

@@ -137,6 +137,10 @@ your login page is the only way into your site.
 - **Passwordless login satisfies both factors only with user verification** (a PIN or
   biometric). An assertion without it logs the user in, but the session stays
   pending until they pass a second factor.
+- **Deactivated accounts cannot use a passkey.** A user with `is_active=False` is
+  refused at passwordless login with the same response as every other failure, and
+  `WebAuthnBackend` ends their existing sessions on the next request, as Django's
+  `ModelBackend` does for a password login.
 - **User handles are random UUIDs** stored in `MfaUserHandle`. They reveal no
   identity, and rotating `SECRET_KEY` does not break passkeys.
 - **Attestation is not verified.** `MFA_FIDO2_ATTESTATION_PREFERENCE` only changes

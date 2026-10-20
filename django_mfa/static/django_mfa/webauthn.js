@@ -147,17 +147,49 @@
     });
   }
 
+  // POST a passwordless assertion and go where the server says.
+  //
+  // Not form.submit(), unlike runCeremony(): the login page belongs to the
+  // host project, and mfa:passkey_complete answers a rejected passkey with
+  // a JSON error, which a plain form post would put on screen as raw JSON
+  // in place of the login page. Asking for JSON keeps the user where they
+  // are; the error is thrown with passkeyRejected set so the callers below
+  // can show it in #webauthn-passkey-error. On success the server answers
+  // with the destination ({"redirect": url}) rather than a redirect, which
+  // fetch() would follow in the background and so load that page twice.
+  function submitPasskey(form) {
+    return fetch(form.action, {
+      method: "POST",
+      body: new FormData(form),
+      credentials: "same-origin",
+      headers: {"Accept": "application/json"}
+    }).then(function (response) {
+      // A body that is not JSON (a CSRF failure page, a proxy error) is
+      // reported with the generic message rather than a parse error.
+      return response.json().catch(function () {
+        return {};
+      }).then(function (body) {
+        if (response.ok && body.redirect) {
+          window.location.assign(body.redirect);
+          return;
+        }
+        var err = new Error(body.error || "Passkey sign-in failed.");
+        err.passkeyRejected = true;
+        throw err;
+      });
+    });
+  }
+
   // Passwordless (passkey) login. Unlike runCeremony() above, there is no
   // page-embedded {% webauthn_options_script %} to read: the login page
   // belongs to the host project, not django_mfa, and no per-request user is
   // known yet to have rendered options for in the first place. Options are
   // instead fetched from mfa:passkey_begin, an ordinary GET the host page
   // wires up via the form's data-begin-url attribute (see this function's
-  // caller below). The rest -- decodeOptions/navigator.credentials.get/
-  // encodeCredential/form.submit -- is identical in shape to runCeremony(),
-  // deliberately reusing the exact same helpers rather than a second set,
-  // so the base64url<->ArrayBuffer conversion stays defined in exactly one
-  // place.
+  // caller below). decodeOptions/navigator.credentials.get/encodeCredential
+  // are the same helpers runCeremony() uses, so the base64url<->ArrayBuffer
+  // conversion stays defined in exactly one place; the result is sent by
+  // submitPasskey() above.
   function runPasskeyLogin(form) {
     var beginUrl = form.getAttribute("data-begin-url");
     return fetch(beginUrl, {credentials: "same-origin"})
@@ -174,13 +206,13 @@
       .then(function (credential) {
         form.querySelector("[name=credential]").value =
           JSON.stringify(encodeCredential(credential));
-        form.submit();
+        return submitPasskey(form);
       });
   }
 
   // Conditional-mediation ("passkey autofill") variant of runPasskeyLogin.
   //
-  // Same fetch/decode/get/encode/submit shape, with two additions that are
+  // Same fetch/decode/get/encode/submitPasskey shape, with two additions that are
   // what make it autofill rather than a modal prompt:
   //
   //   mediation: "conditional" -- do not show a modal. The promise stays
@@ -217,7 +249,7 @@
       .then(function (credential) {
         form.querySelector("[name=credential]").value =
           JSON.stringify(encodeCredential(credential));
-        form.submit();
+        return submitPasskey(form);
       });
   }
 
@@ -299,6 +331,18 @@
         conditionalAbort = new AbortController();
         runConditionalPasskeyLogin(passkeyForm, conditionalAbort)
           .catch(function (err) {
+            // The user did choose a passkey, and the server refused it:
+            // that is an answer to something they did, so show it. Autofill
+            // is not restarted here. The button is still there, and where
+            // prompts are answered without a person (a virtual
+            // authenticator, some password managers) a restart would retry
+            // the refused passkey in a loop.
+            if (err && err.passkeyRejected) {
+              if (passkeyError) {
+                passkeyError.textContent = err.message;
+              }
+              return;
+            }
             // AbortError is the normal, expected outcome every time the
             // button takes over -- reporting it would put "signal is
             // aborted without reason" in front of a user who did nothing

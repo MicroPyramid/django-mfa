@@ -111,9 +111,12 @@ It also needs:
   passkeys are discoverable. Only a discoverable passkey can sign in without a
   username.
 
-On success the user is redirected to `next`, or `LOGIN_REDIRECT_URL`. A failed
-sign-in answers with HTTP 400 and the JSON body
-`{"error": "Passkey sign-in failed."}`, the same for every cause. Whether one tap
+On success the user goes to `next`, or `LOGIN_REDIRECT_URL`. A failed sign-in shows
+"Passkey sign-in failed." in `#webauthn-passkey-error` and leaves the user on your
+login page, with the same message for every cause. (The script asks
+`mfa:passkey_complete` for JSON: `{"redirect": url}` on success, HTTP 400 with
+`{"error": "Passkey sign-in failed."}` on failure. A plain form post gets a redirect
+instead.) Whether one tap
 satisfies both factors depends on how the passkey was unlocked; see
 [Passwordless passkey login](mfa_flow.md#passwordless-passkey-login).
 
@@ -143,8 +146,10 @@ ceremony starts and nothing is ever offered, with no error anywhere. The input d
 not have to be inside the passkey form.
 
 The button keeps working alongside autofill, and a browser without autofill support
-gets the button only. Autofill errors go to `console.debug`, not to the page,
-because the user did not ask for that prompt.
+gets the button only. A passkey the server refuses is reported in
+`#webauthn-passkey-error`, whether it came from the button or from autofill. Other
+autofill errors go to `console.debug`, not to the page, because the user did not
+ask for that prompt.
 
 :::{warning}
 Autofill calls `mfa:passkey_begin` on **every view of the login page**, by every

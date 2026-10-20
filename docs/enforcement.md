@@ -181,8 +181,10 @@ MFA_ADMIN_STEPUP = True
 
 Admin pages then need a challenge within `MFA_STEPUP_MAX_AGE`. With the default of 300
 seconds, staff are challenged every five minutes, and a form submitted after the window
-is not saved (they verify and return to the page). Set without `MFA_PROTECT_ADMIN`,
-`MFA_ADMIN_STEPUP` does nothing and `manage.py check` fails with `django_mfa.E011`.
+is not saved (they verify and return to the page). A site built with
+[`MfaAdminMixin`](#a-custom-admin-site) reads `MFA_ADMIN_STEPUP` too, so you can use
+it without `MFA_PROTECT_ADMIN` there. With neither, it does nothing and
+`manage.py check` fails with `django_mfa.E011`.
 
 ## Rolling it out
 

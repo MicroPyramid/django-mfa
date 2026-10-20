@@ -27,6 +27,8 @@ pending distinction all belong to the view layer, which is where the two
 layers legitimately differ.
 """
 
+from django.db import IntegrityError, transaction
+
 from django_mfa import events, ratelimit, session
 from django_mfa.registry import registry
 
@@ -102,7 +104,8 @@ def attempt_verify(request, user, factor_type, data):
 def attempt_enroll(request, factor_type, data):
     """Complete one enrollment. Returns the created ``Authenticator``.
 
-    Raises ``FactorRejected`` if the adapter refuses the submission.
+    Raises ``FactorRejected`` if the adapter refuses the submission, or if
+    the user may not add (another) one of this factor.
 
     Deliberately not rate-limited, unlike attempt_verify: the code checked
     here is checked against a secret the caller supplied in the same request
@@ -116,9 +119,19 @@ def attempt_enroll(request, factor_type, data):
     instead of the one they already hold.
     """
     adapter = registry.get(factor_type)
+    # A singleton factor the user already holds (a second authenticator app,
+    # say) is not on offer, but a double-clicked submit, a stale tab or a
+    # hand-typed URL still gets here. Refused like any other rejection
+    # rather than left to the database constraint, which raised a 500.
+    if not adapter.is_available(request.user):
+        raise FactorRejected(factor_type)
     try:
-        authenticator = adapter.complete_enroll(request, data)
-    except (ValueError, TypeError, KeyError) as exc:
+        # The savepoint lets a lost race (two submissions that both passed
+        # the check above) fail at the constraint without breaking the
+        # surrounding transaction, e.g. under ATOMIC_REQUESTS.
+        with transaction.atomic():
+            authenticator = adapter.complete_enroll(request, data)
+    except (ValueError, TypeError, KeyError, IntegrityError) as exc:
         raise FactorRejected(factor_type) from exc
 
     session.mark_verified(request, factor_type)
