@@ -18,6 +18,14 @@ To check one Python/Django combination locally (CI runs the grid of Python 3.10-
 
     uv run --python 3.12 --with "django~=4.2.0" python test_runner.py
 
+CI also runs the suite once at the *lowest* versions `pyproject.toml` allows: Python 3.10, with Django, `fido2` and `qrcode` each at their declared floor. Every other job runs the newest versions `uv.lock` pins, so this is the only check that those floors are true. To run it yourself, use a separate worktree. The run rewrites `uv.lock`, and a lowest-version lockfile left behind by an earlier run makes uv keep the versions it already holds instead of testing a floor you have since changed:
+
+    git worktree add --detach ../django-mfa-lowest
+    cd ../django-mfa-lowest
+    uv run --python 3.10 --resolution lowest-direct python test_runner.py
+
+A worktree holds committed files only, so commit the change you want to check first.
+
 ## Documentation
 
 The docs are Markdown, read by Sphinx through [MyST](https://myst-parser.readthedocs.io/), and live in `docs/`:

@@ -26,6 +26,14 @@ Release are derived from it (see [docs/contributing.md](docs/contributing.md)).
   JSON API were not affected; they already treated such a session as pending
   (4.5.0). The middleware now does the same, and redirects it to
   `mfa:verify`.
+- **The declared `fido2` floor was wrong.** Every release since 4.0.0
+  allowed `fido2>=1.1.2`, but the WebAuthn adapter is written against the
+  2.x API and every WebAuthn test fails on 1.x (1.1.2 and 1.2.0 both
+  checked). An environment that resolved a 1.x release installed cleanly and
+  then broke on the first security-key or passkey ceremony. The requirement
+  is now `fido2>=2.0.0,<3`; the full suite passes on 2.0.0. A new CI job
+  runs the suite with every direct dependency at its declared floor, so a
+  wrong minimum now fails a build instead of a user's install.
 
 ### Upgrading
 
