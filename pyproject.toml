@@ -15,7 +15,7 @@ keywords = ["django", "mfa", "2fa", "totp", "webauthn", "passkey", "fido2"]
 
 dependencies = [
     "Django>=4.2",
-    "fido2>=1.1.2,<3",
+    "fido2>=2.0.0,<3",
     "qrcode>=7.0.0,<9",
 ]
 
