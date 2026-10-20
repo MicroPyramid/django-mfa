@@ -21,6 +21,18 @@ from django.contrib.auth import get_user_model
 from django_mfa.handles import user_from_handle, user_handle_for  # noqa: F401
 
 
+def user_can_authenticate(user):
+    """Whether this user may be logged in at all.
+
+    The same rule as Django's ModelBackend.user_can_authenticate(): an
+    account with is_active=False is turned off, and a user model without
+    that field is always allowed. ModelBackend refuses an inactive user's
+    password and drops their existing sessions; without this, a passkey
+    would still log them in and keep them logged in.
+    """
+    return getattr(user, "is_active", True)
+
+
 class WebAuthnBackend:
     """Authenticates a user from a verified WebAuthn assertion.
 
@@ -36,7 +48,12 @@ class WebAuthnBackend:
     """
 
     def authenticate(self, request, mfa_user=None, **kwargs):
-        return mfa_user
+        if mfa_user is not None and user_can_authenticate(mfa_user):
+            return mfa_user
+        return None
 
     def get_user(self, user_id):
-        return get_user_model().objects.filter(pk=user_id).first()
+        user = get_user_model().objects.filter(pk=user_id).first()
+        if user is not None and user_can_authenticate(user):
+            return user
+        return None

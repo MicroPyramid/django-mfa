@@ -89,7 +89,15 @@ def notify_factor_removed(sender, user, factor_type, name, request=None,
     # derived here rather than emitted as its own event. has_primary_factor,
     # not primary_enabled_for: only the yes/no answer is needed to decide
     # whether to send mfa_disabled.
-    if not registry.has_primary_factor(user):
+    #
+    # Only the removal of a primary factor can turn MFA off. Without that
+    # condition, removing recovery codes from a user who already had no
+    # primary factor said so again: manage.py mfa_reset removes every row in
+    # turn, and sent this once more after the last primary factor went.
+    # `sender` is the adapter class, or None for a type no longer registered,
+    # which never counted towards has_primary_factor() either.
+    if (sender is not None and sender.counts_as_primary_factor
+            and not registry.has_primary_factor(user)):
         _notify(user, "mfa_disabled", {"user": user})
 
 

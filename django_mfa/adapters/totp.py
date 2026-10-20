@@ -1,7 +1,9 @@
 import base64
+import logging
 import re
 import secrets
 
+from django.core import signing
 from django.utils.translation import gettext_lazy as _
 
 from django_mfa import totp as totp_mod
@@ -18,6 +20,8 @@ from django_mfa.registry import Adapter
 #: The 3x larger guess space is immaterial against a 6-digit code, and a later
 #: task adds rate limiting on top.
 TOTP_VALID_WINDOW = 1
+
+logger = logging.getLogger(__name__)
 
 
 #: RFC 4226 R6: "The algorithm MUST use a strong shared secret. The length of
@@ -69,7 +73,20 @@ class TOTPAdapter(Adapter):
         auth = self.get_instances(user).first()
         if auth is None:
             return False
-        counter = totp_mod.TOTP(decrypt(auth.data["secret"])).match(
+        try:
+            secret = decrypt(auth.data["secret"])
+        except signing.BadSignature:
+            # Signed under MFA_SECRET_ENCRYPTION_KEYS by a key no longer in
+            # the list (or the setting was removed). The user cannot pass
+            # this factor until a key that signed it is restored or they
+            # re-enroll; that is a failed attempt, not a 500, and only the
+            # log can tell an operator why their codes stopped working.
+            logger.error(
+                "Cannot read the TOTP secret of user %s: no key in "
+                "MFA_SECRET_ENCRYPTION_KEYS matches the one it was signed "
+                "with.", user.pk)
+            return False
+        counter = totp_mod.TOTP(secret).match(
             data.get("code", ""), valid_window=TOTP_VALID_WINDOW)
         if counter is None:
             return False

@@ -1,3 +1,5 @@
+import functools
+
 from django.contrib.auth.views import redirect_to_login
 from django.shortcuts import resolve_url
 from django.urls import reverse
@@ -105,7 +107,27 @@ class MfaMiddleware(MiddlewareMixin):
         if not request.user.is_authenticated:
             return None
 
-        if session.is_pending(request):
+        # Both rungs may need this answer, and it is a query, so it is asked
+        # at most once per request. It is also asked only when a rung reaches
+        # it, which a verified session never does with MFA_REQUIRED off.
+        @functools.cache
+        def has_primary_factor():
+            return registry.has_primary_factor(request.user)
+
+        # Pending (stamped at login, not yet passed), or never challenged at
+        # all while the user holds a factor. The second is a session opened
+        # before its user enrolled, since signals.stamp_pending_verification
+        # skips a factorless user and nothing else stamps it; or one that
+        # missed the signal entirely. Letting it through would leave whoever
+        # opened it inside after the user enrolls, quite possibly in order
+        # to lock that person out. decorators.enforcement_state() treats the
+        # two cases the same way.
+        #
+        # is_verified() first, so a verified session decides this from the
+        # session alone. The query lands on sessions that never passed a
+        # challenge, which in practice means users who have not enrolled.
+        if session.is_pending(request) or (
+                not session.is_verified(request) and has_primary_factor()):
             if (self._is_exempt(request.path, self.exempt_paths())
                     or self.is_api_request(request)):
                 return None
@@ -124,16 +146,17 @@ class MfaMiddleware(MiddlewareMixin):
         # single authenticated request just to build a list this branch
         # immediately discards.
         #
-        # policy.resolve() gates the other two so MFA_REQUIRED = False (the
-        # default) still costs nothing: has_primary_factor() is a query, so
-        # it cannot be the unconditional first operand or every authenticated
-        # request pays it even with MFA_REQUIRED off. Once past that gate,
-        # has_primary_factor() runs before mfa_required_for() so the
+        # policy.resolve() gates the other two so that, with MFA_REQUIRED =
+        # False (the default), this rung costs nothing: has_primary_factor()
+        # is a query, so it cannot be the unconditional first operand or every
+        # verified request pays it even with MFA_REQUIRED off. Once past that
+        # gate, has_primary_factor() runs before mfa_required_for() so the
         # exemption lookup inside mfa_required_for() runs only for a user who
         # is actually about to be walled, not for every enrolled user this
-        # policy applies to.
+        # policy applies to. For a never-challenged session the rung above
+        # has already asked, and this reuses its answer.
         if (policy.resolve()
-                and not registry.has_primary_factor(request.user)
+                and not has_primary_factor()
                 and policy.mfa_required_for(request.user)):
             if (self._is_exempt(request.path, self.enrollment_exempt_paths())
                     or self.is_api_request(request)):

@@ -58,6 +58,40 @@ jobs:
           --with "django~=${{ matrix.django }}.0"
           python -c "import django; print('Django', django.get_version())"
 
+  lowest:
+    # Every other job runs the versions uv.lock pins, which are the newest
+    # releases, so nothing checked the floors pyproject.toml declares. One
+    # was wrong: `fido2>=1.1.2` let an install resolve a 1.x release the
+    # WebAuthn adapter cannot run against, while every job here stayed green
+    # on 2.2.1. lowest-direct resolves each direct dependency to the oldest
+    # version its declared range allows, on the oldest Python supported.
+    # Transitive dependencies stay at their newest: their floors are not a
+    # promise this package makes.
+    #
+    # uv re-locks for this run, inside the runner's checkout only, starting
+    # from the committed uv.lock. Reproducing it locally, do the same from a
+    # clean checkout. A lowest-direct lock left over from an earlier run makes
+    # uv keep the versions it already holds, so a floor loosened since then
+    # is never actually installed and this passes without testing it.
+    name: Lowest declared versions (py3.10)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.0
+        with:
+          enable-cache: true
+
+      - name: Report the versions this job resolves
+        # Before the tests rather than after, so the versions are on record
+        # exactly when it matters: when the next step fails.
+        run: >
+          uv run --python 3.10 --resolution lowest-direct
+          python -c "from importlib.metadata import version as v;
+          print(*(f'{p} {v(p)}' for p in ('django', 'fido2', 'qrcode')), sep=' | ')"
+
+      - name: Run the test suite at every direct dependency's floor
+        run: uv run --python 3.10 --resolution lowest-direct python test_runner.py
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest

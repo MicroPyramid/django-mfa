@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="django-mfa">
+  <path d="M32 4 54 12v18c0 14-9.5 24.5-22 30C19.5 54.5 10 44 10 30V12Z"
+        fill="#0c4b33" stroke="#44b78b" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="32" cy="27" r="7" fill="#fff"/>
+  <path d="M28.5 31h7l2 15h-11Z" fill="#fff"/>
+</svg>

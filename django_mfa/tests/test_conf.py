@@ -1,5 +1,6 @@
 import datetime
 from unittest.mock import patch
+from weakref import WeakSet
 
 from django.test import TestCase, override_settings
 
@@ -165,8 +166,33 @@ class ChecksTests(TestCase):
 
     @override_settings(MFA_ADMIN_STEPUP=True)
     def test_stepup_without_protect_admin_is_an_error(self):
-        errors = check_admin_stepup(app_configs=None)
+        with patch("django.contrib.admin.sites.all_sites", WeakSet()):
+            errors = check_admin_stepup(app_configs=None)
         self.assertEqual([e.id for e in errors], ["django_mfa.E011"])
+
+    @override_settings(MFA_ADMIN_STEPUP=True,
+                       ROOT_URLCONF="django_mfa.tests.support.mixin_admin_urls")
+    def test_a_mixin_site_only_the_urlconf_creates_is_found(self):
+        """Checks run in no fixed order, so the URLconf that creates a
+        project's own site may not be imported yet. The check loads it."""
+        self.assertEqual(check_admin_stepup(app_configs=None), [])
+
+    @override_settings(MFA_ADMIN_STEPUP=True)
+    def test_stepup_with_an_mfa_admin_mixin_site_is_fine(self):
+        """A project that mounts its own AdminSite with MfaAdminMixin, and
+        leaves the default site alone, gets step-up from MFA_ADMIN_STEPUP:
+        the mixin reads it. E011 used to refuse that setup."""
+        from django.contrib.admin import AdminSite
+
+        from django_mfa.admin_site import MfaAdminMixin
+
+        class Site(MfaAdminMixin, AdminSite):
+            pass
+
+        site = Site(name="mfa_e011_check")
+        with patch("django.contrib.admin.sites.all_sites",
+                        WeakSet([site])):
+            self.assertEqual(check_admin_stepup(app_configs=None), [])
 
 
 class MfaFactorsAdapterRegistrationTests(TestCase):

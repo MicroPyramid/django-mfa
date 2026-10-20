@@ -12,7 +12,7 @@ from fido2.webauthn import AuthenticationResponse
 
 from django_mfa import events, flows, session
 from django_mfa.adapters.webauthn import AUTH_STATE_KEY, WebAuthnAdapter, get_server
-from django_mfa.backends import WebAuthnBackend, user_from_handle
+from django_mfa.backends import WebAuthnBackend, user_can_authenticate, user_from_handle
 from django_mfa.conf import settings as mfa_settings
 from django_mfa.models import Authenticator
 from django_mfa.registry import registry
@@ -223,7 +223,9 @@ def resolve_passkey_assertion(request, credential):
         user = user_from_handle(user_handle.decode("utf-8"))
     except UnicodeDecodeError:
         user = None
-    if user is None:
+    # An inactive account fails exactly like an unknown handle: telling the
+    # two apart would reveal which handles belong to disabled accounts.
+    if user is None or not user_can_authenticate(user):
         return None
 
     request.session[AUTH_STATE_KEY] = state
@@ -276,6 +278,13 @@ def passkey_complete(request):
     POST only. The ceremony itself is resolve_passkey_assertion() above,
     shared with the JSON API; everything here is the browser rendering of
     its answer -- one generic 400 for every failure, a redirect on success.
+
+    webauthn.js posts here with fetch() and asks for JSON, so that a
+    rejected passkey is reported on the login page instead of navigating
+    the user to the bare JSON error. It then navigates itself, so on
+    success it is handed the destination rather than a redirect, which
+    fetch() would follow in the background and load the landing page for
+    nothing. A plain form post still gets the redirect.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -288,6 +297,8 @@ def passkey_complete(request):
         return _passkey_failure()
 
     auth.login(request, user, backend=BACKEND_PATH)
+    if "application/json" in request.headers.get("Accept", ""):
+        return JsonResponse({"redirect": _safe_next(request)})
     return redirect(_safe_next(request))
 
 

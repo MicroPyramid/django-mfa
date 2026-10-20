@@ -4,11 +4,11 @@ import datetime
 import random
 
 from django.contrib.auth.models import User
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 
 from django_mfa import totp as totp_mod
 from django_mfa.adapters.totp import TOTPAdapter, generate_secret
-from django_mfa.crypto import decrypt
+from django_mfa.crypto import decrypt, encrypt
 from django_mfa.models import Authenticator
 
 
@@ -54,6 +54,25 @@ class TOTPAdapterTests(TestCase):
         code = totp_mod.TOTP(secret).now()
         self.assertTrue(self.adapter.complete_verify(
             self._request(), self.user, {"code": code}))
+
+    def test_complete_verify_fails_cleanly_when_no_key_reads_the_secret(self):
+        """A secret signed under MFA_SECRET_ENCRYPTION_KEYS that no
+        configured key can read (the key was rotated out, or the setting
+        removed) used to raise BadSignature out of the verify view as a 500.
+        It is a failed attempt, and an operator needs to hear about it."""
+        secret = generate_secret()
+        with override_settings(MFA_SECRET_ENCRYPTION_KEYS=["old-key"]):
+            stored = encrypt(secret)
+        Authenticator.objects.create(
+            user=self.user, type="totp", data={"secret": stored})
+
+        with override_settings(MFA_SECRET_ENCRYPTION_KEYS=["new-key"]), \
+                self.assertLogs("django_mfa.adapters.totp", "ERROR"):
+            verified = self.adapter.complete_verify(
+                self._request(), self.user,
+                {"code": totp_mod.TOTP(secret).now()})
+
+        self.assertFalse(verified)
 
     def test_complete_verify_rejects_wrong_code(self):
         Authenticator.objects.create(user=self.user, type="totp",

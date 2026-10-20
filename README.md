@@ -163,9 +163,6 @@ The parts that are easy to get subtly wrong, done deliberately:
   implement one (iCloud passkeys always report 0).
 - **Recovery codes are hashed** with Django's password hasher, marked used
   individually, and displayed exactly once.
-- **Encryption at rest for TOTP secrets**, opt-in via `MFA_SECRET_ENCRYPTION_KEYS` —
-  a *list*, because the first key encrypts and every key is tried on decrypt. That's
-  what makes key rotation a redeploy instead of a migration.
 - **Recovery codes can never be someone's only factor.** They're exhaustible, so they
   don't count toward "is this user protected" — one source of truth in the registry, not
   a rule re-implemented in three places.
@@ -232,11 +229,13 @@ against it from outside the source tree.
 - [Translations](http://django-mfa.readthedocs.io/en/latest/translations.html) — the six shipped languages, and how to fix or add one
 - [Customizing the UI](http://django-mfa.readthedocs.io/en/latest/customizing.html) — templates, context, and the WebAuthn JS contract
 - [Enforcing MFA](http://django-mfa.readthedocs.io/en/latest/enforcement.html) — requiring it for some or all users, and per-view enforcement
-- [Integration recipes](http://django-mfa.readthedocs.io/en/latest/recipes.html) — allauth, passkey buttons, APIs, testing, troubleshooting
+- [Integration recipes](http://django-mfa.readthedocs.io/en/latest/recipes.html): allauth, passkey buttons, APIs and testing
+- [Troubleshooting](http://django-mfa.readthedocs.io/en/latest/troubleshooting.html): redirect loops, dead passkey buttons, rejected codes and locked-out users
 - [Writing a custom factor](http://django-mfa.readthedocs.io/en/latest/custom_factors.html) — the Adapter API, with a worked example
 - [Security model](http://django-mfa.readthedocs.io/en/latest/security.html) — controls, non-goals, and a production checklist
-- [Flow and URLs](http://django-mfa.readthedocs.io/en/latest/mfa_flow.html) — what happens on enroll, on login, and on passwordless login
+- [How it works](http://django-mfa.readthedocs.io/en/latest/mfa_flow.html): what happens on enroll, on login, and on passwordless login
 - [Upgrade notes](http://django-mfa.readthedocs.io/en/latest/upgrading.html) — read before upgrading a project with real users
+- [Changelog](http://django-mfa.readthedocs.io/en/latest/changelog.html): what changed in each release
 - [Contributing](http://django-mfa.readthedocs.io/en/latest/contributing.html)
 
 A runnable demo project lives in [`sandbox/`](sandbox/).

@@ -14,6 +14,7 @@ from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import NoReverseMatch, reverse
 
 from django_mfa import totp as totp_mod
+from django_mfa.adapters.totp import TOTPAdapter
 from django_mfa.adapters.webauthn import WebAuthnAdapter
 from django_mfa.crypto import encrypt
 from django_mfa.models import Authenticator, RateLimitCounter
@@ -33,6 +34,31 @@ class PickerTests(TestCase):
         self.user = User.objects.create_user("a@example.com", password="pw")
         self.client = Client()
         self.client.login(username="a@example.com", password="pw")
+
+    def _stamp_pending(self):
+        session = self.client.session
+        session["mfa"] = {"verified": False, "method": None, "at": None}
+        session.save()
+
+    def test_pending_session_with_no_methods_left_continues_to_next(self):
+        """A session stamped pending at login whose user then lost every
+        factor (manage.py mfa_reset, or MFA_FACTORS narrowed) has nothing to
+        answer the challenge with. A fresh login would not be challenged at
+        all, so the stale stamp is dropped instead of rendering an empty
+        picker the user cannot leave."""
+        self._stamp_pending()
+
+        response = self.client.get(reverse("mfa:verify") + "?next=/somewhere/")
+
+        self.assertRedirects(response, "/somewhere/",
+                             fetch_redirect_response=False)
+        self.assertNotIn("mfa", self.client.session)
+
+    def test_pending_session_with_no_methods_left_and_no_next(self):
+        self._stamp_pending()
+        response = self.client.get(reverse("mfa:verify"))
+        self.assertRedirects(response, "/accounts/profile/",
+                             fetch_redirect_response=False)
 
     def test_single_factor_redirects_straight_to_it(self):
         Authenticator.objects.create(user=self.user, type="totp")
@@ -145,6 +171,31 @@ class EnrollFactorTests(TestCase):
         code = totp_mod.TOTP(secret).now()
         return self.client.post(reverse("mfa:enroll_factor", args=["totp"]),
                                 {"secret_key": secret, "code": code})
+
+    def test_enrolling_a_second_authenticator_app_is_refused(self):
+        """TOTP is one per user. A second submission (a double-click, a
+        hand-typed URL, a stale tab) used to hit the database constraint and
+        return a 500."""
+        self._enroll_totp()
+
+        response = self._enroll_totp()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Authenticator.objects.filter(
+            user=self.user, type="totp").count(), 1)
+
+    def test_losing_a_race_to_enroll_is_refused(self):
+        """Two submissions that both pass the availability check: the
+        database constraint stops the second, and that must read as a
+        refused attempt rather than a 500."""
+        self._enroll_totp()
+
+        with patch.object(TOTPAdapter, "is_available", return_value=True):
+            response = self._enroll_totp()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Authenticator.objects.filter(
+            user=self.user, type="totp").count(), 1)
 
     def test_get_renders_enroll_template_with_secret_and_uri(self):
         response = self.client.get(reverse("mfa:enroll_factor", args=["totp"]))
@@ -385,8 +436,24 @@ class SecuritySettingsTests(TestCase):
         self.client = Client()
         self.client.login(username="a@example.com", password="pw")
 
+    def enroll(self, **fields):
+        """Give the user a factor the way enrolling one in this session would.
+
+        A real enrollment verifies the session it runs in (flows.attempt_enroll
+        calls session.mark_verified). A bare row created behind the session's
+        back leaves it never challenged, which MfaMiddleware sends to
+        mfa:verify (see test_enforcement.SessionOpenedBeforeEnrollmentTests),
+        and these tests are about the page, not that gate.
+        """
+        auth = Authenticator.objects.create(user=self.user, **fields)
+        session = self.client.session
+        session["mfa"] = {"verified": True, "method": auth.type,
+                          "at": int(time.time())}
+        session.save()
+        return auth
+
     def test_renders_enabled_available_and_remaining(self):
-        Authenticator.objects.create(user=self.user, type="totp")
+        self.enroll(type="totp")
         response = self.client.get(reverse("mfa:security_settings"))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "django_mfa/security.html")
@@ -436,47 +503,44 @@ class SecuritySettingsTests(TestCase):
         authenticator's own pk) must actually be present in the rendered
         page, not just work if you already know the URL and pk.
         """
-        auth = Authenticator.objects.create(user=self.user, type="totp")
+        auth = self.enroll(type="totp")
         response = self.client.get(reverse("mfa:security_settings"))
         content = response.content.decode()
         self.assertIn(reverse("mfa:manage"), content)
         self.assertIn(f'value="{auth.pk}"', content)
 
     def test_a_user_can_delete_their_own_authenticator_through_the_rendered_page(self):
-        auth = Authenticator.objects.create(user=self.user, type="totp")
+        auth = self.enroll(type="totp")
         get_response = self.client.get(reverse("mfa:security_settings"))
         self.assertIn(f'value="{auth.pk}"', get_response.content.decode())
 
-        # mfa:manage is gated by mfa_recent_required -- give this session a
-        # fresh stamp so the delete below exercises manage_factors itself
-        # rather than the gate (covered by test_stepup.py's GatedViewTests).
-        session = self.client.session
-        session["mfa"] = {"verified": True, "method": "totp",
-                          "at": int(time.time())}
-        session.save()
+        # mfa:manage is gated by mfa_recent_required. enroll() left this
+        # session freshly verified, so the delete below exercises
+        # manage_factors itself rather than the gate (covered by
+        # test_stepup.py's GatedViewTests).
 
         post_response = self.client.post(reverse("mfa:manage"), {"pk": auth.pk})
         self.assertRedirects(post_response, reverse("mfa:security_settings"))
         self.assertFalse(Authenticator.objects.filter(pk=auth.pk).exists())
 
     def test_webauthn_credential_lists_its_own_name_and_created_date(self):
-        auth = Authenticator.objects.create(
-            user=self.user, type="webauthn", name="YubiKey 5C")
+        auth = self.enroll(
+            type="webauthn", name="YubiKey 5C")
         response = self.client.get(reverse("mfa:security_settings"))
         content = response.content.decode()
         self.assertIn("YubiKey 5C", content)
         self.assertIn(str(auth.created_at.year), content)
 
     def test_webauthn_removal_form_present_when_not_enterprise_owned(self):
-        auth = Authenticator.objects.create(
-            user=self.user, type="webauthn", name="key")
+        auth = self.enroll(
+            type="webauthn", name="key")
         response = self.client.get(reverse("mfa:security_settings"))
         self.assertIn(f'value="{auth.pk}"', response.content.decode())
 
     @override_settings(MFA_OWNED_BY_ENTERPRISE=True)
     def test_webauthn_removal_form_absent_when_enterprise_owned(self):
-        auth = Authenticator.objects.create(
-            user=self.user, type="webauthn", name="key")
+        auth = self.enroll(
+            type="webauthn", name="key")
         response = self.client.get(reverse("mfa:security_settings"))
         content = response.content.decode()
         # Still listed (name visible)...
@@ -490,7 +554,7 @@ class SecuritySettingsTests(TestCase):
         manage_factors in views/manage.py) -- the page must reflect that,
         not blanket-hide every removal form.
         """
-        auth = Authenticator.objects.create(user=self.user, type="totp")
+        auth = self.enroll(type="totp")
         response = self.client.get(reverse("mfa:security_settings"))
         self.assertIn(f'value="{auth.pk}"', response.content.decode())
 
@@ -1052,6 +1116,14 @@ class WebAuthnJsSourceTests(TestCase):
     def test_posts_credential_via_form_submit(self):
         self.assertIn("name=credential", self.source)
         self.assertIn("form.submit()", self.source)
+
+    def test_passkey_login_reports_a_rejected_assertion_in_the_page(self):
+        """A passkey the server rejects must not navigate the user onto the
+        endpoint's bare JSON error. The passkey path posts with fetch(),
+        asks for JSON, and goes to the destination it is handed."""
+        self.assertIn('"Accept": "application/json"', self.source)
+        self.assertIn("body.redirect", self.source)
+        self.assertIn("passkeyRejected", self.source)
 
     def test_uses_get_client_extension_results_method_not_a_property(self):
         """credential.clientExtensionResults is not a real property on the

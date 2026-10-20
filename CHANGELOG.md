@@ -12,6 +12,83 @@ Versions follow [PEP 440](https://peps.python.org/pep-0440/). The version in
 `pyproject.toml` is the only place it is written; the git tag and the GitHub
 Release are derived from it (see [docs/contributing.md](docs/contributing.md)).
 
+## 4.6.1
+
+### Fixed
+
+- **A session opened before its user enrolled was never challenged by
+  `MfaMiddleware`.** Login stamps nothing for a user with no factor, since
+  there is nothing to challenge yet, and the middleware only challenged
+  sessions that carried a pending stamp. So anyone signed in as that user
+  before they enrolled kept every page the middleware alone protects, after
+  enrollment as well as before. That includes someone the user enrolled
+  specifically to lock out. `@mfa_required`, `@mfa_recent_required` and the
+  JSON API were not affected; they already treated such a session as pending
+  (4.5.0). The middleware now does the same, and redirects it to
+  `mfa:verify`.
+- **The declared `fido2` floor was wrong.** Every release since 4.0.0
+  allowed `fido2>=1.1.2`, but the WebAuthn adapter is written against the
+  2.x API and every WebAuthn test fails on 1.x (1.1.2 and 1.2.0 both
+  checked). An environment that resolved a 1.x release installed cleanly and
+  then broke on the first security-key or passkey ceremony. The requirement
+  is now `fido2>=2.0.0,<3`; the full suite passes on 2.0.0. A new CI job
+  runs the suite with every direct dependency at its declared floor, so a
+  wrong minimum now fails a build instead of a user's install.
+- **A deactivated account could still sign in with a passkey.** Nothing on
+  the passwordless path checked `is_active`: a user with `is_active=False`
+  was refused a password login by Django's `ModelBackend` but signed in with
+  a passkey, and an existing passkey session survived deactivation.
+  Passwordless login now refuses an inactive user with the same response as
+  every other failure, and `WebAuthnBackend` refuses one in `get_user()` and
+  `authenticate()`, as `ModelBackend` does, so deactivating an account ends
+  its passkey sessions on their next request.
+- **Enrolling a factor the user already held returned a 500.** A second
+  authenticator app (a double-clicked submit, a stale tab, a typed URL) hit
+  the one-per-user database constraint. Enrollment, in the HTML views and the
+  JSON API, now refuses a factor `Adapter.is_available()` says the user may
+  not add, and treats a lost race at the constraint the same way: the usual
+  400.
+- **A TOTP secret no configured key could read returned a 500.** Removing a
+  key from `MFA_SECRET_ENCRYPTION_KEYS` (or the setting) while secrets it
+  signed remained made every TOTP attempt for those users raise
+  `BadSignature`. The attempt now fails like a wrong code, and an error is
+  logged on `django_mfa.adapters.totp` naming the user.
+- **`MFA_NOTIFY_ON_CHANGE` could say "Two-factor authentication is off" more
+  than once.** It was sent after any removal that left no primary factor,
+  so `manage.py mfa_reset` sent it again for recovery codes removed after
+  the last primary factor. It is now sent only when the removed factor was
+  the last primary one.
+- **The method picker could be empty, with no way on.** A session stamped
+  pending at login whose user then lost every factor (`manage.py mfa_reset`,
+  or `MFA_FACTORS` narrowed) was sent to a "Verify it's you" page offering
+  nothing, on every request. The picker now drops that stale stamp and
+  continues to `next`, since a fresh login would not have been challenged;
+  `MFA_REQUIRED` then applies as usual.
+- **A refused passkey showed the user raw JSON.** The bundled `webauthn.js`
+  submitted the passwordless form as a page load, so a failure replaced the
+  login page with `{"error": "Passkey sign-in failed."}`. It now posts with
+  `fetch()` and shows the message in `#webauthn-passkey-error`, including
+  for a passkey chosen from autofill. `mfa:passkey_complete` answers a
+  request that asks for JSON with `{"redirect": url}` on success; a plain
+  form post still gets a redirect.
+- **`django_mfa.E011` refused `MFA_ADMIN_STEPUP` on a site built with
+  `MfaAdminMixin`.** The mixin reads the setting, but the check demanded
+  `MFA_PROTECT_ADMIN`, which also patches the default site and makes every
+  staff user required. It now fires only when nothing reads the setting:
+  `MFA_PROTECT_ADMIN` off and no admin site using `MfaAdminMixin`. To find
+  such a site the check imports the URLconf.
+
+### Upgrading
+
+No migration. Users who had other sessions open when they enrolled are asked
+for their factor once on each of them. Telling a never-challenged session apart
+from one whose user holds no factor costs one query per request, paid only by
+sessions that have not passed a challenge (in practice, users who have not
+enrolled); with `MFA_REQUIRED` on, the enrollment wall shares it. Tests that
+create an `Authenticator` row directly after logging in, then request a page
+only the middleware protects, now get a redirect. See
+[docs/upgrading.md](docs/upgrading.md).
+
 ## 4.6.0
 
 ### Added

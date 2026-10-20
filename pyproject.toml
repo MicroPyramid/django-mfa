@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "django-mfa"
-version = "4.6.0"
+version = "4.6.1"
 description = "Second-factor authentication for Django: authenticator apps (TOTP), security keys and passkeys (WebAuthn), and recovery codes."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,7 +15,7 @@ keywords = ["django", "mfa", "2fa", "totp", "webauthn", "passkey", "fido2"]
 
 dependencies = [
     "Django>=4.2",
-    "fido2>=1.1.2,<3",
+    "fido2>=2.0.0,<3",
     "qrcode>=7.0.0,<9",
 ]
 
@@ -84,8 +84,10 @@ dev = [
 # Kept as its own group so a test run doesn't pull the whole Sphinx stack.
 docs = [
     "sphinx>=7",
-    "sphinx-rtd-theme>=2",
     "myst-parser>=3",
+    "furo>=2024.8.6",
+    "sphinx-copybutton>=0.5.2",
+    "sphinx-design>=0.6",
 ]
 
 # ---------------------------------------------------------------------------

@@ -1,8 +1,10 @@
+import io
 import time
 from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core import mail
+from django.core.management import call_command
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
@@ -119,6 +121,23 @@ class NotificationContentTests(NotificationTestCase):
         self.assertEqual(len(mail.outbox), 2)
         bodies = " ".join(m.body for m in mail.outbox)
         self.assertIn("no longer", bodies)
+
+    def test_mfa_is_off_is_sent_once_however_many_factors_go(self):
+        """manage.py mfa_reset removes every row in turn. Only the removal
+        that leaves no primary factor turns MFA off; removing recovery codes
+        after that changes nothing and must not say so again."""
+        Authenticator.objects.create(
+            user=self.user, type="totp",
+            data={"secret": encrypt(generate_secret())})
+        Authenticator.objects.create(
+            user=self.user, type="webauthn", name="Yubikey", data={})
+        RecoveryCodesAdapter().generate(self.user)
+        mail.outbox.clear()
+
+        call_command("mfa_reset", "ashwin", "--yes", stdout=io.StringIO())
+
+        off = [m for m in mail.outbox if "no longer" in m.body]
+        self.assertEqual(len(off), 1)
 
     def test_spending_a_recovery_code_reports_the_remaining_count(self):
         codes = RecoveryCodesAdapter().generate(self.user)
